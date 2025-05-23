@@ -30,7 +30,7 @@ ConsultEase addresses these problems by providing:
 
 ### For Administrators
 - Centralized management of faculty information
-- System oversight and maintenance capabilities
+- System oversight and improved maintenance capabilities due to a more robust and configurable backend.
 - Data insights on consultation patterns and faculty availability
 
 ## User Experience Goals
@@ -51,14 +51,14 @@ ConsultEase addresses these problems by providing:
 
 ### Administrator Experience
 - Intuitive interface for faculty data management
-- Secure access to administrative functions
+- Secure access to administrative functions (enhanced with admin account lockout)
 - Efficient workflows for common tasks
-- Clear technical documentation for system configuration
-- Straightforward backup and recovery procedures
+- Clear technical documentation for system configuration (configuration is now more centralized and documented).
+- Straightforward backup and recovery procedures (underlying system stability improved, UI for these are placeholders).
 
 ## Success Criteria
 - Reduction in student wait times for consultations
 - Increased faculty satisfaction with consultation management
-- High system reliability (uptime >99%)
+- High system reliability (uptime >99%), supported by a more robust and maintainable codebase.
 - Positive user feedback from both students and faculty
-- Seamless integration with existing academic workflows 
+- Seamless integration with existing academic workflows, facilitated by stable system performance.

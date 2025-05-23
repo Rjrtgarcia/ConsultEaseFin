@@ -1,0 +1,70 @@
+# .cursorrules for ConsultEase Project
+
+## Project Overview
+ConsultEase is a student-faculty interaction system with a Central System (Raspberry Pi, PyQt) and a Faculty Desk Unit (ESP32). Key features include RFID authentication, real-time faculty availability, consultation requests, and admin management.
+
+## Core Architectural Patterns
+- **Layered Architecture (MVC-like)**: UI (Views) -> Controllers -> Services -> Models/Utilities.
+- **Singleton Pattern**: Core controllers (`AdminController`, `FacultyController`, `ConsultationController`, `RFIDController`, `StudentController`) and key services (`KeyboardManager`, `RFIDService`, `MQTTService`) are singletons. Access via `.instance()` or `get_service_name()` methods.
+- **Service Layer**: Dedicated services (`MQTTService`, `RFIDService`) encapsulate specific functionalities.
+- **Observer Pattern**: MQTT handlers and PyQt signals/slots for UI updates.
+- **Centralized Configuration**: `central_system/config.py` loads `config.json`, environment variables, and defaults. Accessed via `get_config()`.
+- **Database Session Management**: `@db_operation_with_retry` decorator for write operations, `try/finally close_db()` for reads. Managed via `central_system/models/base.py`.
+- **Logging**: Centralized `logging.basicConfig` in `main.py` now uses `RotatingFileHandler` with `max_size` and `backup_count` configured via `config.py`/`config.json`.
+
+## Key Technologies & Setup
+- **Central System**: Python 3.9+, PyQt5, PostgreSQL/SQLite (dev), Paho MQTT, SQLAlchemy, evdev.
+- **Faculty Desk Unit**: Arduino IDE, ESP32 Arduino Core, TFT_eSPI, NimBLE-Arduino, PubSubClient, ArduinoJson.
+- **Configuration**: `config.json` is crucial. Settings include DB connection, MQTT broker (TLS options: `use_tls`, `tls_ca_certs`, `tls_certfile`, `tls_keyfile`, `tls_insecure`, `tls_version`, `tls_cert_reqs`), RFID VID/PID, logging (`level`, `file`, `max_size`, `backup_count`), UI theme, keyboard preferences.
+- **Database Schema**: Defined by SQLAlchemy models in `central_system/models/` (Admin, Faculty, Student, Consultation).
+
+## Important Coding Practices & Preferences
+- **Style**: Python code follows PEP 8.
+- **Modularity**: Clear separation of concerns (models, views, controllers, services, utils).
+- **Error Handling**: Consistent logging (centrally configured with rotation), informative error messages, retry mechanisms (e.g., DB operations, MQTT reconnection).
+- **Resource Management**: Proper cleanup (e.g., `close_db()`, `RFIDService.stop()`, `KeyboardManager.cleanup()`).
+- **Naming Conventions**:
+    - Classes: `CamelCase`
+    - Variables/Functions: `snake_case`
+    - Constants: `UPPERCASE`
+    - Singleton Access: `MyController.instance()` or `get_my_service()`.
+- **Comments**: Document non-trivial parts of the code. Avoid obvious comments.
+
+## UI/UX Patterns
+- **Theme**: Consistent light theme (`#ffffff` background, `#0d3b66` primary, `#ffc233` secondary).
+- **Touch Optimization**: Minimum 48x48px touch targets.
+- **Keyboard**: Auto-appearing on-screen keyboard via `KeyboardManager` (configurable: `squeekboard`, `matchbox-keyboard`).
+- **Feedback**: Clear status indicators (green for available/success, red for unavailable/error). Confirmations for destructive actions.
+- **Interaction**: Views interact with singleton controller instances.
+
+## Critical Implementation Paths & Considerations
+1.  **RFID Authentication**: `RFIDService` (cache & DB lookup), VID/PID from `config.json`.
+2.  **BLE Presence & MQTT**: Reliable ESP32 scanning, MQTT status updates, `FacultyController` handling.
+3.  **Centralized Configuration**: All modules use `get_config()`. Correctness of `config.json` is vital.
+4.  **Robust Database Operations**: Use of `@db_operation_with_retry` and session management.
+5.  **MQTT Communication**: `MQTTService` using `config.json`, reliable messaging, detailed TLS configuration (including `tls_version`, `tls_cert_reqs`). Message persistence for QoS > 0.
+6.  **Real-time UI Updates**: Thread-safe updates via signals/slots, views observe controllers/services.
+7.  **Admin Security**: Bcrypt for passwords. DB-backed admin account lockout is now implemented in `AdminController.authenticate` and `Admin` model.
+
+## Development Workflow & Tooling
+- **Branching**: Feature branch development.
+- **Testing**: Local testing, then integration testing. Emphasize testing with actual hardware. Simulation modes and manual fallbacks for hardware dependencies are good for initial dev.
+- **Configuration Driven**: Use flags in `config.py`/`config.json` for flexibility (e.g., `ensure_test_faculty_available`, keyboard preferences, logging settings).
+- **Refactoring Insights**:
+    - Centralizing configuration and standardizing patterns (DB sessions, singletons) improves clarity and maintainability.
+    - Incremental refactoring is manageable.
+
+## Current Focus / Next Steps (as of last review)
+- Hardware Integration Testing (RFID, ESP32 BLE/MQTT with TLS).
+- MQTT TLS Configuration & Testing (generate/obtain certs, configure all TLS options in `config.json`, test secure communication).
+- Documentation updates (user and technical, esp. `config.json` sections for TLS, RFID, logging).
+- Deployment preparation (scripts, file permissions for logs, config, RFID device access).
+- User Acceptance Testing (UAT).
+
+## Known Issues (as of last review)
+- `config.json` dependency: correctness is critical for all features.
+- Admin Backup/Restore UI: Placeholders, manual DB operations needed.
+- RFID/BLE reliability: Needs thorough hardware testing under various conditions.
+- Virtual keyboard behavior: Can vary by OS setup.
+
+This file serves as a quick reference for working on the ConsultEase project. It should be updated as the project evolves. 

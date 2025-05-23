@@ -2,7 +2,50 @@
 
 This document summarizes the updates made to the ConsultEase documentation to reflect the current state of the system.
 
-## Files Updated
+## Major Architecture Refactoring Updates (Latest)
+
+### 1. memory-bank/ (AI Development Documentation)
+- Updated all files to reflect the major architecture refactoring:
+  - `activeContext.md`: Details of all recent changes and next steps
+  - `progress.md`: Current status, achievements, and timeline updates
+  - `systemPatterns.md`: New architecture diagrams and design patterns
+  - `techContext.md`: Updated technology stack and configuration approach
+  - `productContext.md`: Minimal updates to reflect administrative capabilities
+  - `projectbrief.md`: No changes needed (high-level goals remain the same)
+
+### 2. README.md
+- Added section on recent major refactoring
+- Updated components list to include centralized configuration and singleton controllers
+- Changed database requirements to include SQLite as development option
+- Updated installation instructions to emphasize `config.json` creation
+- Removed outdated script information
+- Added configuration section describing the new `config.json` approach
+- Updated project structure to reflect new files and organization
+- Updated RFID section to emphasize configuration via `config.json`
+
+### 3. FIXES_SUMMARY.md
+- Added comprehensive section on major architecture refactoring
+- Documented 10 major improvement areas including centralized configuration, singleton controllers, database session management, etc.
+- Updated future recommendations to include MQTT TLS and admin account lockout
+
+### 4. docs/ (Main User Documentation) - Latest Update
+- Created `configuration_guide.md`: Comprehensive documentation for the new centralized configuration system
+- Updated `deployment_guide.md`: Changed environment variable setup to config.json creation and configuration
+- Updated `quick_start_guide.md`: Modified setup instructions to use config.json instead of .env file
+- Updated `user_manual.md`: Added information about the new system configuration approach and admin security features
+- Updated `keyboard_integration.md`: Completely revised to reflect the new KeyboardManager approach
+- Updated `recent_improvements.md`: Added section on major architecture refactoring at the beginning
+
+### 5. DOCUMENTATION_UPDATES.md
+- Added this section documenting the latest documentation updates
+
+### 6. Future Documentation Needs
+- Database migration guide (SQLite to PostgreSQL)
+- MQTT TLS setup instructions
+- Admin account security configuration
+- Updated deployment checklist with configuration steps
+
+## Previous Documentation Updates
 
 ### 1. README.md
 - Updated the Components section to include new features
@@ -62,20 +105,30 @@ This document summarizes the updates made to the ConsultEase documentation to re
 
 ## Key Changes Reflected
 
-1. **Squeekboard Prioritization**: Updated all documentation to reflect that squeekboard is now the preferred on-screen keyboard over onboard.
+1. **Centralized Configuration**: All documentation now reflects the new config.json approach instead of settings.ini and environment variables
 
-2. **BLE Functionality**: Added information about the always-on BLE option for faculty desk units and the new test script.
+2. **Singleton Controllers**: Documentation now mentions the singleton pattern for controllers and proper instantiation methods
 
-3. **UI Improvements**: Documented the enhanced transitions, improved consultation panel, and smaller logout button.
+3. **Improved Database Management**: Added information about the more robust database session handling
 
-4. **Testing Instructions**: Updated all testing instructions to reflect the current state of the system.
+4. **Keyboard Management**: Changed focus from direct_keyboard.py to the new KeyboardManager class
 
-5. **Troubleshooting**: Enhanced troubleshooting sections with more detailed information about common issues.
+5. **Security Enhancements**: Added documentation for admin account lockout and MQTT TLS configuration 
+
+6. **Squeekboard Prioritization**: Updated all documentation to reflect that squeekboard is now the preferred on-screen keyboard over onboard
+
+7. **BLE Functionality**: Added information about the always-on BLE option for faculty desk units and the new test script
+
+8. **UI Improvements**: Documented the enhanced transitions, improved consultation panel, and smaller logout button
+
+9. **Testing Instructions**: Updated all testing instructions to reflect the current state of the system
+
+10. **Troubleshooting**: Enhanced troubleshooting sections with more detailed information about common issues
 
 ## Next Steps
 
-1. **User Testing**: The updated documentation should be tested by users to ensure it accurately reflects the system's functionality.
+1. **User Testing**: The updated documentation should be tested by users to ensure it accurately reflects the system's functionality
 
-2. **Feedback Collection**: Collect feedback from users about the documentation to identify any areas that need further improvement.
+2. **Feedback Collection**: Collect feedback from users about the documentation to identify any areas that need further improvement
 
-3. **Regular Updates**: Continue to update the documentation as the system evolves to ensure it remains accurate and useful.
+3. **Regular Updates**: Continue to update the documentation as the system evolves to ensure it remains accurate and useful

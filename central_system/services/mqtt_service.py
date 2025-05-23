@@ -8,9 +8,13 @@ import configparser
 import pathlib
 import random
 from datetime import datetime
+import ssl
+
+# Import configuration system
+from central_system.config import get_config
 
 # Set up logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s') # REMOVED
 logger = logging.getLogger(__name__)
 
 class MQTTService:
@@ -19,15 +23,25 @@ class MQTTService:
     """
 
     def __init__(self):
-        # Load settings from settings.ini if available
-        self._load_settings()
+        # Load settings from settings.ini if available # REMOVED _load_settings call
+        # self._load_settings()
+        self.config = get_config() # Get central config instance
 
-        # MQTT settings (use settings from file or fall back to environment variables)
-        self.broker_host = self.settings.get('broker_host', os.environ.get('MQTT_BROKER_HOST', 'localhost'))
-        self.broker_port = int(self.settings.get('broker_port', os.environ.get('MQTT_BROKER_PORT', 1883)))
-        self.client_id = "central_system"
-        self.username = os.environ.get('MQTT_USERNAME', None)
-        self.password = os.environ.get('MQTT_PASSWORD', None)
+        # MQTT settings from config.py
+        self.broker_host = self.config.get('mqtt.broker_host', 'localhost')
+        self.broker_port = int(self.config.get('mqtt.broker_port', 1883))
+        # Generate a unique client ID
+        base_client_id = self.config.get('mqtt.client_id', 'central_system')
+        self.client_id = f"{base_client_id}_{''.join(random.choices('0123456789abcdef', k=6))}"
+        self.username = self.config.get('mqtt.username', None)
+        self.password = self.config.get('mqtt.password', None)
+        self.use_tls = self.config.get('mqtt.use_tls', False)
+        self.tls_ca_certs = self.config.get('mqtt.tls_ca_certs', None)
+        self.tls_certfile = self.config.get('mqtt.tls_certfile', None)
+        self.tls_keyfile = self.config.get('mqtt.tls_keyfile', None)
+        self.tls_insecure = self.config.get('mqtt.tls_insecure', False) # For testing, not production
+        self.tls_version = self.config.get('mqtt.tls_version', None) # e.g., "TLSv1.2", "TLSv1.3"
+        self.tls_cert_reqs = self.config.get('mqtt.tls_cert_reqs', 'CERT_REQUIRED') # e.g., "CERT_NONE", "CERT_OPTIONAL"
 
         # Log the MQTT broker settings
         logger.info(f"MQTT broker settings: {self.broker_host}:{self.broker_port}")
@@ -36,6 +50,58 @@ class MQTTService:
         self.client = mqtt.Client(client_id=self.client_id)
         if self.username and self.password:
             self.client.username_pw_set(self.username, self.password)
+        
+        # Configure TLS if enabled
+        if self.use_tls:
+            try:
+                logger.info(f"Configuring MQTT with TLS. CA: {self.tls_ca_certs}, Cert: {self.tls_certfile}, Key: {self.tls_keyfile}, Version: {self.tls_version}, CertReqs: {self.tls_cert_reqs}")
+                
+                # Map string config values to ssl constants if necessary
+                parsed_tls_version = None
+                if self.tls_version:
+                    if self.tls_version == "TLSv1.2":
+                        parsed_tls_version = ssl.PROTOCOL_TLSv1_2
+                    elif self.tls_version == "TLSv1.3":
+                        # Note: Paho MQTT might use PROTOCOL_TLS_CLIENT which auto-negotiates
+                        # Check Paho documentation for best way to enforce TLSv1.3 if strictly needed
+                        # For now, this illustrates mapping. ssl.PROTOCOL_TLSv1_3 is not standard for client.
+                        # Using PROTOCOL_TLS_CLIENT is generally recommended for broadest compatibility.
+                        # If specific versions are needed, ensure the library and broker support it.
+                        # For example, ssl.PROTOCOL_TLS_CLIENT is often the right choice.
+                        # Let's assume config value "TLS_CLIENT" for auto-negotiation, or specific versions.
+                        if hasattr(ssl, f"PROTOCOL_{self.tls_version.replace('.', '')}"):
+                             parsed_tls_version = getattr(ssl, f"PROTOCOL_{self.tls_version.replace('.', '')}")
+                        elif self.tls_version == "CLIENT_DEFAULT": # Add a sensible default
+                            parsed_tls_version = ssl.PROTOCOL_TLS_CLIENT 
+                        else:
+                            logger.warning(f"Unsupported TLS version string: {self.tls_version}. Using library default.")
+                            # parsed_tls_version will remain None, letting Paho decide or use its default.
+
+                parsed_cert_reqs = None
+                if self.tls_cert_reqs == "CERT_REQUIRED":
+                    parsed_cert_reqs = ssl.CERT_REQUIRED
+                elif self.tls_cert_reqs == "CERT_OPTIONAL":
+                    parsed_cert_reqs = ssl.CERT_OPTIONAL
+                elif self.tls_cert_reqs == "CERT_NONE":
+                    parsed_cert_reqs = ssl.CERT_NONE
+                else:
+                    logger.warning(f"Unsupported tls_cert_reqs string: {self.tls_cert_reqs}. Using library default (likely CERT_REQUIRED with CA).")
+
+
+                self.client.tls_set(
+                    ca_certs=self.tls_ca_certs,
+                    certfile=self.tls_certfile,
+                    keyfile=self.tls_keyfile,
+                    cert_reqs=parsed_cert_reqs, # Use parsed value
+                    tls_version=parsed_tls_version # Use parsed value
+                    # TODO: Add other TLS parameters like ciphers if needed from config
+                )
+                if self.tls_insecure: # Should only be used for testing with self-signed certs
+                    logger.warning("MQTT TLS is configured with tls_insecure=True. Not for production!")
+                    self.client.tls_insecure_set(True)
+            except Exception as e:
+                logger.error(f"Error configuring MQTT TLS: {e}. Proceeding without TLS.")
+                self.use_tls = False # Fallback to no TLS if configuration fails
 
         # Set callbacks
         self.client.on_connect = self.on_connect
@@ -612,27 +678,31 @@ class MQTTService:
         """
         Load settings from settings.ini file if available.
         """
+        # THIS METHOD IS DEPRECATED AND SHOULD NOT BE USED.
+        # Configuration is now handled by config.py
+        logger.warning("_load_settings in MQTTService is deprecated. MQTT config should come from central config system.")
         self.settings = {}
+        return
 
-        try:
-            # Get the path to the settings.ini file
-            settings_path = pathlib.Path(__file__).parent.parent / "settings.ini"
-
-            if settings_path.exists():
-                logger.info(f"Loading settings from {settings_path}")
-                config = configparser.ConfigParser()
-                config.read(settings_path)
-
-                # Load MQTT settings
-                if 'MQTT' in config:
-                    self.settings['broker_host'] = config['MQTT'].get('broker_host', 'localhost')
-                    self.settings['broker_port'] = config['MQTT'].get('broker_port', '1883')
-                    logger.info(f"Loaded MQTT settings from file: {self.settings['broker_host']}:{self.settings['broker_port']}")
-            else:
-                logger.warning(f"Settings file not found at {settings_path}, using default values")
-        except Exception as e:
-            logger.error(f"Error loading settings: {str(e)}")
-            # Continue with default settings
+        # try:
+        #     # Get the path to the settings.ini file
+        #     settings_path = pathlib.Path(__file__).parent.parent / "settings.ini"
+        #
+        #     if settings_path.exists():
+        #         logger.info(f"Loading settings from {settings_path}")
+        #         config = configparser.ConfigParser()
+        #         config.read(settings_path)
+        #
+        #         # Load MQTT settings
+        #         if 'MQTT' in config:
+        #             self.settings['broker_host'] = config['MQTT'].get('broker_host', 'localhost')
+        #             self.settings['broker_port'] = config['MQTT'].get('broker_port', '1883')
+        #             logger.info(f"Loaded MQTT settings from file: {self.settings['broker_host']}:{self.settings['broker_port']}")
+        #     else:
+        #         logger.warning(f"Settings file not found at {settings_path}, using default values")
+        # except Exception as e:
+        #     logger.error(f"Error loading settings: {str(e)}")
+        #     # Continue with default settings
 
     def _format_for_faculty_desk_unit(self, data):
         """

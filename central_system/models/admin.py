@@ -5,18 +5,18 @@ import os
 import logging
 import re
 import time
-from .base import Base
+from .base import Base, get_db, close_db
+from ..config import get_config
+import datetime
 
 # Set up logging
 logger = logging.getLogger(__name__)
+config = get_config()
 
-# Constants for password security
-MIN_PASSWORD_LENGTH = 8
-PASSWORD_LOCKOUT_THRESHOLD = 5  # Number of failed attempts before lockout
-PASSWORD_LOCKOUT_DURATION = 15 * 60  # 15 minutes in seconds
-
-# Store failed login attempts: {username: [(timestamp, ip_address), ...]}
-failed_login_attempts = {}
+# Constants for password security - now from config with fallbacks
+MIN_PASSWORD_LENGTH = config.get('security.min_password_length', 8)
+PASSWORD_LOCKOUT_THRESHOLD = config.get('security.password_lockout_threshold', 5)
+PASSWORD_LOCKOUT_DURATION = config.get('security.password_lockout_duration', 15 * 60)  # 15 minutes in seconds
 
 class Admin(Base):
     """
@@ -28,10 +28,15 @@ class Admin(Base):
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, index=True, nullable=False)
     password_hash = Column(String, nullable=False)
-    salt = Column(String, nullable=False)
+    salt = Column(String, nullable=False) # Kept for SHA256 fallback, bcrypt includes its own
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    # Columns for DB-backed account lockout
+    failed_login_attempts = Column(Integer, default=0, nullable=False)
+    last_failed_login_at = Column(DateTime, nullable=True)
+    account_locked_until = Column(DateTime, nullable=True)
 
     def __repr__(self):
         return f"<Admin {self.username}>"
@@ -65,9 +70,12 @@ class Admin(Base):
         if not has_special:
             return False, "Password must contain at least one special character"
 
-        # Check for common patterns
-        if re.search(r'123|abc|qwerty|password|admin', password.lower()):
-            return False, "Password contains common patterns that are easy to guess"
+        # Check for common patterns - only reject if they make up most of the password
+        common_patterns = ['123', 'abc', 'qwerty', 'password', 'admin']
+        for pattern in common_patterns:
+            # Only reject if the pattern makes up more than 50% of the password
+            if pattern in password.lower() and len(pattern) > len(password) / 2:
+                return False, "Password relies too heavily on common patterns that are easy to guess"
 
         return True, "Password meets strength requirements"
 
@@ -136,80 +144,91 @@ class Admin(Base):
     @classmethod
     def record_login_attempt(cls, username, ip_address, success):
         """
-        Record a login attempt for the account lockout mechanism.
-
-        Args:
-            username (str): Username that was attempted
-            ip_address (str): IP address of the client
-            success (bool): Whether the login was successful
-
-        Returns:
-            tuple: (is_locked_out, lockout_remaining_seconds)
+        Record a login attempt. Uses database for persistence.
+        Assumes Admin model has: failed_login_attempts, account_locked_until
         """
-        global failed_login_attempts
+        db = get_db()
+        try:
+            admin = db.query(cls).filter(cls.username == username).first()
+            if not admin:
+                logger.warning(f"Attempt to record login for non-existent admin: {username}")
+                return False, 0 # Or handle as per security policy
 
-        # If login was successful, clear failed attempts
-        if success:
-            if username in failed_login_attempts:
-                del failed_login_attempts[username]
-            return False, 0
+            current_time = datetime.datetime.utcnow() # Use datetime for comparison with DB
 
-        # Record the failed attempt
-        current_time = time.time()
+            # Check if currently locked
+            if admin.account_locked_until and admin.account_locked_until > current_time:
+                remaining_lockout = (admin.account_locked_until - current_time).total_seconds()
+                logger.warning(f"Login attempt for already locked account {username}. Locked for {remaining_lockout:.0f} more seconds.")
+                # Do not update failed attempts if already locked and lock is still valid
+                return True, remaining_lockout
+            
+            # Reset lock if duration has passed
+            if admin.account_locked_until and admin.account_locked_until <= current_time:
+                admin.failed_login_attempts = 0 # Renamed from failed_attempts_count
+                admin.account_locked_until = None
 
-        if username not in failed_login_attempts:
-            failed_login_attempts[username] = []
+            if success:
+                admin.failed_login_attempts = 0 # Renamed
+                admin.account_locked_until = None
+                db.commit()
+                logger.info(f"Successful login for admin {username}. Lockout reset.")
+                return False, 0
+            else: # Failed login
+                admin.failed_login_attempts = (admin.failed_login_attempts or 0) + 1 # Renamed
+                admin.last_failed_login_at = current_time # Use the new column
+                logger.warning(f"Failed login attempt for admin {username}. Attempt #{admin.failed_login_attempts}")
 
-        # Add the current failed attempt
-        failed_login_attempts[username].append((current_time, ip_address))
+                if admin.failed_login_attempts >= PASSWORD_LOCKOUT_THRESHOLD:
+                    lock_duration = datetime.timedelta(seconds=PASSWORD_LOCKOUT_DURATION)
+                    admin.account_locked_until = current_time + lock_duration
+                    logger.warning(f"Account {username} locked due to {admin.failed_login_attempts} failed attempts. Locked until {admin.account_locked_until}.")
+                
+                db.commit()
 
-        # Clean up old attempts (older than lockout duration)
-        failed_login_attempts[username] = [
-            attempt for attempt in failed_login_attempts[username]
-            if current_time - attempt[0] < PASSWORD_LOCKOUT_DURATION
-        ]
+                # Re-check lock status after commit
+                if admin.account_locked_until and admin.account_locked_until > current_time:
+                    remaining_lockout = (admin.account_locked_until - current_time).total_seconds()
+                    return True, remaining_lockout
+                return False, 0
 
-        # Check if account is locked out
-        if len(failed_login_attempts[username]) >= PASSWORD_LOCKOUT_THRESHOLD:
-            # Calculate remaining lockout time
-            oldest_recent_attempt = failed_login_attempts[username][-PASSWORD_LOCKOUT_THRESHOLD]
-            lockout_end_time = oldest_recent_attempt[0] + PASSWORD_LOCKOUT_DURATION
-            remaining_seconds = max(0, lockout_end_time - current_time)
-
-            if remaining_seconds > 0:
-                logger.warning(f"Account '{username}' is locked out for {remaining_seconds:.0f} more seconds")
-                return True, remaining_seconds
-
-        return False, 0
+        except Exception as e:
+            logger.error(f"Error recording login attempt for {username}: {e}")
+            if db: db.rollback()
+            return False, 0 # Default to not locked on error to avoid unintended permanent lock
+        finally:
+            if db: close_db()
 
     @classmethod
     def is_account_locked(cls, username):
         """
-        Check if an account is currently locked out.
-
-        Args:
-            username (str): Username to check
-
-        Returns:
-            tuple: (is_locked_out, lockout_remaining_seconds)
+        Check if an account is currently locked out from the database.
+        Assumes Admin model has: account_locked_until
         """
-        if username not in failed_login_attempts:
-            return False, 0
+        db = get_db()
+        try:
+            admin = db.query(cls).filter(cls.username == username).first()
+            if not admin or not admin.account_locked_until:
+                return False, 0
 
-        # Check if there are enough recent failed attempts
-        if len(failed_login_attempts[username]) < PASSWORD_LOCKOUT_THRESHOLD:
-            return False, 0
-
-        # Calculate remaining lockout time
-        current_time = time.time()
-        oldest_recent_attempt = failed_login_attempts[username][-PASSWORD_LOCKOUT_THRESHOLD]
-        lockout_end_time = oldest_recent_attempt[0] + PASSWORD_LOCKOUT_DURATION
-        remaining_seconds = max(0, lockout_end_time - current_time)
-
-        if remaining_seconds > 0:
-            return True, remaining_seconds
-
-        return False, 0
+            current_time = datetime.datetime.utcnow()
+            if admin.account_locked_until > current_time:
+                remaining_seconds = (admin.account_locked_until - current_time).total_seconds()
+                logger.info(f"Account {username} is currently locked. {remaining_seconds:.0f}s remaining.")
+                return True, remaining_seconds
+            else:
+                # Lock has expired, reset it (optional, could be done on next login attempt)
+                # For simplicity, we just report it as not locked if time has passed.
+                # Consider resetting failed_attempts_count here if desired.
+                # admin.account_locked_until = None
+                # admin.failed_login_attempts = 0
+                # db.commit() # If making changes
+                return False, 0
+        except Exception as e:
+            logger.error(f"Error checking account lock status for {username}: {e}")
+            return False, 0 # Default to not locked on error
+        finally:
+            if db: close_db()
 
     def to_dict(self):
         """

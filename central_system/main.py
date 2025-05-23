@@ -2,19 +2,46 @@ import sys
 import os
 import logging
 import subprocess
-from PyQt5.QtWidgets import QApplication
-from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtWidgets import QApplication, QLineEdit, QTextEdit, QSplashScreen, QDesktopWidget
+from PyQt5.QtCore import Qt, QTimer, QEvent
+from PyQt5.QtGui import QPixmap, QFont
+import signal
+from logging.handlers import RotatingFileHandler
 
 # Add parent directory to path to help with imports
 sys.path.insert(0, os.path.abspath(os.path.dirname(os.path.dirname(__file__))))
 
-# Configure logging
+# Import configuration system
+from central_system.config import get_config, initialize_config, log_config_load_status
+
+# Initialize configuration early
+initialize_config()
+config = get_config()
+log_config_load_status()
+
+# Configure logging using settings from config.py
+log_level_str = config.get('logging.level', 'INFO').upper()
+log_level = getattr(logging, log_level_str, logging.INFO)
+log_file = config.get('logging.file', 'consultease.log')
+log_max_size = config.get('logging.max_size', 10*1024*1024) # Default 10MB
+log_backup_count = config.get('logging.backup_count', 5)
+
+# Ensure logs directory exists
+os.makedirs(os.path.dirname(log_file), exist_ok=True)
+
+# Create handlers
+stream_handler = logging.StreamHandler(sys.stdout)
+# Use RotatingFileHandler
+file_handler = RotatingFileHandler(
+    log_file, maxBytes=log_max_size, backupCount=log_backup_count
+)
+
 logging.basicConfig(
-    level=logging.INFO,
+    level=log_level,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler('consultease.log')
+        stream_handler,
+        file_handler
     ]
 )
 logger = logging.getLogger(__name__)
@@ -36,9 +63,6 @@ from central_system.views import (
     AdminDashboardWindow
 )
 
-# Import the keyboard setup script generator
-from central_system.views.login_window import create_keyboard_setup_script
-
 # Import utilities
 from central_system.utils import (
     apply_stylesheet,
@@ -46,12 +70,33 @@ from central_system.utils import (
     get_keyboard_manager,
     install_keyboard_manager
 )
-# Import direct keyboard integration
-from central_system.utils.direct_keyboard import get_direct_keyboard
 # Import theme system
 from central_system.utils.theme import ConsultEaseTheme
 # Import icons module separately to avoid early QPixmap creation
 from central_system.utils import icons
+from central_system.utils.keyboard_manager import KeyboardManager
+
+# Event filter for auto-showing keyboard
+class FocusEventFilter(QEvent.QObject):
+    def __init__(self, keyboard_manager, parent=None):
+        super().__init__(parent)
+        self.keyboard_manager = keyboard_manager
+        self.logger = logging.getLogger(__name__ + ".FocusEventFilter")
+
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.FocusIn:
+            if isinstance(obj, (QLineEdit, QTextEdit)):
+                # Check if the widget wants keyboard on focus (optional, for more control)
+                # For now, always show for QLineEdit and QTextEdit
+                self.logger.debug(f"FocusIn event on {obj.__class__.__name__} ({obj.objectName()}). Showing keyboard.")
+                self.keyboard_manager.show()
+        # elif event.type() == QEvent.FocusOut:
+        #     if isinstance(obj, (QLineEdit, QTextEdit)):
+        #         # Potentially hide keyboard if no other input field has focus.
+        #         # This can be complex; for now, rely on manual hide or keyboard's own behavior.
+        #         self.logger.debug(f"FocusOut event on {obj.__class__.__name__}. Considering hiding keyboard.")
+        #         pass # Logic to hide keyboard if no other input has focus would go here
+        return super().eventFilter(obj, event)
 
 class ConsultEaseApp:
     """
@@ -63,6 +108,7 @@ class ConsultEaseApp:
         Initialize the ConsultEase application.
         """
         logger.info("Initializing ConsultEase application")
+        self.config = get_config() # Store config instance
 
         # Create QApplication instance
         self.app = QApplication(sys.argv)
@@ -87,13 +133,6 @@ class ConsultEaseApp:
             except Exception as e2:
                 logger.error(f"Failed to apply fallback stylesheet: {e2}")
 
-        # Create keyboard setup script for Raspberry Pi
-        try:
-            script_path = create_keyboard_setup_script()
-            logger.info(f"Created keyboard setup script at {script_path}")
-        except Exception as e:
-            logger.error(f"Failed to create keyboard setup script: {e}")
-
         # Initialize unified keyboard manager for touch input
         try:
             self.keyboard_handler = get_keyboard_manager()
@@ -104,22 +143,14 @@ class ConsultEaseApp:
             logger.error(f"Failed to initialize keyboard manager: {e}")
             self.keyboard_handler = None
 
-        # Initialize direct keyboard integration as a fallback
-        try:
-            self.direct_keyboard = get_direct_keyboard()
-            logger.info(f"Initialized direct keyboard integration with {self.direct_keyboard.keyboard_type} keyboard")
-        except Exception as e:
-            logger.error(f"Failed to initialize direct keyboard integration: {e}")
-            self.direct_keyboard = None
-
         # Initialize database
         init_db()
 
         # Initialize controllers
-        self.rfid_controller = RFIDController()
-        self.faculty_controller = FacultyController()
-        self.consultation_controller = ConsultationController()
-        self.admin_controller = AdminController()
+        self.rfid_controller = RFIDController.instance()
+        self.faculty_controller = FacultyController.instance()
+        self.consultation_controller = ConsultationController.instance()
+        self.admin_controller = AdminController.instance()
 
         # Ensure default admin exists
         self.admin_controller.ensure_default_admin()
@@ -141,14 +172,19 @@ class ConsultEaseApp:
         logger.info("Starting consultation controller")
         self.consultation_controller.start()
 
-        # Make sure at least one faculty is available for testing
-        self._ensure_dr_john_smith_available()
+        # Make sure at least one faculty is available for testing, if configured
+        if self.config.get('system.ensure_test_faculty_available', False):
+            logger.info("Configuration requests ensuring test faculty is available.")
+            self._ensure_dr_john_smith_available()
+        else:
+            logger.info("Skipping ensure_test_faculty_available as per configuration.")
 
         # Current student
         self.current_student = None
 
         # Initialize transition manager
-        self.transition_manager = WindowTransitionManager(duration=300)
+        transition_duration = self.config.get('ui.transition_duration', 300)
+        self.transition_manager = WindowTransitionManager(duration=transition_duration)
         logger.info("Initialized window transition manager")
 
         # Verify RFID controller is properly initialized
@@ -174,7 +210,17 @@ class ConsultEaseApp:
         self.show_login_window()
 
         # Store fullscreen preference for use in window creation
-        self.fullscreen = fullscreen
+        self.fullscreen = self.config.get('ui.fullscreen', False)
+
+        # Initialize KeyboardManager
+        keyboard_cmd = self.config.get("system.keyboard_command", "squeekboard")
+        self.keyboard_manager = KeyboardManager(keyboard_command=keyboard_cmd)
+        self.app.keyboard_manager = self.keyboard_manager # Make it accessible globally if needed
+
+        # Install focus event filter for auto keyboard display
+        self.focus_filter = FocusEventFilter(self.keyboard_manager)
+        self.app.installEventFilter(self.focus_filter)
+        logger.info("Installed focus event filter for automatic keyboard.")
 
     def _get_theme_preference(self):
         """
@@ -184,16 +230,10 @@ class ConsultEaseApp:
             str: Theme name ('light' or 'dark')
         """
         # Default to light theme as per the technical context document
-        theme = "light"
-
-        # Check for environment variable
-        if "CONSULTEASE_THEME" in os.environ:
-            env_theme = os.environ["CONSULTEASE_THEME"].lower()
-            if env_theme in ["light", "dark"]:
-                theme = env_theme
+        theme = self.config.get('ui.theme', 'light')
 
         # Log the theme being used
-        logger.info(f"Using {theme} theme based on preference")
+        logger.info(f"Using {theme} theme based on preference from configuration")
 
         return theme
 
@@ -231,6 +271,18 @@ class ConsultEaseApp:
         self.rfid_controller.stop()
         self.faculty_controller.stop()
         self.consultation_controller.stop()
+
+        if self.keyboard_manager: # Cleanup keyboard manager
+            self.keyboard_manager.cleanup()
+            logger.info("Keyboard manager cleaned up.")
+
+        # Close all windows gracefully
+        self.login_window = None
+        self.dashboard_window = None
+        self.admin_login_window = None
+        self.admin_dashboard_window = None
+
+        logger.info("Cleanup finished.")
 
     def show_login_window(self):
         """
@@ -427,22 +479,33 @@ class ConsultEaseApp:
             self.admin_dashboard_window.show()
             self.admin_dashboard_window.showFullScreen()  # Force fullscreen
 
-    def handle_rfid_scan(self, student, rfid_uid):
+    def handle_rfid_scan(self, student, rfid_uid, error_message=None):
         """
-        Handle RFID scan event.
-
+        Handle RFID scan events from RFIDController.
         Args:
-            student (Student): Verified student or None if not verified
-            rfid_uid (str): RFID UID that was scanned
+            student: Authenticated student object, or None on failure.
+            rfid_uid: The scanned RFID UID.
+            error_message: Error message if authentication failed.
         """
-        logger.info(f"Main.handle_rfid_scan called with student: {student}, rfid_uid: {rfid_uid}")
-
-        # If login window is active and visible
-        if self.login_window and self.login_window.isVisible():
-            logger.info(f"Forwarding RFID scan to login window: {rfid_uid}")
-            self.login_window.handle_rfid_read(rfid_uid, student)
+        if student:
+            logger.info(f"RFID scan successful: Student {student.name} (UID: {rfid_uid})")
+            self.current_student = student
+            self.show_dashboard_window(student)
+            # Sound/UI feedback for success should be handled within show_dashboard_window or by DashboardWindow itself
         else:
-            logger.info(f"Login window not visible, RFID scan not forwarded: {rfid_uid}")
+            logger.warning(f"RFID scan failed: UID '{rfid_uid}'. Error: {error_message}")
+            # Display error message on the current relevant window (e.g., LoginWindow)
+            if self.login_window and self.login_window.isVisible():
+                display_error = error_message if error_message else f"Invalid RFID card ('{rfid_uid}')."
+                self.login_window.show_error_message(display_error)
+            elif self.dashboard_window and self.dashboard_window.isVisible():
+                # If already on dashboard (e.g. admin scanned an unknown card), show a temporary notification
+                display_error = error_message if error_message else f"Unknown RFID card ('{rfid_uid}')."
+                self.dashboard_window.show_notification(display_error, 'error')
+            else:
+                # Fallback if no specific window is active to show the error
+                logger.error(f"RFID Authentication failed for UID '{rfid_uid}': {error_message}. No active window to display error.")
+            # Sound/UI feedback for error should be handled by the window showing the error
 
     def handle_student_authenticated(self, student):
         """
@@ -474,12 +537,8 @@ class ConsultEaseApp:
 
         if admin:
             logger.info(f"Admin authenticated: {username}")
-            # Create admin info to pass to dashboard
-            admin_info = {
-                'id': admin.id,
-                'username': admin.username
-            }
-            self.show_admin_dashboard_window(admin_info)
+            # Pass the admin model object directly
+            self.show_admin_dashboard_window(admin)
         else:
             logger.warning(f"Admin authentication failed: {username}")
             if self.admin_login_window:
@@ -589,37 +648,31 @@ class ConsultEaseApp:
             logger.warning(f"Unknown window: {window_name}")
 
 if __name__ == "__main__":
-    # Configure logging
-    import logging
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        handlers=[
-            logging.StreamHandler(),
-            logging.FileHandler("consultease.log")
-        ]
-    )
+    # Config object is already initialized globally when config is imported
+    # Logging is configured globally using config values
 
-    # Enable debug logging for RFID service
+    # Enable debug logging for RFID service (can also be driven by config)
+    rfid_log_level_str = config.get('logging.rfid_level', 'INFO').upper()
+    rfid_log_level = getattr(logging, rfid_log_level_str, logging.INFO)
     rfid_logger = logging.getLogger('central_system.services.rfid_service')
-    rfid_logger.setLevel(logging.DEBUG)
+    rfid_logger.setLevel(rfid_log_level) # Use configured level
 
-    # Set environment variables if needed
-    import os
+    # Set environment variables if needed - REMOVED, should be set externally or in config.json
+    # import os
 
     # Configure RFID - enable simulation mode since we're on Raspberry Pi
-    os.environ['RFID_SIMULATION_MODE'] = 'true'  # Enable if no RFID reader available
-
+    # os.environ['RFID_SIMULATION_MODE'] = 'true'  # REMOVED
     # Set the theme to light as per the technical context document
-    os.environ['CONSULTEASE_THEME'] = 'light'
-
+    # os.environ['CONSULTEASE_THEME'] = 'light' # REMOVED
     # Use SQLite for development and testing
-    os.environ['DB_TYPE'] = 'sqlite'
-    os.environ['DB_PATH'] = 'consultease.db'  # SQLite database file
+    # os.environ['DB_TYPE'] = 'sqlite' # REMOVED
+    # os.environ['DB_PATH'] = 'consultease.db'  # REMOVED
 
     # Check if we're running in fullscreen mode
-    fullscreen = os.environ.get('CONSULTEASE_FULLSCREEN', 'false').lower() == 'true'
+    # fullscreen = os.environ.get('CONSULTEASE_FULLSCREEN', 'false').lower() == 'true' # Now handled by self.fullscreen in __init__
+    fullscreen_from_config = config.get('ui.fullscreen', False)
 
     # Start the application
-    app = ConsultEaseApp(fullscreen=fullscreen)
+    app = ConsultEaseApp(fullscreen=fullscreen_from_config) # Pass config value
+    signal.signal(signal.SIGINT, lambda sig, frame: app.cleanup()) # Ensure cleanup on Ctrl+C
     sys.exit(app.run())

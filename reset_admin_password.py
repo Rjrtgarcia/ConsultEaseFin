@@ -39,8 +39,8 @@ def reset_admin_password():
         if admin:
             logger.info(f"Found admin user: {admin.username} (ID: {admin.id})")
 
-            # Reset password to a secure default: 'Secure@Pass456'
-            password_hash, salt = Admin.hash_password("Secure@Pass456")
+            # Reset password to a secure default: 'Admin123!'
+            password_hash, salt = Admin.hash_password("Admin123!")
 
             # Update admin
             admin.password_hash = password_hash
@@ -54,7 +54,7 @@ def reset_admin_password():
 
             logger.info(f"Reset password for admin user: {admin.username}")
             logger.warning(
-                "Admin password has been reset to 'Secure@Pass456'. "
+                "Admin password has been reset to 'Admin123!'. "
                 "Please change this password after logging in!"
             )
         else:
@@ -63,8 +63,8 @@ def reset_admin_password():
             # Create admin user if it doesn't exist
             logger.info("Creating new admin user with default credentials")
 
-            # Hash password - use a secure default: 'Secure@Pass456'
-            password_hash, salt = Admin.hash_password("Secure@Pass456")
+            # Hash password - use a secure default: 'Admin123!'
+            password_hash, salt = Admin.hash_password("Admin123!")
 
             # Create new admin
             admin = Admin(
@@ -79,14 +79,14 @@ def reset_admin_password():
 
             logger.info(f"Created new admin user: admin (ID: {admin.id})")
             logger.warning(
-                "Created default admin user with username 'admin' and password 'Secure@Pass456'. "
+                "Created default admin user with username 'admin' and password 'Admin123!'. "
                 "Please change this password after logging in!"
             )
 
         # Close database connection
         db.close()
 
-        print("Admin password has been reset to 'Secure@Pass456'")
+        print("Admin password has been reset to 'Admin123!'")
 
     except Exception as e:
         logger.error(f"Error resetting admin password: {str(e)}")

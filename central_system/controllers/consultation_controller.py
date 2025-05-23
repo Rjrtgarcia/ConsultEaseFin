@@ -1,32 +1,44 @@
 import logging
 import datetime
+import time # Added for sleep in create_consultation
 from ..services import get_mqtt_service
-from ..models import Consultation, ConsultationStatus, get_db
+from ..models import Consultation, ConsultationStatus, Student, Faculty, get_db, close_db # Import Student, Faculty, close_db
+from ..models.base import db_operation_with_retry # Import decorator
 from ..utils.mqtt_topics import MQTTTopics
 
 # Set up logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s') # REMOVED
 logger = logging.getLogger(__name__)
 
 class ConsultationController:
     """
     Controller for managing consultation requests.
     """
+    _instance = None
+
+    @classmethod
+    def instance(cls):
+        """Get the singleton instance of the ConsultationController."""
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
 
     def __init__(self):
         """
         Initialize the consultation controller.
         """
+        if ConsultationController._instance is not None:
+            raise RuntimeError("ConsultationController is a singleton, use ConsultationController.instance()")
+
         self.mqtt_service = get_mqtt_service()
         self.callbacks = []
+        ConsultationController._instance = self
 
     def start(self):
         """
         Start the consultation controller.
         """
         logger.info("Starting Consultation controller")
-
-        # Connect MQTT service
         if not self.mqtt_service.is_connected:
             self.mqtt_service.connect()
 
@@ -39,19 +51,13 @@ class ConsultationController:
     def register_callback(self, callback):
         """
         Register a callback to be called when a consultation status changes.
-
-        Args:
-            callback (callable): Function that takes a Consultation object as argument
         """
         self.callbacks.append(callback)
-        logger.info(f"Registered Consultation controller callback: {callback.__name__}")
+        logger.info(f"Registered Consultation controller callback: {getattr(callback, '__name__', 'unnamed_callback')}")
 
     def _notify_callbacks(self, consultation):
         """
-        Notify all registered callbacks with the updated consultation information.
-
-        Args:
-            consultation (Consultation): Updated consultation object
+        Notify all registered callbacks.
         """
         for callback in self.callbacks:
             try:
@@ -59,361 +65,236 @@ class ConsultationController:
             except Exception as e:
                 logger.error(f"Error in Consultation controller callback: {str(e)}")
 
+    def _ensure_mqtt_connected(self, operation_description: str = "operation") -> bool:
+        """
+        Ensures MQTT service is connected, attempting to connect if necessary.
+        Includes a timeout for the connection attempt.
+
+        Args:
+            operation_description (str): Description of the operation requiring MQTT (for logging).
+
+        Returns:
+            bool: True if connected, False otherwise.
+        """
+        if not self.mqtt_service.is_connected:
+            logger.warning(f"MQTT not connected before {operation_description}. Attempting to connect.")
+            self.mqtt_service.connect() # connect() should be non-blocking or have its own timeout management
+            
+            # Allow some time for connection to establish, especially if connect() is async
+            # This loop is a fallback/check, assuming connect() initiates connection.
+            connect_timeout = 5  # seconds
+            start_time = time.time()
+            while not self.mqtt_service.is_connected and (time.time() - start_time) < connect_timeout:
+                time.sleep(0.1) # Brief pause before re-checking
+            
+            if not self.mqtt_service.is_connected:
+                logger.error(f"MQTT: Failed to connect within timeout before {operation_description}.")
+                return False
+            logger.info(f"MQTT: Successfully connected before {operation_description}.")
+        return True
+
+    @db_operation_with_retry()
+    def _create_consultation_in_db(self, db, student_id, faculty_id, request_message, course_code=None):
+        """
+        Helper to create consultation in DB. `db` is from decorator.
+        """
+        consultation = Consultation(
+            student_id=student_id, faculty_id=faculty_id, request_message=request_message,
+            course_code=course_code, status=ConsultationStatus.PENDING,
+            requested_at=datetime.datetime.now()
+        )
+        db.add(consultation)
+        # db.flush() # Ensure ID is populated if needed before commit by decorator
+        return consultation
+
     def create_consultation(self, student_id, faculty_id, request_message, course_code=None):
         """
-        Create a new consultation request.
-
-        Args:
-            student_id (int): Student ID
-            faculty_id (int): Faculty ID
-            request_message (str): Consultation request message
-            course_code (str, optional): Course code
-
-        Returns:
-            Consultation: New consultation object or None if error
+        Create a new consultation request, store in DB, then publish.
         """
+        logger.info(f"Attempting to create consultation (Student: {student_id}, Faculty: {faculty_id})")
+        consultation = None
         try:
-            logger.info(f"Creating new consultation request (Student: {student_id}, Faculty: {faculty_id})")
-
-            # Check if MQTT service is connected
-            if not self.mqtt_service.is_connected:
-                logger.warning("MQTT service is not connected. Attempting to connect...")
-                self.mqtt_service.connect()
-                # Wait briefly for connection
-                import time
-                time.sleep(1)
-
-                if not self.mqtt_service.is_connected:
-                    logger.error("Failed to connect to MQTT service. Consultation will be created but may not be delivered to faculty desk unit.")
-
-            db = get_db()
-
-            # Create new consultation
-            consultation = Consultation(
-                student_id=student_id,
-                faculty_id=faculty_id,
-                request_message=request_message,
-                course_code=course_code,
-                status=ConsultationStatus.PENDING,
-                requested_at=datetime.datetime.now()
-            )
-
-            db.add(consultation)
-            db.commit()
-
-            logger.info(f"Created consultation request: {consultation.id} (Student: {student_id}, Faculty: {faculty_id})")
-
-            # Get student and faculty information for direct MQTT publishing
-            from ..models import Student, Faculty
-            student = db.query(Student).filter(Student.id == student_id).first()
-            faculty = db.query(Faculty).filter(Faculty.id == faculty_id).first()
-
-            # Create a simple message that will definitely work
-            simple_message = f"Student: {student.name if student else 'Unknown'}\n"
-            if course_code:
-                simple_message += f"Course: {course_code}\n"
-            simple_message += f"Request: {request_message}"
-
-            # Publish directly to the legacy topic which is guaranteed to work
-            success_direct = self.mqtt_service.publish_raw(MQTTTopics.LEGACY_FACULTY_MESSAGES, simple_message)
-
-            if success_direct:
-                logger.info(f"Successfully published direct message to {MQTTTopics.LEGACY_FACULTY_MESSAGES}")
+            consultation = self._create_consultation_in_db(student_id, faculty_id, request_message, course_code)
+            if consultation and consultation.id: # Check if ID is populated (meaning commit was successful)
+                logger.info(f"DB: Created consultation request: {consultation.id}")
+                
+                if self._ensure_mqtt_connected(f"publishing consultation {consultation.id}"):
+                    publish_success = self._publish_consultation_to_mqtt(consultation.id)
+                    if publish_success:
+                        logger.info(f"MQTT: Successfully published consultation {consultation.id}")
+                    else:
+                        logger.error(f"MQTT: Failed to publish consultation {consultation.id}. It is saved in DB.")
+                else:
+                    # _ensure_mqtt_connected already logs the failure to connect
+                    logger.error(f"MQTT: Not connected. Consultation {consultation.id} saved in DB but not published.")
+                
+                self._notify_callbacks(consultation) # Notify UI/other internal parts
+                return consultation
             else:
-                logger.error(f"Failed to publish direct message to {MQTTTopics.LEGACY_FACULTY_MESSAGES}")
-
-            # Also try the regular publishing method
-            publish_success = self._publish_consultation(consultation)
-
-            if publish_success:
-                logger.info(f"Successfully published consultation request {consultation.id} to faculty desk unit")
-            else:
-                logger.error(f"Failed to publish consultation request {consultation.id} to faculty desk unit")
-
-            # Notify callbacks
-            self._notify_callbacks(consultation)
-
-            return consultation
+                logger.error(f"DB: Failed to create consultation or retrieve ID after commit.")
+                return None
         except Exception as e:
-            logger.error(f"Error creating consultation: {str(e)}")
+            logger.error(f"Error in create_consultation controller method: {str(e)}")
+            # The decorator on _create_consultation_in_db handles DB rollback
             return None
 
-    def _publish_consultation(self, consultation):
+    def _publish_consultation_to_mqtt(self, consultation_id):
         """
-        Publish consultation to MQTT.
-
-        Args:
-            consultation (Consultation): Consultation object to publish
+        Publish consultation to MQTT. Fetches fresh data for publishing.
         """
+        db = get_db()
         try:
-            # Get a new database session and fetch the consultation with all related objects
-            db = get_db(force_new=True)
-
-            # Instead of refreshing, query for the consultation by ID to ensure it's attached to this session
-            consultation_id = consultation.id
+            # Fetch the consultation with related objects for publishing
+            # No need for force_new=True if this session is short-lived and only for this publish
             consultation = db.query(Consultation).filter(Consultation.id == consultation_id).first()
-
             if not consultation:
-                logger.error(f"Consultation with ID {consultation_id} not found in database")
+                logger.error(f"MQTT Publish: Consultation {consultation_id} not found.")
                 return False
 
-            # Explicitly load the related objects to avoid lazy loading issues
-            student = consultation.student
+            student = consultation.student # Assuming relationships are loaded or accessible
             faculty = consultation.faculty
-
-            if not student:
-                logger.error(f"Student not found for consultation {consultation_id}")
+            if not student or not faculty:
+                logger.error(f"MQTT Publish: Student or Faculty not found for Consultation {consultation_id}.")
                 return False
 
-            if not faculty:
-                logger.error(f"Faculty not found for consultation {consultation_id}")
-                return False
+            # Primary message format for modern faculty desk units (JSON to specific topic)
+            message_for_display = f"Student: {student.name}\n"
+            if consultation.course_code: message_for_display += f"Course: {consultation.course_code}\n"
+            message_for_display += f"Request: {consultation.request_message}"
 
-            # Format the message for the faculty desk unit display - EXACTLY like the test message
-            message = f"Student: {student.name}\n"
-            if consultation.course_code:
-                message += f"Course: {consultation.course_code}\n"
-            message += f"Request: {consultation.request_message}"
-
-            # Create payload - EXACTLY like the test message format
             payload = {
-                'id': consultation.id,
-                'student_id': student.id,
-                'student_name': student.name,
-                'student_department': student.department,
-                'faculty_id': faculty.id,
-                'faculty_name': faculty.name,
-                'request_message': consultation.request_message,
-                'course_code': consultation.course_code,
+                'id': consultation.id, 'student_id': student.id, 'student_name': student.name,
+                'student_department': student.department, 'faculty_id': faculty.id, 'faculty_name': faculty.name,
+                'request_message': consultation.request_message, 'course_code': consultation.course_code,
                 'status': consultation.status.value,
                 'requested_at': consultation.requested_at.isoformat() if consultation.requested_at else None,
-                # IMPORTANT: Add message field for easier extraction by faculty desk unit
-                'message': message
+                'message': message_for_display # ESP32 prefers this for direct display
             }
+            specific_topic = MQTTTopics.get_faculty_requests_topic(faculty.id)
+            success_specific = self.mqtt_service.publish(specific_topic, payload)
+            if success_specific: logger.info(f"MQTT: Published to specific topic {specific_topic}")
+            else: logger.error(f"MQTT: Failed to publish to specific topic {specific_topic}")
 
-            logger.info(f"Preparing to publish consultation request {consultation.id} for faculty {faculty.id}")
-
-            # IMPORTANT: First publish to the legacy topic that the faculty desk unit is known to use
-            # This is the topic used in the faculty desk unit code and is GUARANTEED to work
+            # Fallback/Legacy: Plain text message to a general legacy topic (if deemed absolutely necessary)
+            # Consider phasing this out if all desk units support the specific JSON topic.
+            # For now, keeping one legacy publish as per previous intense desire for it.
             legacy_topic = MQTTTopics.LEGACY_FACULTY_MESSAGES
-
-            # Publish the message directly (not as JSON) to match the faculty desk unit code
-            # This is the MOST RELIABLE method and should work regardless of faculty ID
-            success_legacy = self.mqtt_service.publish_raw(legacy_topic, message)
-
-            if success_legacy:
-                logger.info(f"Successfully published consultation request to legacy topic {legacy_topic}")
-            else:
-                logger.error(f"Failed to publish consultation request to legacy topic {legacy_topic}")
-
-            # Now publish to faculty-specific topic using standardized format
-            faculty_requests_topic = MQTTTopics.get_faculty_requests_topic(faculty.id)
-
-            # The MQTT service will format the message for the faculty desk unit
-            success = self.mqtt_service.publish(faculty_requests_topic, payload)
-
-            if success:
-                logger.info(f"Successfully published consultation request to {faculty_requests_topic}")
-            else:
-                logger.error(f"Failed to publish consultation request to {faculty_requests_topic}")
-
-            # Try publishing to the faculty-specific messages topic in plain text format as well
-            # This provides maximum compatibility
-            faculty_messages_topic = MQTTTopics.get_faculty_messages_topic(faculty.id)
-            success_faculty = self.mqtt_service.publish_raw(faculty_messages_topic, message)
-
-            if success_faculty:
-                logger.info(f"Successfully published plain text message to {faculty_messages_topic}")
-            else:
-                logger.error(f"Failed to publish plain text message to {faculty_messages_topic}")
-
-            # For backward compatibility, also publish to the legacy topic
-            # This ensures we're using the exact same format that works in the test
-            success_test = self.mqtt_service.publish_raw(MQTTTopics.LEGACY_FACULTY_MESSAGES, message)
-            if success_test:
-                logger.info(f"Successfully published to {MQTTTopics.LEGACY_FACULTY_MESSAGES} (backward compatibility)")
-            else:
-                logger.error(f"Failed to publish to {MQTTTopics.LEGACY_FACULTY_MESSAGES} (backward compatibility)")
-
-            # Log overall success/failure
-            if success or success_legacy or success_faculty or success_test:
-                logger.info(f"Successfully published consultation request {consultation.id} to at least one topic")
-            else:
-                logger.error(f"Failed to publish consultation request {consultation.id} to any topic")
-
-            # Close the database session
-            db.close()
-
-            return success or success_legacy or success_faculty or success_test
+            success_legacy_raw = self.mqtt_service.publish_raw(legacy_topic, message_for_display)
+            if success_legacy_raw: logger.info(f"MQTT: Published to legacy raw topic {legacy_topic}")
+            else: logger.error(f"MQTT: Failed to publish to legacy raw topic {legacy_topic}")
+            
+            # Return true if primary specific publish worked, or if legacy fallback worked
+            return success_specific or success_legacy_raw 
         except Exception as e:
-            logger.error(f"Error publishing consultation: {str(e)}")
+            logger.error(f"Error in _publish_consultation_to_mqtt for C_ID {consultation_id}: {str(e)}")
             return False
+        finally:
+            close_db()
 
-    def update_consultation_status(self, consultation_id, status):
+    @db_operation_with_retry()
+    def update_consultation_status(self, db, consultation_id, status):
         """
-        Update consultation status.
-
-        Args:
-            consultation_id (int): Consultation ID
-            status (ConsultationStatus): New status
-
-        Returns:
-            Consultation: Updated consultation object or None if error
+        Update consultation status in DB. `db` is from decorator.
+        Also handles subsequent MQTT publishing if successful.
         """
-        try:
-            db = get_db()
-            consultation = db.query(Consultation).filter(Consultation.id == consultation_id).first()
+        consultation = db.query(Consultation).filter(Consultation.id == consultation_id).first()
+        if not consultation:
+            # Error will be handled by decorator (rollback, retry)
+            raise ValueError(f"Consultation not found for status update: {consultation_id}")
 
-            if not consultation:
-                logger.error(f"Consultation not found: {consultation_id}")
-                return None
+        consultation.status = status
+        if status == ConsultationStatus.ACCEPTED: consultation.accepted_at = datetime.datetime.now()
+        elif status == ConsultationStatus.COMPLETED: consultation.completed_at = datetime.datetime.now()
+        # db.commit() handled by decorator
 
-            # Update status and timestamp
-            consultation.status = status
+        logger.info(f"DB: Updated consultation {consultation.id} to status {status}")
+        
+        # After successful DB commit (handled by decorator), try to publish
+        # This runs outside the decorator's DB transaction, so MQTT failure won't roll back DB change.
+        # This is generally desired: DB state is source of truth.
+        if self._ensure_mqtt_connected(f"publishing status for C_ID {consultation.id}"):
+            publish_success_update = self._publish_consultation_to_mqtt(consultation.id)
+            if publish_success_update:
+                logger.info(f"MQTT: Published status update for consultation {consultation.id}")
+            else:
+                logger.error(f"MQTT: Failed to publish status update for {consultation.id}. DB is updated.")
+        else:
+            # _ensure_mqtt_connected already logs the failure to connect
+            logger.error(f"MQTT: Not connected. Status update for {consultation.id} saved in DB but not published.")
 
-            if status == ConsultationStatus.ACCEPTED:
-                consultation.accepted_at = datetime.datetime.now()
-            elif status == ConsultationStatus.COMPLETED:
-                consultation.completed_at = datetime.datetime.now()
-            elif status == ConsultationStatus.CANCELLED:
-                # No specific timestamp for cancellation, but we could add one if needed
-                pass
-
-            db.commit()
-
-            logger.info(f"Updated consultation status: {consultation.id} -> {status}")
-
-            # Publish updated consultation
-            self._publish_consultation(consultation)
-
-            # Notify callbacks
-            self._notify_callbacks(consultation)
-
-            return consultation
-        except Exception as e:
-            logger.error(f"Error updating consultation status: {str(e)}")
-            return None
+        self._notify_callbacks(consultation) # Notify UI, etc.
+        return consultation # Return the updated consultation object
 
     def cancel_consultation(self, consultation_id):
         """
         Cancel a consultation request.
-
-        Args:
-            consultation_id (int): Consultation ID
-
-        Returns:
-            Consultation: Updated consultation object or None if error
         """
-        return self.update_consultation_status(consultation_id, ConsultationStatus.CANCELLED)
+        try:
+            return self.update_consultation_status(consultation_id, ConsultationStatus.CANCELLED)
+        except Exception as e:
+            # update_consultation_status (decorated) will handle logging of DB errors
+            logger.error(f"Error in cancel_consultation controller method for C_ID {consultation_id}: {e}")
+            return None
 
     def get_consultations(self, student_id=None, faculty_id=None, status=None):
         """
-        Get consultations, optionally filtered by student, faculty, or status.
-
-        Args:
-            student_id (int, optional): Filter by student ID
-            faculty_id (int, optional): Filter by faculty ID
-            status (ConsultationStatus, optional): Filter by status
-
-        Returns:
-            list: List of Consultation objects
+        Get consultations, optionally filtered.
         """
+        db = get_db()
         try:
-            db = get_db()
             query = db.query(Consultation)
-
-            # Apply filters
-            if student_id is not None:
-                query = query.filter(Consultation.student_id == student_id)
-
-            if faculty_id is not None:
-                query = query.filter(Consultation.faculty_id == faculty_id)
-
-            if status is not None:
-                query = query.filter(Consultation.status == status)
-
-            # Order by requested_at (newest first)
-            query = query.order_by(Consultation.requested_at.desc())
-
-            # Execute query
-            consultations = query.all()
-
+            if student_id is not None: query = query.filter(Consultation.student_id == student_id)
+            if faculty_id is not None: query = query.filter(Consultation.faculty_id == faculty_id)
+            if status is not None: query = query.filter(Consultation.status == status)
+            consultations = query.order_by(Consultation.requested_at.desc()).all()
             return consultations
         except Exception as e:
             logger.error(f"Error getting consultations: {str(e)}")
             return []
+        finally:
+            close_db()
 
     def get_consultation_by_id(self, consultation_id):
         """
         Get a consultation by ID.
-
-        Args:
-            consultation_id (int): Consultation ID
-
-        Returns:
-            Consultation: Consultation object or None if not found
         """
+        db = get_db()
         try:
-            db = get_db()
             consultation = db.query(Consultation).filter(Consultation.id == consultation_id).first()
             return consultation
         except Exception as e:
             logger.error(f"Error getting consultation by ID: {str(e)}")
             return None
+        finally:
+            close_db()
 
     def test_faculty_desk_connection(self, faculty_id):
         """
         Test the connection to a faculty desk unit by sending a test message.
-
-        Args:
-            faculty_id (int): Faculty ID to test
-
-        Returns:
-            bool: True if the test message was sent successfully, False otherwise
         """
+        db = get_db()
         try:
-            # Get faculty information
-            db = get_db()
-            from ..models import Faculty
             faculty = db.query(Faculty).filter(Faculty.id == faculty_id).first()
-
             if not faculty:
-                logger.error(f"Faculty not found: {faculty_id}")
+                logger.error(f"Faculty not found for test message: {faculty_id}")
                 return False
-
-            # Create a test message
+            
             message = f"Test message from ConsultEase central system.\nTimestamp: {datetime.datetime.now().isoformat()}"
-
-            # Publish to faculty-specific topic using standardized format
-            faculty_requests_topic = MQTTTopics.get_faculty_requests_topic(faculty_id)
             payload = {
-                'id': 0,
-                'student_id': 0,
-                'student_name': "System Test",
-                'student_department': "System",
-                'faculty_id': faculty_id,
-                'faculty_name': faculty.name,
-                'request_message': message,
-                'course_code': "TEST",
-                'status': "test",
-                'requested_at': datetime.datetime.now().isoformat(),
-                'message': message
+                'id': 0, 'student_name': "System Test", 'faculty_name': faculty.name,
+                'request_message': message, 'message': message # Ensure message field for ESP32
             }
-
-            # Publish to JSON topic
-            success_json = self.mqtt_service.publish(faculty_requests_topic, payload)
-
-            # Publish to legacy plain text topic for backward compatibility
-            success_text = self.mqtt_service.publish_raw(MQTTTopics.LEGACY_FACULTY_MESSAGES, message)
-
-            # Publish to faculty-specific plain text topic
-            faculty_messages_topic = MQTTTopics.get_faculty_messages_topic(faculty_id)
-            success_faculty = self.mqtt_service.publish_raw(faculty_messages_topic, message)
-
-            logger.info(f"Test message sent to faculty desk unit {faculty_id} ({faculty.name})")
-            logger.info(f"JSON topic success: {success_json}, Text topic success: {success_text}, Faculty topic success: {success_faculty}")
-
-            return success_json or success_text or success_faculty
+            
+            specific_topic = MQTTTopics.get_faculty_requests_topic(faculty.id)
+            success_json = self.mqtt_service.publish(specific_topic, payload)
+            
+            legacy_topic = MQTTTopics.LEGACY_FACULTY_MESSAGES
+            success_raw_legacy = self.mqtt_service.publish_raw(legacy_topic, message)
+            
+            logger.info(f"Test message sent to faculty {faculty.name}. JSON Specific: {success_json}, Raw Legacy: {success_raw_legacy}")
+            return success_json or success_raw_legacy
         except Exception as e:
             logger.error(f"Error testing faculty desk connection: {str(e)}")
             return False
+        finally:
+            close_db()

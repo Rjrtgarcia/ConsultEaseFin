@@ -7,12 +7,11 @@ Wants=postgresql.service mosquitto.service
 Type=simple
 User=pi
 WorkingDirectory=/home/pi/ConsultEase
-ExecStart=/usr/bin/python3 central_system/main.py
+ExecStart=/usr/bin/python3 /home/pi/ConsultEase/central_system/main.py
 Restart=on-failure
 RestartSec=5
 Environment=DISPLAY=:0
 Environment=XAUTHORITY=/home/pi/.Xauthority
-Environment=CONSULTEASE_KEYBOARD=squeekboard
 Environment=PYTHONUNBUFFERED=1
 
 # Logging

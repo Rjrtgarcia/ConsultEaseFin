@@ -88,16 +88,42 @@ This guide provides comprehensive instructions for deploying the complete Consul
    ```
 2. Configure Mosquitto:
    ```bash
-   sudo nano /etc/mosquitto/mosquitto.conf
+   sudo nano /etc/mosquitto/conf.d/consultease.conf 
+   # It's better to use a custom config file in conf.d
    ```
-   Add these lines:
+   Add basic lines for non-TLS setup:
    ```
    listener 1883
-   allow_anonymous true
+   allow_anonymous true 
+   # For production, consider disabling anonymous access and setting up ACLs
+   # allow_anonymous false
+   # password_file /etc/mosquitto/passwd
+   # acl_file /etc/mosquitto/aclfile
    ```
-3. Start and enable the Mosquitto service:
+   
+   **For TLS Setup (Recommended for Production):**
+   If you plan to use TLS for MQTT (configured with `use_tls: true` in `config.json`):
+     a. Ensure you have your CA certificate, server certificate, and server key.
+     b. Update your Mosquitto configuration (`/etc/mosquitto/conf.d/consultease.conf`) to include:
+        ```
+        listener 8883 # Default TLS port
+        cafile /path/to/your/certs/ca.crt
+        certfile /path/to/your/certs/server.crt
+        keyfile /path/to/your/certs/server.key
+        # Optional: require client certificates if your clients are configured with them
+        # require_certificate true 
+        # tls_version tlsv1.2 tlsv1.3
+        ```
+     c. Ensure the paths to `cafile`, `certfile`, and `keyfile` are correct and Mosquitto has read access.
+     d. Refer to the "MQTT TLS Configuration" section in `docs/configuration_guide.md` for more details on generating certificates.
+
+3. (If using password file) Create a password file for MQTT users:
    ```bash
-   sudo systemctl start mosquitto
+   # sudo mosquitto_passwd -c /etc/mosquitto/passwd your_mqtt_user
+   ```
+4. Start and enable the Mosquitto service:
+   ```bash
+   sudo systemctl restart mosquitto # Use restart to apply new config
    sudo systemctl enable mosquitto
    ```
 
@@ -108,11 +134,21 @@ This guide provides comprehensive instructions for deploying the complete Consul
    ```
 2. Install PyQt5 WebEngine:
    ```bash
-   sudo apt install python3-pyqt5.qtwebengine -y
+   sudo apt install python3-pyqt5.qtwebengine -y 
+   # Note: PyQtWebEngine might not be strictly necessary for the core ConsultEase functionality if no web content is embedded. Verify if it's used.
    ```
 3. Install Python libraries:
    ```bash
-   pip3 install paho-mqtt sqlalchemy psycopg2-binary
+   pip3 install paho-mqtt sqlalchemy psycopg2-binary bcrypt
+   # Consider creating and using a requirements.txt:
+   # echo "paho-mqtt
+sphinx
+SQLAlchemy
+psycopg2-binary
+bcrypt
+eventlet
+greenlet" > requirements.txt 
+   # pip3 install -r requirements.txt
    ```
 
 ### 6. ConsultEase Application Setup
@@ -127,17 +163,83 @@ This guide provides comprehensive instructions for deploying the complete Consul
    sudo -u postgres psql -c "CREATE USER piuser WITH PASSWORD 'password';"
    sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE consultease TO piuser;"
    ```
-3. Configure environment variables (create a `.env` file):
+3. Create and configure `config.json`:
    ```bash
-   DB_USER=piuser
-   DB_PASSWORD=password
-   DB_HOST=localhost
-   DB_NAME=consultease
-   MQTT_BROKER_HOST=localhost
-   MQTT_BROKER_PORT=1883
+   cd central_system
+   cp config.example.json config.json
+   nano config.json
    ```
+   
+   Update the following sections in config.json:
+   ```json
+   {
+     "database": {
+       "type": "postgresql",
+       "host": "localhost",
+       "port": 5432,
+       "name": "consultease",
+       "user": "piuser",
+       "password": "password",
+       "sqlite_path": "consultease.db"
+     },
+     "mqtt": {
+       "broker_host": "localhost",
+       "broker_port": 1883,
+       "client_id_base": "consultease_central",
+       "username": "",
+       "password": "",
+       "use_tls": false,
+       "tls_ca_certs": null,
+       "tls_certfile": null,
+       "tls_keyfile": null,
+       "tls_insecure": false,
+       "tls_version": "CLIENT_DEFAULT",
+       "tls_cert_reqs": "CERT_REQUIRED"
+     },
+     "rfid_reader": {
+       "vid": "0xFFFF",
+       "pid": "0x0035",
+       "simulation_mode": false,
+       "refresh_interval": 300,
+       "device_path": null
+     },
+     "keyboard": {
+       "preferred": "squeekboard",
+       "fallback": "matchbox-keyboard",
+       "show_timeout": 0.5,
+       "hide_timeout": 0.5
+     },
+     "system": {
+       "ensure_test_faculty_available": false,
+       "fullscreen": true,
+       "log_level": "INFO",
+       "log_file": "consultease.log",
+       "log_max_size": 10485760,
+       "log_backup_count": 5,
+       "admin_lockout_attempts": 5,
+       "admin_lockout_minutes": 30
+     },
+     "ui": {
+       "theme": "light",
+       "transition_duration": 300,
+       "refresh_interval": 60
+     }
+   }
+   ```
+   
+   **Important `config.json` Notes:**
+   - **Paths:** For paths like `tls_ca_certs`, `tls_certfile`, `tls_keyfile`, and `log_file`, use **absolute paths** when running ConsultEase as a systemd service to avoid issues with relative path resolution.
+   - **RFID VID/PID:** You can determine the VID/PID of your RFID reader using `lsusb` and then looking for your device, or by checking kernel messages (`dmesg`) when you plug it in. The `scripts/fix_rfid.sh` might also help identify it or set permissions.
+   - **Permissions:** Ensure `config.json` has restricted read permissions for the user running the application (e.g., `chown pi:pi config.json && chmod 600 config.json`).
+   - **Log Directory:** If `log_file` points to a directory like `/var/log/consultease/`, ensure this directory exists and the application user (`pi` in the service example) has write permissions to it.
+     ```bash
+     # sudo mkdir /var/log/consultease
+     # sudo chown pi:pi /var/log/consultease
+     ```
+
 4. Run the application for testing:
    ```bash
+   cd ..
    python3 central_system/main.py
    ```
 
@@ -410,36 +512,49 @@ This script will:
 
 ## Touch Interface Setup
 
-ConsultEase is designed to work with a touchscreen interface on the Raspberry Pi. Follow these steps to ensure optimal touch functionality:
+ConsultEase is designed to work with a touchscreen interface on the Raspberry Pi. The system uses a `KeyboardManager` to automatically show and hide a virtual keyboard when text fields receive focus.
 
-### 1. Install On-Screen Keyboard
+### 1. Install On-Screen Keyboard(s)
 
-ConsultEase supports automatic pop-up of an on-screen keyboard when text fields receive focus. To enable this functionality, you need to install one of the supported virtual keyboards:
+Ensure your desired virtual keyboard(s) are installed. Supported options include `squeekboard` and `matchbox-keyboard`.
 
 ```bash
-# Run the installation script
-cd /path/to/consultease
-chmod +x scripts/install_squeekboard.sh
-./scripts/install_squeekboard.sh
+# Example: Install squeekboard (recommended)
+sudo apt update
+sudo apt install squeekboard -y
+
+# Example: Install matchbox-keyboard (fallback option)
+# sudo apt install matchbox-keyboard -y
+```
+Refer to `scripts/install_squeekboard.sh` or `scripts/install_matchbox_keyboard.sh` if they exist in your project for more specific installation steps.
+
+### 2. Configure Preferred Keyboard
+
+The `KeyboardManager` will attempt to use the keyboard specified in `central_system/config.json`. Update the `keyboard` section:
+
+```json
+"keyboard": {
+  "preferred": "squeekboard",    // Your preferred keyboard (e.g., "squeekboard", "matchbox-keyboard")
+  "fallback": "matchbox-keyboard", // Fallback if preferred is not found
+  "show_timeout": 0.5,           // Delay before showing keyboard (seconds)
+  "hide_timeout": 0.5            // Delay before hiding keyboard (seconds)
+}
 ```
 
-The script will attempt to install one of the following keyboards (in order of preference):
-- squeekboard (preferred)
-- onboard (alternative)
-- matchbox-keyboard (fallback)
+### 3. Enable Fullscreen Mode
 
-Note: The system now prefers squeekboard over onboard for better touch input support and integration with the Raspberry Pi environment.
+Fullscreen mode is controlled by the `system.fullscreen` setting in `central_system/config.json`:
 
-### 2. Enable Fullscreen Mode
-
-To utilize the full touchscreen area, uncomment the following line in `central_system/views/base_window.py`:
-
-```python
-# Uncomment this line when deploying on Raspberry Pi
-self.showFullScreen()
+```json
+"system": {
+  // ... other system settings ...
+  "fullscreen": true, // Set to true for fullscreen, false for windowed
+  // ... other system settings ...
+}
 ```
+No manual code changes in `base_window.py` are needed for this.
 
-### 3. Adjust Touch Calibration (if needed)
+### 4. Adjust Touch Calibration (if needed)
 
 If the touch input is not aligned correctly with the display:
 
@@ -457,15 +572,15 @@ Follow the on-screen instructions to calibrate your touchscreen.
 
 To test the touch interface and keyboard functionality:
 
-1. Start the ConsultEase application
-2. Tap on any text input field (like the Admin Login username field)
-3. The on-screen keyboard should automatically appear
-4. When you tap outside the text field, the keyboard should close
+1. Start the ConsultEase application.
+2. Tap on any text input field (like the Admin Login username field).
+3. The on-screen keyboard, as configured in `config.json`, should automatically appear.
+4. When you tap outside the text field or the keyboard's close button (if available), the keyboard should hide.
 
-If the keyboard doesn't appear automatically, you can:
-- Press F5 to toggle the keyboard visibility
-- Run `~/keyboard-show.sh` to manually show the keyboard
-- Run `./scripts/fix_keyboard.sh` to troubleshoot keyboard issues
+If the keyboard doesn't behave as expected:
+- Verify your `keyboard.preferred` and `keyboard.fallback` settings in `config.json` are correct and the specified keyboards are installed.
+- Check the application logs for any errors related to `KeyboardManager`.
+- Ensure your Raspberry Pi OS desktop environment is not interfering with the application's keyboard management (e.g., disabling other global on-screen keyboard services if they conflict).
 
 ## Performance Optimization
 
@@ -474,8 +589,9 @@ If the keyboard doesn't appear automatically, you can:
 For optimal database performance:
 
 1. **PostgreSQL Configuration**:
+   Locate your `postgresql.conf` file. The path is typically `/etc/postgresql/<YOUR_PG_VERSION>/main/postgresql.conf` (e.g., `/etc/postgresql/13/main/postgresql.conf` if using PostgreSQL 13). You can find your version by running `psql --version`.
    ```bash
-   sudo nano /etc/postgresql/13/main/postgresql.conf
+   sudo nano /etc/postgresql/<YOUR_PG_VERSION>/main/postgresql.conf
    ```
 
    Adjust the following settings based on your Raspberry Pi's resources:
@@ -522,80 +638,6 @@ For optimal database performance:
    - The application is optimized to use minimal CPU resources
    - If CPU usage is consistently high, check for background processes
 
-## Recent Improvements
-
-The ConsultEase system has undergone significant improvements to enhance stability, security, and functionality:
-
-### Security Enhancements
-
-1. **Password Security**:
-   - Implemented bcrypt password hashing for admin accounts
-   - Added fallback mechanism for backward compatibility
-   - Improved validation of user input
-
-2. **Database Security**:
-   - Enhanced database connection security
-   - Added proper error handling for database operations
-   - Implemented secure backup and restore functionality
-
-### Functionality Improvements
-
-1. **RFID Service**:
-   - Improved callback management to prevent memory leaks
-   - Enhanced error handling for different card types
-   - Added manual input fallback for RFID scanning
-
-2. **MQTT Communication**:
-   - Added exponential backoff for reconnection attempts
-   - Improved error handling for network disconnections
-   - Enhanced message delivery reliability
-   - Added keep-alive mechanism to detect disconnections
-
-3. **BLE Functionality**:
-   - Added always-on BLE option for faculty desk unit
-   - Improved BLE connection detection and reporting
-   - Created test script to verify BLE functionality
-   - Enhanced status reporting for more reliable faculty status updates
-
-4. **Admin Dashboard**:
-   - Fixed CRUD operations for faculty and student management
-   - Added proper resource cleanup to prevent memory leaks
-   - Improved UI consistency and user experience
-
-5. **Database Management**:
-   - Added backup and restore functionality
-   - Implemented proper error handling for database operations
-   - Added default data creation for easier setup
-
-### UI Improvements
-
-1. **Theme Consistency**:
-   - Set the theme to light as specified in the technical context
-   - Improved UI element styling and layout
-   - Enhanced touch interface usability
-
-2. **Transitions and Animations**:
-   - Added smooth transitions between screens
-   - Improved platform detection for transition effects
-   - Enhanced fade and slide animations
-   - Added tab highlighting for better visual cues
-
-3. **Consultation Panel Improvements**:
-   - Enhanced readability and user feedback
-   - Added auto-refresh for consultation history
-   - Improved tab change animations
-   - Better visual feedback for user actions
-
-4. **Dashboard Improvements**:
-   - Made the logout button smaller in the dashboard
-   - Improved faculty status display
-   - Enhanced overall layout and spacing
-
-5. **Error Handling**:
-   - Added informative error messages
-   - Implemented fallback mechanisms for error recovery
-   - Improved logging for debugging
-
 ## Maintenance and Updates
 
 ### Regular System Updates
@@ -607,29 +649,47 @@ It's important to keep the system updated:
 sudo apt update && sudo apt upgrade -y
 
 # Update ConsultEase from repository (if applicable)
-cd /path/to/consultease
+cd /path/to/consultease # Navigate to your project directory
 git pull
+# After pulling, check if dependencies need updating (e.g., if requirements.txt changed)
+# pip3 install -r requirements.txt --upgrade
+# Restart the ConsultEase service if it's running
+# sudo systemctl restart consultease.service
 ```
 
 ### Database Backups
 
-Regular database backups are essential:
+Regular database backups are essential. The Admin Dashboard UI for backup/restore is currently a placeholder. Backups must be performed manually using command-line tools.
 
-1. **Automated Backups**:
+1. **Automated Backups (Example for PostgreSQL)**:
    ```bash
    # Create a backup script
    sudo nano /etc/cron.daily/consultease-backup.sh
    ```
 
-   Add the following content:
+   Add the following content (adjust `DB_NAME`, `DB_USER`, and `BACKUP_DIR` as needed):
    ```bash
    #!/bin/bash
    BACKUP_DIR="/home/pi/consultease_backups"
+   DB_NAME="consultease" # From your config.json
+   DB_USER="piuser"      # From your config.json, if pg_dump needs it and not running as postgres user
+   
    mkdir -p $BACKUP_DIR
-   DATE=$(date +%Y-%m-%d)
-   sudo -u postgres pg_dump consultease > $BACKUP_DIR/consultease_$DATE.sql
+   DATE=$(date +%Y-%m-%d_%H%M%S)
+   
+   # For PostgreSQL
+   # Ensure the user running this script (e.g., root if via cron.daily, or pi if run manually)
+   # has permissions to run pg_dump or is the postgres user.
+   # Using sudo -u postgres is often safest.
+   sudo -u postgres pg_dump $DB_NAME > $BACKUP_DIR/${DB_NAME}_${DATE}.sql
+   
+   # For SQLite (if using SQLite)
+   # SQLITE_PATH="/path/to/your/consultease.db" # From your config.json
+   # sqlite3 $SQLITE_PATH ".backup $BACKUP_DIR/consultease_sqlite_${DATE}.db"
+
    # Keep only the last 7 backups
-   ls -t $BACKUP_DIR/consultease_*.sql | tail -n +8 | xargs rm -f
+   ls -t $BACKUP_DIR/${DB_NAME}_*.sql 2>/dev/null | tail -n +8 | xargs rm -f
+   ls -t $BACKUP_DIR/consultease_sqlite_*.db 2>/dev/null | tail -n +8 | xargs rm -f
    ```
 
    Make it executable:
@@ -638,6 +698,23 @@ Regular database backups are essential:
    ```
 
 2. **Manual Backups**:
-   - Use the admin interface to create manual backups
-   - Store backups in a secure location
-   - Test restore functionality periodically
+   - **For PostgreSQL**:
+     ```bash
+     sudo -u postgres pg_dump your_db_name > /path/to/your/backup_file.sql
+     ```
+     (Replace `your_db_name` with the actual database name from `config.json`)
+   - **For SQLite**:
+     ```bash
+     sqlite3 /path/to/your/consultease.db ".backup /path/to/your/backup_file.db"
+     ```
+     (Replace `/path/to/your/consultease.db` with the actual path from `config.json`)
+   
+   Store backups in a secure, separate location. Test restore functionality periodically.
+
+   **To Restore a PostgreSQL backup:**
+   ```bash
+   # sudo -u postgres psql -d your_db_name -f /path/to/your/backup_file.sql
+   ```
+
+   **To Restore an SQLite backup:**
+   Simply replace the existing database file with the backup file.

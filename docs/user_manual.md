@@ -4,7 +4,7 @@
 
 ConsultEase is a comprehensive system designed to streamline student-faculty consultations. It consists of a Central System running on a Raspberry Pi with a touchscreen interface, and Faculty Desk Units installed at each faculty member's desk. The system uses RFID for student authentication, displays real-time faculty availability, and manages consultation requests efficiently.
 
-This manual provides instructions for students, faculty members, and administrators on how to use the ConsultEase system. This version has been updated to reflect recent improvements to the system, including enhanced UI transitions, improved consultation panel, and updated BLE functionality.
+This manual provides instructions for students, faculty members, and administrators on how to use the ConsultEase system. This version reflects the major architecture refactoring with centralized configuration, singleton controllers, improved database session handling, and enhanced security features, as well as UI improvements and keyboard management enhancements.
 
 ## Quick Start Guide
 
@@ -182,6 +182,23 @@ To access the admin interface:
    - Username: `admin`
    - Password: `admin123`
 4. You will be prompted to change your password on first login.
+5. The system now includes account lockout protection - multiple failed login attempts will temporarily lock the account.
+
+### System Configuration
+
+The system now uses a centralized configuration approach:
+
+1. Configuration settings are stored in `central_system/config.json`
+2. Key configuration categories include:
+   - Database connection details
+   - MQTT broker settings and TLS options
+   - RFID reader VID/PID configuration
+   - Keyboard preferences
+   - System feature flags
+3. To modify configuration:
+   - Exit the application
+   - Edit `config.json` with appropriate privileges
+   - Restart the application to apply changes
 
 ### Managing Faculty
 
@@ -234,36 +251,22 @@ In the admin interface, you can also manage students:
 
 ### System Maintenance
 
-As an administrator, you may need to perform system maintenance:
+As an administrator, you are responsible for system maintenance tasks. Key configurations are managed via the `central_system/config.json` file (see `docs/configuration_guide.md`).
 
-1. **Backup Database**:
-   - Select "System Maintenance" from the admin menu
-   - Click "Backup Database"
-   - Choose a location to save the backup file
-   - The system supports both PostgreSQL and SQLite database formats
-   - For PostgreSQL (default), the backup will be saved as a .sql file
-   - Regular backups are recommended to prevent data loss
+1. **Database Backup and Restore**:
+   - Regular database backups are crucial to prevent data loss.
+   - The Admin Dashboard UI for automated backup/restore is currently a **placeholder**.
+   - Backups and restores must be performed **manually using command-line tools**.
+   - Refer to the "Database Backups" section in `docs/deployment_guide.md` for detailed instructions on how to perform manual backups and restores for both PostgreSQL and SQLite databases.
 
-2. **Restore Database**:
-   - Select "System Maintenance" from the admin menu
-   - Click "Restore Database"
-   - Select a previously created backup file
-   - Confirm the restore operation (this will overwrite the current database)
-   - The system will automatically restart after the restore is complete
-   - Note: Always create a backup before performing a restore
+2. **System Logs**:
+   - The primary application logs are written to a file specified in `config.json` (e.g., `consultease.log`). These logs contain detailed information for troubleshooting.
+   - The Admin Dashboard *may* offer a basic interface to view recent log entries, but for comprehensive analysis, refer to the log file directly on the Raspberry Pi.
 
-3. **System Logs**:
-   - Select "System Maintenance" from the admin menu
-   - Click "View Logs" to see system activity
-   - Use filters to narrow down the log entries
-   - You can clear logs if they become too large
-   - Log files are also stored in the application directory for advanced troubleshooting
-
-4. **System Settings**:
-   - Select "System Settings" from the admin menu
-   - Configure MQTT settings, database connection, and other parameters
-   - Changes to system settings require a restart to take effect
-   - Default settings are optimized for most deployments
+3. **System Configuration**:
+   - All critical system settings (Database, MQTT, RFID, Logging, Keyboard, etc.) are managed via the `central_system/config.json` file.
+   - To modify these settings, you will need to edit this JSON file directly on the Raspberry Pi (e.g., using `nano config.json`) and then restart the ConsultEase application for the changes to take effect.
+   - Refer to `docs/configuration_guide.md` for a detailed explanation of all configuration options.
 
 ---
 
@@ -289,14 +292,15 @@ As an administrator, you may need to perform system maintenance:
 - Run the BLE test script to verify functionality: `python scripts/test_ble_connection.py test`
 
 #### Central System Unresponsive
-- Wait a few moments for the system to respond
-- If the touchscreen remains unresponsive, notify an administrator
-- Press F11 to toggle fullscreen mode if the display is cut off
-- Press F5 to toggle the on-screen keyboard if needed
-- The system may require a restart
-- Check system logs for any error messages
-- If transitions between screens are not working properly, try restarting the application
-- If the consultation panel is not refreshing, check the auto-refresh timer settings
+- Wait a few moments for the system to respond.
+- If the touchscreen remains unresponsive, notify an administrator.
+- If the display appears cut off, the system should be configured for fullscreen via `config.json` (see `docs/configuration_guide.md`). Pressing F11 might toggle fullscreen in some desktop environments but is not the primary way to configure ConsultEase's display mode.
+- The on-screen keyboard should appear automatically when a text field is focused, based on the `KeyboardManager` and settings in `config.json`. If it does not:
+    - Ensure the correct keyboard programs (`squeekboard`, `matchbox-keyboard`) are installed and specified in `config.json`.
+    - Check application logs for `KeyboardManager` errors.
+- The system may require a restart. Check system logs for any error messages.
+- If transitions between screens are not working properly, try restarting the application.
+- If the consultation panel is not refreshing, check the auto-refresh timer settings (if configurable) or report it.
 
 #### Faculty Desk Unit Display Issues
 - Check the power connection
@@ -404,36 +408,28 @@ The Faculty Desk Unit requires the following libraries:
 The ConsultEase system includes several security features:
 
 1. **Password Security**:
-   - Admin passwords are hashed using bcrypt, a secure password-hashing function
-   - Password complexity requirements are enforced
-   - Failed login attempts are logged
+   - Admin passwords are hashed using bcrypt, a secure password-hashing function.
+   - Account lockout mechanisms are in place for administrators to prevent brute-force attacks (configurable via `config.json`).
+   - Failed login attempts are logged.
 
 2. **Database Security**:
-   - Database connections use secure authentication
-   - Sensitive data is properly handled
-   - Regular backups protect against data loss
+   - Database connections use secure authentication (credentials managed in `config.json`).
+   - Sensitive data is handled with care.
+   - Regular manual backups (see `docs/deployment_guide.md`) protect against data loss.
 
 3. **Input Validation**:
-   - All user inputs are validated to prevent injection attacks
-   - RFID data is sanitized before processing
-   - Form submissions include CSRF protection
+   - User inputs are generally validated to ensure they are of the expected type and format.
+   - RFID data is processed carefully.
+   - (CSRF protection claims removed as not typically applicable to PyQt)
 
 ### Backup and Recovery
 
-To backup the system:
-1. Go to the Admin interface
-2. Select "System Maintenance"
-3. Click "Backup Database"
-4. Choose a location to save the backup file
-5. The system will create a backup of the PostgreSQL database
+Database backup and recovery are critical maintenance tasks.
 
-To restore from a backup:
-1. Go to the Admin interface
-2. Select "System Maintenance"
-3. Click "Restore Database"
-4. Select the backup file to restore
-5. Confirm the restore operation
-6. The system will restart automatically after the restore is complete
+- **Backup**: As mentioned in the "System Maintenance" section, backups are performed manually using command-line tools appropriate for your database (PostgreSQL or SQLite). Detailed instructions are in `docs/deployment_guide.md`.
+- **Recovery**: Restoring from a backup also involves command-line tools. Refer to `docs/deployment_guide.md` for instructions.
+
+The Admin Dashboard UI does **not** currently support backup or restore operations.
 
 ### Error Handling
 

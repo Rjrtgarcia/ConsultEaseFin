@@ -35,40 +35,50 @@ pip3 install -r requirements.txt
 sudo -u postgres psql -c "CREATE DATABASE consultease;"
 sudo -u postgres psql -c "CREATE USER piuser WITH PASSWORD 'password';"
 sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE consultease TO piuser;"
-
-# Create .env file
-cat > .env << EOF
-DB_USER=piuser
-DB_PASSWORD=password
-DB_HOST=localhost
-DB_NAME=consultease
-MQTT_BROKER_HOST=localhost
-MQTT_BROKER_PORT=1883
-CONSULTEASE_KEYBOARD=squeekboard
-EOF
 ```
 
-### 4. Install On-Screen Keyboard
+### 4. Configure System
+```bash
+# Create and configure config.json
+cd central_system
+cp config.example.json config.json
+
+# Edit config.json with your settings
+# Essential settings to update:
+# - database.user and database.password
+# - mqtt.broker_host
+# - rfid_reader.vid and rfid_reader.pid
+# - keyboard.preferred
+nano config.json
+cd ..
+```
+
+You can determine your RFID reader's VID/PID using:
+```bash
+sudo ./scripts/fix_rfid.sh
+```
+
+### 5. Install On-Screen Keyboard
 ```bash
 # Install and configure squeekboard (preferred keyboard)
 chmod +x scripts/install_squeekboard.sh
 ./scripts/install_squeekboard.sh
 ```
 
-### 5. Initialize Database
+### 6. Initialize Database
 ```bash
 # Create initial admin user
 python3 -c "
-from central_system.models import Admin, init_db
-from central_system.controllers import AdminController
+from central_system.models import init_db
+from central_system.controllers.admin_controller import AdminController
 init_db()
-admin_controller = AdminController()
+admin_controller = AdminController.instance()
 admin_controller.ensure_default_admin()
 print('Default admin created with username \"admin\" and password \"admin123\"')
 "
 ```
 
-### 6. Run ConsultEase
+### 7. Run ConsultEase
 ```bash
 # Start the application
 python3 central_system/main.py

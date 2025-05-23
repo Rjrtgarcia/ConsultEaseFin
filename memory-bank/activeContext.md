@@ -1,92 +1,122 @@
 # ConsultEase - Active Context
 
 ## Current Focus
-The application is now stable and fully functional after comprehensive bug fixing and feature enhancements. The focus has shifted to integration testing with hardware components and preparing for deployment. All core functionality is working properly, including RFID scanning, admin dashboard CRUD operations, database management, and system maintenance.
+The application has undergone significant refactoring to improve stability, maintainability, and adherence to best practices. Core services and controllers have been standardized in terms of configuration, database session management, and logging. The focus remains on preparing for deployment, including hardware integration testing and final documentation updates.
 
 ## Recent Changes
-- **Enhanced Security**: Implemented bcrypt password hashing for admin accounts, replacing the less secure SHA-256 implementation.
-- **Database Flexibility**: Added SQLite support for development and testing, while maintaining PostgreSQL compatibility for production.
-- **CRUD Functionality**: Fixed issues with the admin dashboard CRUD operations for faculty and student management.
-- **RFID Service Improvements**:
-  - Enhanced callback management to prevent memory leaks
-  - Improved error handling for different card types
-  - Fixed student lookup to happen before notifying callbacks
-- **MQTT Communication**: Improved error handling for network disconnections with exponential backoff for reconnection attempts.
-- **UI Consistency**: Set the theme to light as specified in the technical context document.
-- **Resource Management**: Implemented proper cleanup methods to ensure resources are released when no longer needed.
-- **Database Management**: Added backup and restore functionality with support for both SQLite and PostgreSQL.
-- **Error Handling**: Added comprehensive error handling throughout the application with informative error messages.
+- **Centralized Configuration**: `config.py` is now the single source of truth for all configurations. `settings.ini` has been removed. `config.py` now includes all necessary MQTT (including enhanced TLS options like `tls_version` and `tls_cert_reqs`) and RFID (VID/PID now sourced from config) settings.
+- **Improved Database Session Management**:
+    - Implemented a `@db_operation_with_retry` decorator in `models/base.py` for robust database transactions.
+    - Standardized session handling across all controllers (`AdminController`, `FacultyController`, `ConsultationController`, `StudentController`) using the decorator or `try/finally close_db()` blocks.
+    - Fixed missing `close_db()` in `RFIDService.refresh_student_data()`.
+- **RFID Service (`central_system/services/rfid_service.py`)**:
+    - Implemented an in-memory student cache (`self.student_rfid_cache`) populated by `refresh_student_data()`, significantly reducing DB queries per scan.
+    - `target_vid` and `target_pid` are now correctly sourced from `config.py`.
+    - Improved DB session handling for cache refresh (added `close_db()`).
+- **MQTT Service (`central_system/services/mqtt_service.py`)**:
+    - Removed direct `settings.ini` access; now uses `get_config()` for all MQTT settings.
+    - Client ID is now base_id + random suffix for uniqueness.
+    - TLS configuration enhanced: `tls_version` and `tls_cert_reqs` are now configurable via `config.py` and `MQTTService` uses these settings.
+- **Controller Refactoring**:
+    - `AdminController`, `FacultyController`, `ConsultationController`, `RFIDController`, and the new `StudentController` have been converted to singletons, accessible via `.instance()` methods.
+    - Standardized database session management in all controllers.
+    - `FacultyController`: Removed subscription to the legacy MQTT topic. Verified `last_seen` attribute usage is correct.
+    - `AdminController.authenticate`: Now correctly uses `Admin.is_account_locked` and `Admin.record_login_attempt` from the `Admin` model, fully implementing the DB-backed account lockout logic. Returns more descriptive messages for UI.
+    - `ConsultationController`: Replaced `time.sleep()` with a polling loop when checking MQTT connection status before publishing.
+    - `RFIDController`:
+        - `_notify_callbacks` signature standardized. UI sound playing removed.
+        - Added `process_manual_uid()` to handle UIDs entered via UI, streamlining logic from `LoginWindow`.
+    - `StudentController`: New controller created to encapsulate student data management.
+- **View Layer (`central_system/views/`)**:
+    - `LoginWindow`: Simplified keyboard invocation logic.
+    - `DashboardWindow`: More efficient `FacultyCard` updates.
+    - `AdminDashboardWindow`:
+        - Tabs now use singleton controllers.
+        - `SystemMaintenanceTab`: Backup/restore methods confirmed to be placeholders showing "Not Implemented".
+- **Keyboard Management (`central_system/utils/`)**: Consolidated into `KeyboardManager`.
+- **Test/Demo Code**: `_ensure_dr_john_smith_available()` in `main.py` is conditional via config.
+- **Model Updates (`central_system/models/`)**:
+    - `Admin`: `is_account_locked` and `record_login_attempt` methods confirmed functional for DB-backed lockout.
+    - `Faculty`: `last_seen` attribute confirmed present.
+- **Logging**: Centralized logging setup. `main.py` now uses `RotatingFileHandler` with `max_size` and `backup_count` from `config.py` for improved log management.
 
 ## Next Steps
-- Conduct integration testing with the actual 13.56 MHz RFID reader.
-- Begin integration testing with ESP32 Faculty Desk Unit.
-- Implement TLS/SSL for MQTT communication.
-- Finalize user guides and training materials.
-- Prepare deployment scripts and procedures.
-- Conduct user acceptance testing with faculty and students.
+- **Hardware Integration Testing**:
+    - Thoroughly test with the actual 13.56 MHz RFID reader (verify VID/PID in `config.json`) and various card types.
+    - Complete integration testing with ESP32 Faculty Desk Unit, verifying MQTT messages (including TLS if configured), display updates, and BLE presence.
+- **MQTT TLS Implementation & Testing**:
+    - Generate or obtain necessary TLS certificates/keys.
+    - Configure paths and other TLS settings (e.g. `tls_version`, `tls_cert_reqs` if non-default needed) in `config.json`.
+    - Test secure MQTT communication between Central System and ESP32.
+- **Documentation**:
+    - Update user guides (student, faculty, admin) to reflect all UI and functionality changes.
+    - Update technical/deployment documentation with details on new configuration options (especially `config.json` for MQTT TLS, RFID VID/PID, logging rotation).
+- **Deployment Preparation**:
+    - Finalize deployment scripts and procedures for the Raspberry Pi (including ensuring correct file permissions for RFID, log files, and `config.json`).
+    - Ensure all dependencies are correctly listed in `requirements.txt`.
+- **User Acceptance Testing (UAT)**:
+    - Conduct UAT with representative faculty and students to gather feedback.
 
 ## Active Decisions and Considerations
-- **UI Design Pattern**: Using PyQt5 with a modular design pattern separating models, views, and controllers (MVC).
-- **UI Theme**: Using light theme (white/navy/gold) as specified in the technical context document.
-- **Database Access**: Using SQLAlchemy ORM for database operations with support for both SQLite (development) and PostgreSQL (production).
-- **Inter-device Communication**: Using MQTT as the backbone for communication between Central System and Faculty Desk Units with improved error handling.
-- **Authentication Flow**: Two separate authentication paths - RFID for students and username/password for admins. Student RFID lookup happens earlier in the `RFIDService`.
-- **Security**: Using bcrypt for password hashing with fallback for backward compatibility.
-- **Thread Safety**: Using Qt's signal-slot mechanism to ensure thread-safe UI updates with proper callback management.
-- **Deployment Strategy**: Automated setup scripts for the Raspberry Pi with fullscreen toggle (F11) and environment variable configuration.
-- **Admin Interface**: Comprehensive dashboard with tabs for managing faculty, students, and system maintenance with complete CRUD functionality.
-- **Database Management**: Backup and restore functionality with support for both SQLite and PostgreSQL.
-- **Touch Optimization**: Enhanced UI elements with larger touch targets and optimized spacing.
-- **Keyboard Integration**: Auto-showing virtual keyboard for text input fields (squeekboard).
+- **Configuration Management**: `config.py` (loading `config.json` and environment variables) is the sole source of configuration.
+- **Database Session Management**: Primarily through `@db_operation_with_retry` decorator and `try/finally close_db()` for thread-safe, robust operations.
+- **Singleton Pattern**: Applied to core controllers and services.
+- **MQTT Communication**: Standardized topics. TLS is configurable with fine-grained options. Message persistence in `MQTTService` for QoS > 0 messages.
+- **Keyboard Management**: Centralized in `KeyboardManager`.
+- **Security**: Bcrypt for admin passwords. DB-backed admin account lockout is implemented.
+- **Logging**: Centralized and uses `RotatingFileHandler`.
 
 ## Learnings and Project Insights
-- **Callback Management**: Asynchronous operations (like RFID reading) require careful handling of callbacks to prevent memory leaks and ensure proper registration/unregistration.
-- **Hardware Interaction**: RFID readers require specific character mapping and handling based on the reader and card type. Providing manual input fallbacks is crucial for reliability.
-- **Security Best Practices**: Using modern password hashing algorithms like bcrypt is essential for security. Always include fallback mechanisms for backward compatibility.
-- **Database Flexibility**: Supporting multiple database backends (SQLite for development, PostgreSQL for production) provides flexibility and simplifies development.
-- **Error Handling**: Comprehensive error handling with informative messages improves user experience and simplifies debugging.
-- **Resource Management**: Proper cleanup of resources (especially in PyQt) is essential to prevent memory leaks and ensure application stability.
-- **UI Consistency**: Maintaining a consistent UI theme and design language improves user experience and reduces confusion.
-- **Testing Strategy**: Thorough testing of all components, especially those involving hardware interaction, is essential for reliability.
-- **Documentation**: Keeping documentation up-to-date with the latest changes is crucial for maintainability and knowledge transfer.
+- **Refactoring Benefits**: Centralizing configuration and standardizing patterns (like DB session management and singletons) significantly improves code clarity, maintainability, and reduces redundancy.
+- **Singleton Controllers**: Useful for managing global state and services, simplifying access from different parts of the application (e.g., views).
+- **Configuration-driven Behavior**: Using flags in `config.py` (e.g., `ensure_test_faculty_available`, keyboard preferences) makes the application more flexible and easier to manage in different environments.
+- **Incremental Refactoring**: Tackling refactoring module by module or feature by feature can make a large task more manageable.
+- **Tooling Limitations**: Awareness of tool limitations (e.g., `edit_file` sometimes struggling with complex or repeated edits on the same file) is important; having fallback strategies (like full file replacement or manual review) is key.
 
 ## Important Patterns and Preferences
 
 ### Code Organization
 - Python code follows PEP 8 style guide.
 - Modular architecture with clear separation of concerns (models, views, controllers, services, utils).
+- **Singleton pattern** for major controllers.
+- **Centralized configuration** via `config.py`.
+- **Standardized database session management**.
 - Proper error handling with informative error messages.
 - Resource cleanup with destructors and cleanup methods.
 
 ### UI Patterns
 - Consistent light theme styling applied via `BaseWindow` and stylesheets.
 - Fullscreen toggle via F11 key.
-- Manual input fallback provided for hardware-dependent features (RFID scan).
+- Manual input fallback provided for hardware-dependent features (RFID scan via UI).
 - Status indicators use consistent color coding (green for success, red for error).
 - Confirmations required for destructive actions (delete, restore).
-- Auto-appearing on-screen keyboard for text input.
+- Auto-appearing on-screen keyboard for text input, managed by `KeyboardManager`.
 - Informative error messages with suggestions for resolution.
+- Views interact with **singleton controller instances**.
 
 ### Database Patterns
 - SQLAlchemy ORM for database operations.
 - Support for both SQLite (development) and PostgreSQL (production).
-- Backup and restore functionality with proper error handling.
-- Default data creation for easier testing and development.
+- `@db_operation_with_retry` decorator for robust transactions.
+- Default data creation for easier testing and development (conditionally via config).
+- Admin model includes fields for account lockout.
 
 ### Security Patterns
 - Bcrypt password hashing for admin accounts.
-- Fallback mechanisms for backward compatibility.
-- Proper validation of user input.
-- Secure credential storage.
+- Plan for DB-backed admin account lockout mechanism.
+- Secure credential storage (via `config.py` for service credentials like MQTT).
+- MQTT to be secured with TLS.
 
 ### Naming Conventions
 - CamelCase for class names.
 - snake_case for variables and function names.
 - UPPERCASE for constants.
 - Descriptive names that reflect purpose.
+- `instance()` method for accessing singleton objects.
 
 ### Testing and Debugging
-- Comprehensive error logging.
-- Simulation modes for hardware-dependent features.
+- Comprehensive error logging (centrally configured).
+- Simulation modes for hardware-dependent features (RFID scan).
 - Manual input fallbacks for testing.
-- Environment variable configuration for different environments.
+- Environment variable configuration for different environments, read via `config.py`.
+- Conditional enabling of test data/features via `config.py`.

@@ -13,35 +13,43 @@
               ▼
 ┌─────────────────────────┐
 │      Database           │
-│    (PostgreSQL)         │
+│    (PostgreSQL/SQLite)  │
 └─────────────────────────┘
 ```
+*(Note: Database can be PostgreSQL or SQLite for dev)*
 
 ### Central System Architecture (PyQt)
 
+The Central System follows a layered architecture, broadly aligning with Model-View-Controller (MVC), though with distinct service and utility layers.
+
 ```
-┌─────────────────────────────────────────────────────┐
-│                   UI Layer                           │
-├─────────────┬───────────────┬───────────────────────┤
-│ Login/RFID  │  Dashboard    │ Admin Interface       │
-│  Screen     │               │                       │
-└─────┬───────┴───────┬───────┴───────────────┬───────┘
-      │               │                       │
-┌─────▼───────┬───────▼───────┐       ┌───────▼───────┐
-│ RFID        │ Consultation  │       │ Faculty       │
-│ Controller  │ Controller    │       │ Management    │
-└─────┬───────┴───────┬───────┘       └───────┬───────┘
-      │               │                       │
-┌─────▼───────────────▼───────────────────────▼───────┐
-│                   Service Layer                      │
-├─────────────┬───────────────┬───────────────────────┤
-│ Database    │ MQTT          │ Authentication        │
-│ Service     │ Service       │ Service               │
-└─────────────┴───────────────┴───────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                            UI Layer (Views)                      │
+│ (LoginWindow, DashboardWindow, AdminDashboardWindow, Dialogs etc.)│
+└───────────────────────────────┬──────────────────────────────────┘
+                                │ (Interacts with Controllers)
+┌───────────────────────────────▼──────────────────────────────────┐
+│                       Controller Layer                           │
+│ (RFIDController, FacultyController, ConsultationController,     │
+│  AdminController, StudentController - All Singletons)            │
+└───────────────────────────────┬──────────────────────────────────┘
+                                │ (Utilize Services and Models)
+┌───────────────────────────────▼──────────────────────────────────┐
+│                         Service Layer                            │
+│ (MQTTService, RFIDService, KeyboardManager - Singletons/Managed) │
+└───────────────────────────────┬──────────────────────────────────┘
+                                │ (Interact with Database / OS)
+┌───────────────────────────────▼──────────────────────────────────┐
+│                          Data Model Layer (SQLAlchemy)           │
+│ (Faculty, Student, Consultation, Admin models)                   │
+├──────────────────────────────────────────────────────────────────┤
+│                          Utility Layer                           │
+│ (config.py, mqtt_topics.py, icons.py, etc.)                      │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
 ### Faculty Desk Unit Architecture (ESP32)
-
+*(No significant changes to this high-level view)*
 ```
 ┌─────────────────────────┐
 │     Display Controller  │
@@ -58,80 +66,113 @@
 ## Design Patterns
 
 ### Central System
-1. **Model-View-Controller (MVC)**
-   - Models: Faculty, Student, Consultation
-   - Views: Login, Dashboard, Admin Interface
-   - Controllers: RFID, Consultation, Faculty Management
-
-2. **Observer Pattern**
-   - MQTT service subscribes to updates
-   - UI components observe model changes
-
-3. **Singleton Pattern**
-   - Database connection
-   - MQTT client
-
-4. **Factory Pattern**
-   - UI screen creation
-   - Database model creation
+1.  **Model-View-Controller (MVC) - Adapted**:
+    *   Models: SQLAlchemy models (`Faculty`, `Student`, `Consultation`, `Admin`).
+    *   Views: PyQt windows and widgets (`LoginWindow`, `DashboardWindow`, various tabs and dialogs).
+    *   Controllers: Dedicated controller classes (`AdminController`, `FacultyController`, `ConsultationController`, `RFIDController`, `StudentController`) manage application logic and mediate between views and models/services.
+2.  **Singleton Pattern**:
+    *   Applied extensively to core controllers (`AdminController`, `FacultyController`, `ConsultationController`, `RFIDController`, `StudentController`) to ensure a single point of control and state management for their respective domains.
+    *   Used for services like `KeyboardManager`, `RFIDService`.
+    *   Database engine and session management (`get_db`, `scoped_session`).
+3.  **Observer Pattern**:
+    *   MQTT service and registered handlers act as observers for topic updates.
+    *   PyQt signals/slots mechanism is used extensively for UI updates in response to data changes or events (e.g., RFID scans, faculty status updates).
+4.  **Configuration Management Pattern**:
+    *   A centralized configuration system (`config.py` loading `config.json`, environment variables, and providing defaults) is used throughout the application. `get_config()` provides access to configuration.
+5.  **Database Session Management Pattern**:
+    *   Standardized approach using a `@db_operation_with_retry` decorator for write operations and `try/finally close_db()` blocks for read operations to ensure sessions are properly handled and closed.
+6.  **Service Layer Pattern**:
+    *   Dedicated services (`MQTTService`, `RFIDService`) encapsulate specific functionalities and external interactions.
+7.  **Error Handling and Retry Pattern**:
+    *   The `@db_operation_with_retry` decorator implements retry logic for database operations.
+    *   MQTT service includes reconnection logic.
+    *   Consistent logging of errors.
 
 ### Faculty Desk Unit
-1. **State Pattern**
-   - Faculty presence states (Present, Unavailable)
-   - Connection states (Connected, Disconnecting, Reconnecting)
-
-2. **Command Pattern**
-   - Display update commands
-   - MQTT publish commands
+1.  **State Pattern**:
+    *   Faculty presence states (Present, Available, Busy, Unavailable - as defined by system).
+    *   Connection states for MQTT (Connected, Disconnecting, Reconnecting).
+2.  **Command Pattern** (Implicit):
+    *   Functions to publish specific MQTT messages or update the display act as commands.
 
 ## Data Flow
 
 ### Student Consultation Request Flow
-1. Student scans RFID at Central System
-2. System validates student ID in database
-3. Student selects faculty and submits consultation request
-4. Request is stored in database
-5. Request is published via MQTT
-6. Faculty Desk Unit receives request and displays it
-7. Faculty returns (BLE beacon detected)
-8. Faculty Desk Unit updates status to "Present"
-9. Status change is published via MQTT
-10. Central System updates faculty status display
+*(No major changes, but reflects updated controller involvement)*
+1.  Student scans RFID at Central System (`LoginWindow` / `RFIDController` -> `RFIDService`).
+2.  `RFIDService` validates student ID against its cache or database.
+3.  If valid, `LoginWindow` transitions to `DashboardWindow`.
+4.  Student selects faculty and submits consultation request via `DashboardWindow` -> `ConsultationController`.
+5.  `ConsultationController` stores request in the database.
+6.  `ConsultationController` publishes request via `MQTTService`.
+7.  Faculty Desk Unit receives request via MQTT and displays it.
+8.  Faculty returns (BLE beacon detected by ESP32).
+9.  Faculty Desk Unit updates its status and publishes this via MQTT.
+10. `FacultyController` (via `MQTTService`) receives status, updates the database.
+11. `DashboardWindow` (observing `FacultyController` or via callbacks) updates faculty status display.
 
 ### Faculty Presence Detection Flow
-1. Faculty BLE beacon is detected by ESP32
-2. Faculty Desk Unit updates local status display
-3. Status change is published via MQTT
-4. Central System receives update
-5. Database is updated with new status
-6. Dashboard UI refreshes to show current status
+*(No major changes)*
+1.  Faculty BLE beacon is detected by ESP32.
+2.  Faculty Desk Unit updates local status display.
+3.  Status change (e.g., "Available", "Unavailable") is published via MQTT.
+4.  Central System (`FacultyController` via `MQTTService`) receives update.
+5.  Database is updated with new status by `FacultyController`.
+6.  `DashboardWindow` UI refreshes to show current status.
 
 ## Critical Implementation Paths
 
-1. **RFID Authentication**
-   - RFID reader integration with Raspberry Pi
-   - Student validation against database
-   - Error handling for failed reads
+1.  **RFID Authentication & Student Identification**:
+    *   `RFIDService` integration, including VID/PID configuration from `config.py`.
+    *   Student lookup in `RFIDService` cache and database.
+    *   Error handling and clear feedback via `RFIDController` to UI.
+2.  **BLE Presence Detection & MQTT Status Updates**:
+    *   Reliable beacon scanning and status interpretation on ESP32.
+    *   Consistent MQTT message formatting for status updates from ESP32.
+    *   `FacultyController` handling these updates and persisting to DB.
+3.  **Centralized Configuration Loading & Access**:
+    *   `config.py` correctly loading `config.json`, environment variables, and applying defaults.
+    *   All modules using `get_config()` for settings.
+4.  **Robust Database Operations**:
+    *   Consistent use of `@db_operation_with_retry` and session management across all controllers.
+    *   Correct handling of SQLAlchemy sessions and engine.
+5.  **Singleton Controller Logic & Interaction**:
+    *   Ensuring controllers are correctly initialized as singletons.
+    *   Views and other components correctly obtaining and using controller instances.
+6.  **MQTT Communication (including future TLS)**:
+    *   `MQTTService` correctly using settings from `config.py`.
+    *   Reliable message passing for all defined topics.
+    *   Correct implementation and testing of TLS.
+7.  **Real-time UI Updates via Controllers & Services**:
+    *   Thread-safe UI updates using signals/slots.
+    *   Views correctly registering for and receiving updates from controllers/services.
 
-2. **BLE Presence Detection**
-   - Reliable beacon scanning on ESP32
-   - Configurable detection thresholds
-   - Status transition logic
-   - Battery management for faculty beacons
-   - LED indicators for beacon status and battery level
+## Keyboard Integration Pattern
 
-3. **MQTT Communication**
-   - Reliable message passing between components
-   - Reconnection logic
-   - Message format standardization
+ConsultEase integrates with on-screen keyboards via a centralized `KeyboardManager` class. This manager is configuration-driven through `config.json`.
 
-4. **Real-time UI Updates**
-   - Thread-safe UI operations
-   - Asynchronous data loading
-   - Responsive feedback mechanisms
+### Keyboard Integration Architecture
 
-5. **User Documentation**
-   - Quick Start Guide for new users
-   - BLE Beacon maintenance instructions for faculty
-   - Technical specifications for administrators
-   - Troubleshooting procedures for common issues 
+```
+┌─────────────────┐      ┌──────────────────┐      ┌───────────────┐
+│  Qt Text Input  │──────│  KeyboardManager  │──────│  System       │
+│  Widgets        │      │  (Singleton)      │      │  Keyboard     │
+└─────────────────┘      └──────────────────┘      └───────────────┘
+```
+
+1. Text input widgets (e.g., `QLineEdit`, `QTextEdit`) in the UI layer trigger keyboard visibility requests, typically on focus-in events.
+2. The `KeyboardManager` (a singleton service) receives these requests.
+3. `KeyboardManager` handles the logic to show or hide the system's on-screen keyboard based on its internal state and the preferences defined in `config.json`.
+4. The actual system keyboard is invoked through subprocess calls or DBus interactions, depending on the specific keyboard program being used (e.g., `squeekboard`, `matchbox-keyboard`).
+
+### KeyboardManager Features
+
+The `KeyboardManager` class provides the following key features:
+
+1.  **Configuration-driven**: Keyboard preferences (e.g., `preferred` keyboard, `fallback` keyboard, `show_timeout`, `hide_timeout`) are set in `config.json` and loaded via `get_config()`.
+2.  **Priority List**: Attempts to use the `preferred` keyboard first. If unavailable or fails, it tries the `fallback` keyboard.
+3.  **Automatic Detection**: Can detect if supported keyboard executables are available on the system.
+4.  **State Management**: Tracks the current visibility state of the keyboard.
+5.  **Process Management**: Handles the launching and, where necessary, termination of keyboard processes to ensure proper behavior.
+6.  **System Integration**: Designed to work with various common Linux on-screen keyboard implementations.
+7.  **Show/Hide Triggers**: Automatically shows the keyboard when a registered text input widget gains focus and hides it when focus is lost or shifts to a non-input widget. Explicit show/hide calls are also possible. 

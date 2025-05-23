@@ -2,24 +2,37 @@ import logging
 import datetime
 from sqlalchemy import or_
 from ..services import get_mqtt_service
-from ..models import Faculty, get_db
+from ..models import Faculty, get_db, close_db
+from ..models.base import db_operation_with_retry
 from ..utils.mqtt_topics import MQTTTopics
 
 # Set up logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s') # REMOVED
 logger = logging.getLogger(__name__)
 
 class FacultyController:
     """
     Controller for managing faculty data and status.
     """
+    _instance = None
+
+    @classmethod
+    def instance(cls):
+        """Get the singleton instance of the FacultyController."""
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
 
     def __init__(self):
         """
         Initialize the faculty controller.
         """
+        if FacultyController._instance is not None:
+            raise RuntimeError("FacultyController is a singleton, use FacultyController.instance()")
+        
         self.mqtt_service = get_mqtt_service()
         self.callbacks = []
+        FacultyController._instance = self
 
     def start(self):
         """
@@ -29,13 +42,7 @@ class FacultyController:
 
         # Subscribe to faculty status updates using standardized topic
         self.mqtt_service.register_topic_handler(
-            "consultease/faculty/+/status",
-            self.handle_faculty_status_update
-        )
-
-        # Subscribe to legacy faculty desk unit status updates for backward compatibility
-        self.mqtt_service.register_topic_handler(
-            MQTTTopics.LEGACY_FACULTY_STATUS,
+            "consultease/faculty/+/status",  # Specific topic for faculty status
             self.handle_faculty_status_update
         )
 
@@ -57,7 +64,7 @@ class FacultyController:
             callback (callable): Function that takes a Faculty object as argument
         """
         self.callbacks.append(callback)
-        logger.info(f"Registered Faculty controller callback: {callback.__name__}")
+        logger.info(f"Registered Faculty controller callback: {getattr(callback, '__name__', 'unnamed_callback')}")
 
     def _notify_callbacks(self, faculty):
         """
@@ -73,478 +80,323 @@ class FacultyController:
                 logger.error(f"Error in Faculty controller callback: {str(e)}")
 
     def handle_faculty_status_update(self, topic, data):
-        """
-        Handle faculty status update from MQTT.
-
-        Args:
-            topic (str): MQTT topic
-            data (dict or str): Status update data
-        """
-        faculty_id = None
-        status = None
-        faculty_name = None
-
-        # Handle different topic formats
-        if topic == MQTTTopics.LEGACY_FACULTY_STATUS:
-            # This is from the faculty desk unit using the legacy topic
-            # Check if this is a string message (keychain_connected or keychain_disconnected)
-            if isinstance(data, str):
-                if data == "keychain_connected":
-                    status = True
-                    # Extract faculty name from client ID (DeskUnit_FacultyName)
-                    # This is more flexible than hardcoding a specific faculty name
-                    db = get_db()
-
-                    # Try to find the faculty from the MQTT client ID if available
-                    # If not available, look for faculty with BLE beacons configured
-                    faculty = None
-
-                    # First, try to find any faculty with BLE configured and status=False
-                    # This assumes the BLE connection is for a faculty that was previously disconnected
-                    faculty = db.query(Faculty).filter(
-                        Faculty.ble_id.isnot(None),
-                        Faculty.status == False
-                    ).first()
-
-                    if faculty:
-                        faculty_id = faculty.id
-                        faculty_name = faculty.name
-                        logger.info(f"BLE beacon connected for faculty desk unit (ID: {faculty_id}, Name: {faculty_name})")
-                    else:
-                        # If no disconnected faculty found, look for any faculty with BLE configured
-                        faculty = db.query(Faculty).filter(
-                            Faculty.ble_id.isnot(None)
-                        ).first()
-
-                        if faculty:
-                            faculty_id = faculty.id
-                            faculty_name = faculty.name
-                            logger.info(f"BLE beacon connected for faculty desk unit (ID: {faculty_id}, Name: {faculty_name})")
-                        else:
-                            logger.error("No faculty with BLE configuration found in database")
-                            return
-                elif data == "keychain_disconnected":
-                    status = False
-                    # Similar approach as above for finding the faculty
-                    db = get_db()
-
-                    # First, try to find any faculty with BLE configured and status=True
-                    # This assumes the BLE disconnection is for a faculty that was previously connected
-                    faculty = db.query(Faculty).filter(
-                        Faculty.ble_id.isnot(None),
-                        Faculty.status == True
-                    ).first()
-
-                    if faculty:
-                        faculty_id = faculty.id
-                        faculty_name = faculty.name
-                        logger.info(f"BLE beacon disconnected for faculty desk unit (ID: {faculty_id}, Name: {faculty_name})")
-                    else:
-                        # If no connected faculty found, look for any faculty with BLE configured
-                        faculty = db.query(Faculty).filter(
-                            Faculty.ble_id.isnot(None)
-                        ).first()
-
-                        if faculty:
-                            faculty_id = faculty.id
-                            faculty_name = faculty.name
-                            logger.info(f"BLE beacon disconnected for faculty desk unit (ID: {faculty_id}, Name: {faculty_name})")
-                        else:
-                            logger.error("No faculty with BLE configuration found in database")
-                            return
-            else:
-                # This is a JSON message
-                status = data.get('status', False)
-                faculty_id = data.get('faculty_id')
-                faculty_name = data.get('faculty_name')
-
-                if faculty_id is None and faculty_name is not None:
-                    # Try to find faculty by name
-                    db = get_db()
-                    faculty = db.query(Faculty).filter(Faculty.name == faculty_name).first()
-                    if faculty:
-                        faculty_id = faculty.id
-                    else:
-                        logger.error(f"Faculty '{faculty_name}' not found in database")
-                        return
-                elif faculty_id is None:
-                    # No faculty ID or name provided, try to find any faculty with BLE configured
-                    db = get_db()
-                    faculty = db.query(Faculty).filter(
-                        Faculty.ble_id.isnot(None)
-                    ).first()
-
-                    if faculty:
-                        faculty_id = faculty.id
-                        faculty_name = faculty.name
-                    else:
-                        logger.error("No faculty with BLE configuration found in database")
-                        return
-        else:
-            # Extract faculty ID from topic (e.g., "consultease/faculty/123/status")
-            parts = topic.split('/')
-            if len(parts) != 4:
-                logger.error(f"Invalid topic format: {topic}")
-                return
-
-            try:
-                faculty_id = int(parts[2])
-            except ValueError:
-                logger.error(f"Invalid faculty ID in topic: {parts[2]}")
-                return
-
-            # Get status from data
-            if isinstance(data, dict):
-                status = data.get('status', False)
-                faculty_name = data.get('faculty_name')
-
-                # Check if this is a BLE beacon status update
-                if 'keychain_connected' in data:
-                    status = True
-                    logger.info(f"BLE beacon connected for faculty {faculty_id}")
-                elif 'keychain_disconnected' in data:
-                    status = False
-                    logger.info(f"BLE beacon disconnected for faculty {faculty_id}")
-            else:
-                logger.error(f"Invalid data format for topic {topic}: {data}")
-                return
-
-        # If we couldn't determine faculty ID or status, return
-        if faculty_id is None or status is None:
-            logger.error(f"Could not determine faculty ID or status from topic {topic} and data {data}")
-            return
-
-        logger.info(f"Received status update for faculty {faculty_id}: {status}")
-
-        # Update faculty status in database
-        faculty = self.update_faculty_status(faculty_id, status)
-
-        if faculty:
-            # Notify callbacks
-            self._notify_callbacks(faculty)
-
-            # Publish a notification about faculty availability using standardized topic
-            try:
-                notification = {
-                    'type': 'faculty_status',
-                    'faculty_id': faculty.id,
-                    'faculty_name': faculty.name,
-                    'status': status,
-                    'timestamp': faculty.last_seen.isoformat() if faculty.last_seen else None
-                }
-                self.mqtt_service.publish(MQTTTopics.SYSTEM_NOTIFICATIONS, notification)
-            except Exception as e:
-                logger.error(f"Error publishing faculty status notification: {str(e)}")
-
-    def update_faculty_status(self, faculty_id, status):
-        """
-        Update faculty status in the database.
-
-        Args:
-            faculty_id (int): Faculty ID
-            status (bool): New status (True = Available, False = Unavailable)
-
-        Returns:
-            Faculty: Updated faculty object or None if not found
-        """
+        faculty_id_to_update = None
+        new_status_bool = None
+        db = get_db()
         try:
-            db = get_db()
-            faculty = db.query(Faculty).filter(Faculty.id == faculty_id).first()
+            logger.debug(f"MQTT status update: Topic='{topic}', Data='{data}'")
+            
+            # Try parsing specific topic first: "consultease/faculty/{id}/status"
+            if topic.startswith("consultease/faculty/") and topic.endswith("/status"):
+                parts = topic.split('/')
+                if len(parts) == 4: # Should be ["consultease", "faculty", "{id}", "status"]
+                    try:
+                        faculty_id_to_update = int(parts[2])
+                    except ValueError: 
+                        logger.error(f"Invalid faculty ID '{parts[2]}' in topic: {topic}"); return
+                    
+                    if isinstance(data, dict):
+                        if data.get('keychain_connected') is True: new_status_bool = True
+                        elif data.get('keychain_disconnected') is True: new_status_bool = False
+                        elif 'status' in data and isinstance(data['status'], bool): new_status_bool = data['status']
+                    elif isinstance(data, str): # Simple string on specific topic
+                        if data.lower() in ["true", "on", "available", "keychain_connected"]: new_status_bool = True
+                        elif data.lower() in ["false", "off", "unavailable", "keychain_disconnected"]: new_status_bool = False
+                    
+                    if new_status_bool is not None:
+                         logger.info(f"Parsed specific topic: faculty_id={faculty_id_to_update}, status={new_status_bool}")
+                    else:
+                        logger.warning(f"Could not determine status from data on specific topic: {topic}, data: {data}")
+                else:
+                    logger.warning(f"Malformed specific topic received: {topic}")
+            else:
+                # If it's not the specific topic format we expect, log it as unhandled.
+                logger.warning(f"Message on unhandled MQTT topic: {topic}"); return
 
-            if not faculty:
-                logger.error(f"Faculty not found: {faculty_id}")
-                return None
-
-            # Always update status based on BLE connection
-            # The always_available flag is no longer used
-
-            # Otherwise, update status normally
-            faculty.status = status
-            faculty.last_seen = datetime.datetime.now()
-
-            db.commit()
-
-            logger.info(f"Updated status for faculty {faculty.name} (ID: {faculty.id}): {status}")
-
-            return faculty
+            if faculty_id_to_update is not None and new_status_bool is not None:
+                updated_faculty = self.update_faculty_status_in_db(faculty_id_to_update, new_status_bool)
+                if updated_faculty:
+                    self._notify_callbacks(updated_faculty)
+                    # Consider publishing a system notification about the update
+                    system_notification = {
+                        "type": "faculty_status_updated",
+                        "faculty_id": updated_faculty.id,
+                        "name": updated_faculty.name,
+                        "status": updated_faculty.status
+                    }
+                    self.mqtt_service.publish(MQTTTopics.SYSTEM_NOTIFICATIONS, system_notification)
+                    logger.info(f"Published system notification for faculty {updated_faculty.id} status change.")
+                else:
+                    logger.error(f"Failed to update status in DB for faculty_id={faculty_id_to_update}")
+            elif topic.startswith("consultease/faculty/") and topic.endswith("/status"): 
+                # Only log 'no valid id/status' if it was a specific topic that failed parsing,
+                # otherwise the 'unhandled topic' log already covered it.
+                logger.warning(f"No valid faculty_id or status determined from topic='{topic}', data='{data}'. No update.")
+        
         except Exception as e:
-            logger.error(f"Error updating faculty status: {str(e)}")
-            return None
+            logger.error(f"Error in handle_faculty_status_update: {e}", exc_info=True)
+        finally:
+            close_db()
+
+    @db_operation_with_retry()
+    def update_faculty_status_in_db(self, db, faculty_id, status_bool):
+        """
+        Update faculty status in the database. Intended to be called by handle_faculty_status_update.
+        `db` is provided by the decorator.
+        """
+        faculty = db.query(Faculty).filter(Faculty.id == faculty_id).first()
+        if not faculty:
+            logger.error(f"DB: Faculty with ID {faculty_id} not found for status update.")
+            return None 
+        
+        if faculty.status == status_bool:
+            logger.info(f"DB: Status for faculty {faculty.name} (ID: {faculty.id}) is already {status_bool}. No change.")
+            return faculty # Return faculty even if no change, so callbacks can be notified if needed.
+
+        faculty.status = status_bool
+        faculty.last_seen = datetime.datetime.now() # Keep last_seen for presence, update on any status change too
+        logger.info(f"DB: Updated status for faculty {faculty.name} (ID: {faculty.id}) to {status_bool}")
+        return faculty
 
     def get_all_faculty(self, filter_available=None, search_term=None):
         """
         Get all faculty, optionally filtered by availability or search term.
-
-        Args:
-            filter_available (bool, optional): Filter by availability status
-            search_term (str, optional): Search term for name or department
-
-        Returns:
-            list: List of Faculty objects
         """
+        db = get_db()
         try:
-            db = get_db()
             query = db.query(Faculty)
-
-            # Apply filters
             if filter_available is not None:
                 query = query.filter(Faculty.status == filter_available)
-
             if search_term:
-                search_term = f"%{search_term}%"
-                query = query.filter(
-                    or_(
-                        Faculty.name.ilike(search_term),
-                        Faculty.department.ilike(search_term)
-                    )
-                )
-
-            # Execute query
+                search_val = f"%{search_term}%"
+                query = query.filter(or_(Faculty.name.ilike(search_val), Faculty.department.ilike(search_val)))
             faculties = query.all()
-
             return faculties
         except Exception as e:
             logger.error(f"Error getting faculty list: {str(e)}")
             return []
+        finally:
+            close_db()
 
     def get_faculty_by_id(self, faculty_id):
         """
         Get a faculty member by ID.
-
-        Args:
-            faculty_id (int): Faculty ID
-
-        Returns:
-            Faculty: Faculty object or None if not found
         """
+        db = get_db()
         try:
-            db = get_db()
             faculty = db.query(Faculty).filter(Faculty.id == faculty_id).first()
             return faculty
         except Exception as e:
             logger.error(f"Error getting faculty by ID: {str(e)}")
             return None
+        finally:
+            close_db()
 
     def get_faculty_by_ble_id(self, ble_id):
         """
         Get a faculty member by BLE ID.
-
-        Args:
-            ble_id (str): BLE beacon ID
-
-        Returns:
-            Faculty: Faculty object or None if not found
         """
+        db = get_db()
         try:
-            db = get_db()
             faculty = db.query(Faculty).filter(Faculty.ble_id == ble_id).first()
-
             if faculty:
                 logger.info(f"Found faculty with BLE ID {ble_id}: {faculty.name} (ID: {faculty.id})")
             else:
                 logger.warning(f"No faculty found with BLE ID: {ble_id}")
-
             return faculty
         except Exception as e:
             logger.error(f"Error getting faculty by BLE ID: {str(e)}")
             return None
+        finally:
+            close_db()
 
-    def add_faculty(self, name, department, email, ble_id, image_path=None, always_available=False):
+    @db_operation_with_retry()
+    def add_faculty(self, db, name, department, email, ble_id=None, image_path=None, always_available=False): # 'always_available' is present but ignored
         """
-        Add a new faculty member.
-
-        Args:
-            name (str): Faculty name
-            department (str): Faculty department
-            email (str): Faculty email
-            ble_id (str): Faculty BLE beacon ID
-            image_path (str, optional): Path to faculty image
-            always_available (bool, optional): Deprecated parameter, no longer used
-
-        Returns:
-            Faculty: New faculty object or None if error
+        Add a new faculty member. `db` is provided by the decorator.
+        The `always_available` parameter is deprecated and its value is ignored. BLE presence dictates availability.
         """
+        # Check for existing faculty with the same email or non-empty BLE ID
+        existing_faculty_check = or_(Faculty.email == email)
+        if ble_id and ble_id.strip() != "": # Only include BLE ID in check if it's not None or empty
+            existing_faculty_check = or_(Faculty.email == email, Faculty.ble_id == ble_id)
+        
+        if db.query(Faculty).filter(existing_faculty_check).first():
+            error_msg = f"Faculty with email '{email}'"
+            if ble_id and ble_id.strip() != "":
+                error_msg += f" or BLE ID '{ble_id}'"
+            error_msg += " already exists."
+            raise ValueError(error_msg)
+
+        faculty = Faculty(
+            name=name, 
+            department=department, 
+            email=email, 
+            ble_id=ble_id if ble_id and ble_id.strip() != "" else None, # Store None if empty/whitespace
+            image_path=image_path, 
+            status=False,  # New faculty defaults to not available
+            always_available=False # Deprecated, set to False
+        )
+        db.add(faculty)
+        # db.commit() and db.refresh(faculty) handled by decorator
+        logger.info(f"DB: Added faculty: {faculty.name} (ID: {faculty.id})")
+        
+        # Publish notification
         try:
-            db = get_db()
+            # Ensure faculty ID is available after commit (decorator handles refresh)
+            db.flush() # Ensure ID is populated if not already by commit
+            notification = {
+                'type': 'faculty_added',
+                'faculty_id': faculty.id,
+                'faculty_name': faculty.name,
+                'department': faculty.department,
+                'email': faculty.email,
+                'status': faculty.status 
+            }
+            self.mqtt_service.publish(MQTTTopics.SYSTEM_NOTIFICATIONS, notification)
+            logger.info(f"Published faculty_added notification for {faculty.name}")
+        except Exception as e_mqtt:
+            logger.error(f"Error publishing faculty added notification for {faculty.name}: {str(e_mqtt)}")
+        
+        return faculty
 
-            # Check if email or BLE ID already exists
-            existing = db.query(Faculty).filter(
-                or_(
-                    Faculty.email == email,
-                    Faculty.ble_id == ble_id
-                )
-            ).first()
 
-            if existing:
-                logger.error(f"Faculty with email {email} or BLE ID {ble_id} already exists")
-                return None
+    @db_operation_with_retry()
+    def update_faculty(self, db, faculty_id, name=None, department=None, email=None, ble_id=None, image_path=None, always_available=None): # 'always_available' is present but ignored
+        """
+        Update an existing faculty member. `db` is provided by the decorator.
+        The `always_available` parameter is deprecated and its value is ignored.
+        """
+        faculty = db.query(Faculty).filter(Faculty.id == faculty_id).first()
+        if not faculty:
+            raise ValueError(f"Faculty ID {faculty_id} not found for update.")
 
-            # Create new faculty
-            faculty = Faculty(
-                name=name,
-                department=department,
-                email=email,
-                ble_id=ble_id,
-                image_path=image_path,
-                status=False,  # Initial status is False, will be updated by BLE
-                always_available=False  # Always set to False
-            )
+        updated_fields = []
 
-            db.add(faculty)
-            db.commit()
+        if name is not None and faculty.name != name:
+            faculty.name = name
+            updated_fields.append("name")
+        if department is not None and faculty.department != department:
+            faculty.department = department
+            updated_fields.append("department")
+        if email is not None and faculty.email != email:
+            # Check if new email is already used by another faculty
+            if db.query(Faculty).filter(Faculty.email == email, Faculty.id != faculty_id).first(): 
+                raise ValueError(f"Email '{email}' already used by another faculty.")
+            faculty.email = email
+            updated_fields.append("email")
+        
+        # Handle BLE ID update carefully: allow setting to None/empty or a new value
+        # If ble_id is an empty string or None, set it to None in DB.
+        # If ble_id has a value, check for uniqueness.
+        current_ble_id = faculty.ble_id if faculty.ble_id else ""
+        new_ble_id = ble_id if ble_id else ""
 
-            logger.info(f"Added new faculty: {faculty.name} (ID: {faculty.id})")
+        if new_ble_id != current_ble_id:
+            if new_ble_id.strip() != "": # New BLE ID is not empty
+                if db.query(Faculty).filter(Faculty.ble_id == new_ble_id, Faculty.id != faculty_id).first(): 
+                    raise ValueError(f"BLE ID '{new_ble_id}' already used by another faculty.")
+                faculty.ble_id = new_ble_id
+            else: # New BLE ID is empty or None, so set to None
+                faculty.ble_id = None
+            updated_fields.append("ble_id")
 
-            # Publish a notification about the new faculty
-            logger.info(f"Faculty {faculty.name} (ID: {faculty.id}) created with BLE-based availability")
+        if image_path is not None and faculty.image_path != image_path:
+            faculty.image_path = image_path
+            updated_fields.append("image_path")
+        
+        # always_available is deprecated, ensure it's False if for some reason it was True
+        if faculty.always_available:
+            faculty.always_available = False
+            updated_fields.append("always_available (deprecated, set to False)")
+
+        if updated_fields:
+            logger.info(f"DB: Updated faculty ID {faculty_id}. Changed fields: {', '.join(updated_fields)}")
+            # db.commit() and db.refresh(faculty) handled by decorator
+            
+            # Publish notification
             try:
+                # Ensure faculty ID is available after commit (decorator handles refresh)
+                db.flush() 
                 notification = {
-                    'type': 'faculty_status',
+                    'type': 'faculty_updated',
                     'faculty_id': faculty.id,
-                    'faculty_name': faculty.name,
-                    'status': faculty.status,
-                    'timestamp': faculty.last_seen.isoformat() if faculty.last_seen else None
+                    'name': faculty.name, # Send current name
+                    'updated_fields': updated_fields
                 }
                 self.mqtt_service.publish(MQTTTopics.SYSTEM_NOTIFICATIONS, notification)
-            except Exception as e:
-                logger.error(f"Error publishing faculty status notification: {str(e)}")
+                logger.info(f"Published faculty_updated notification for {faculty.name}")
+            except Exception as e_mqtt:
+                logger.error(f"Error publishing faculty updated notification for {faculty.name}: {str(e_mqtt)}")
+        else:
+            logger.info(f"DB: No changes for faculty ID {faculty_id}.")
+            
+        return faculty
 
-            return faculty
-        except Exception as e:
-            logger.error(f"Error adding faculty: {str(e)}")
-            return None
-
-    def update_faculty(self, faculty_id, name=None, department=None, email=None, ble_id=None, image_path=None, always_available=None):
+    @db_operation_with_retry()
+    def delete_faculty(self, db, faculty_id):
         """
-        Update an existing faculty member.
-
-        Args:
-            faculty_id (int): Faculty ID
-            name (str, optional): New faculty name
-            department (str, optional): New faculty department
-            email (str, optional): New faculty email
-            ble_id (str, optional): New faculty BLE beacon ID
-            image_path (str, optional): New faculty image path
-            always_available (bool, optional): Deprecated parameter, no longer used
-
-        Returns:
-            Faculty: Updated faculty object or None if error
+        Delete a faculty member. `db` is provided by the decorator.
         """
+        faculty = db.query(Faculty).filter(Faculty.id == faculty_id).first()
+        if not faculty:
+            # Allow graceful failure if faculty not found, or raise ValueError if strict
+            logger.warning(f"DB: Faculty ID {faculty_id} not found for deletion. No action taken.")
+            return False # Indicate faculty was not found/deleted
+
+        faculty_name = faculty.name # Store for logging before deletion
+        db.delete(faculty)
+        # db.commit() handled by decorator
+        logger.info(f"DB: Deleted faculty ID {faculty_id}, Name: {faculty_name}")
+        
+        # Publish notification
         try:
-            db = get_db()
-            faculty = db.query(Faculty).filter(Faculty.id == faculty_id).first()
+            notification = {
+                'type': 'faculty_deleted',
+                'faculty_id': faculty_id, # ID is known
+                'faculty_name': faculty_name 
+            }
+            self.mqtt_service.publish(MQTTTopics.SYSTEM_NOTIFICATIONS, notification)
+            logger.info(f"Published faculty_deleted notification for {faculty_name} (ID: {faculty_id})")
+        except Exception as e_mqtt:
+            logger.error(f"Error publishing faculty deleted notification for {faculty_name}: {str(e_mqtt)}")
+            
+        return True # Indicate successful deletion
 
-            if not faculty:
-                logger.error(f"Faculty not found: {faculty_id}")
-                return None
 
-            # Update fields if provided
-            if name is not None:
-                faculty.name = name
-
-            if department is not None:
-                faculty.department = department
-
-            if email is not None and email != faculty.email:
-                # Check if email already exists
-                existing = db.query(Faculty).filter(Faculty.email == email).first()
-                if existing and existing.id != faculty_id:
-                    logger.error(f"Faculty with email {email} already exists")
-                    return None
-                faculty.email = email
-
-            if ble_id is not None and ble_id != faculty.ble_id:
-                # Check if BLE ID already exists
-                existing = db.query(Faculty).filter(Faculty.ble_id == ble_id).first()
-                if existing and existing.id != faculty_id:
-                    logger.error(f"Faculty with BLE ID {ble_id} already exists")
-                    return None
-                faculty.ble_id = ble_id
-
-            if image_path is not None:
-                faculty.image_path = image_path
-
-            # Set always_available to False regardless of input
-            # Status is always determined by BLE connection
-            if faculty.always_available:
-                faculty.always_available = False
-                logger.info(f"Faculty {faculty.name} (ID: {faculty.id}) status will be determined by BLE connection")
-
-            db.commit()
-
-            logger.info(f"Updated faculty: {faculty.name} (ID: {faculty.id})")
-
-            return faculty
-        except Exception as e:
-            logger.error(f"Error updating faculty: {str(e)}")
-            return None
-
-    def delete_faculty(self, faculty_id):
+    def ensure_available_faculty(self): # Marked for testing purposes as per memory
         """
-        Delete a faculty member.
-
-        Args:
-            faculty_id (int): Faculty ID
-
-        Returns:
-            bool: True if successful, False otherwise
+        TESTING/DEMO: Ensures at least one faculty member is marked as available.
+        This should ideally be replaced by actual BLE-based status updates.
         """
+        db = get_db()
         try:
-            db = get_db()
-            faculty = db.query(Faculty).filter(Faculty.id == faculty_id).first()
-
-            if not faculty:
-                logger.error(f"Faculty not found: {faculty_id}")
-                return False
-
-            db.delete(faculty)
-            db.commit()
-
-            logger.info(f"Deleted faculty: {faculty.name} (ID: {faculty.id})")
-
-            return True
-        except Exception as e:
-            logger.error(f"Error deleting faculty: {str(e)}")
-            return False
-
-    def ensure_available_faculty(self):
-        """
-        Ensure at least one faculty member is available for testing.
-        If no faculty is available, make Dr. John Smith available.
-
-        Returns:
-            Faculty: The available faculty member or None if error
-        """
-        try:
-            db = get_db()
-
-            # Check if any faculty is available
+            logger.debug("Testing: Attempting to ensure an available faculty member.")
+            # Check if any faculty is already available
             available_faculty = db.query(Faculty).filter(Faculty.status == True).first()
-
             if available_faculty:
-                logger.info(f"Found available faculty: {available_faculty.name} (ID: {available_faculty.id})")
+                logger.info(f"Testing: Found available faculty: {available_faculty.name} (ID: {available_faculty.id}). No changes made.")
                 return available_faculty
 
-            # If no faculty is available, make Dr. John Smith available
-            dr_john = db.query(Faculty).filter(Faculty.name == "Dr. John Smith").first()
+            # If no one is available, try to make one available (e.g., Dr. John Smith or the first one)
+            # This is placeholder logic for testing without real BLE.
+            target_faculty = db.query(Faculty).filter(Faculty.name == "Dr. John Smith").first()
+            if not target_faculty:
+                target_faculty = db.query(Faculty).order_by(Faculty.id).first() # Get the first faculty
 
-            if dr_john:
-                logger.info(f"Making Dr. John Smith (ID: {dr_john.id}) available for testing")
-                dr_john.status = True
+            if target_faculty:
+                logger.warning(f"Testing: No faculty currently available. Making '{target_faculty.name}' (ID: {target_faculty.id}) available for testing.")
+                target_faculty.status = True
+                target_faculty.last_seen = datetime.datetime.now()
                 db.commit()
-                return dr_john
-
-            # If Dr. John Smith doesn't exist, make the first faculty available
-            first_faculty = db.query(Faculty).first()
-
-            if first_faculty:
-                logger.info(f"Making {first_faculty.name} (ID: {first_faculty.id}) available for testing")
-                first_faculty.status = True
-                db.commit()
-                return first_faculty
-
-            logger.warning("No faculty found in the database")
-            return None
+                self._notify_callbacks(target_faculty) # Notify about this test-induced change
+                return target_faculty
+            else:
+                logger.warning("Testing: No faculty members found in the database to make available.")
+                return None
         except Exception as e:
-            logger.error(f"Error ensuring available faculty: {str(e)}")
+            logger.error(f"Testing: Error in ensure_available_faculty: {e}", exc_info=True)
+            if db: db.rollback() # Rollback on error
             return None
+        finally:
+            close_db()

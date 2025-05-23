@@ -2,6 +2,75 @@
 
 This document outlines the improvements made to the ConsultEase system to fix bugs and enhance functionality.
 
+## 0. Major Architecture Refactoring
+
+### Overview:
+- Complete architectural overhaul for stability, maintainability, and configurability
+- Standardized design patterns across the system
+- Centralized configuration management
+- Enhanced database session handling
+- Improved component interactions
+
+### Key Improvements:
+
+#### Centralized Configuration System:
+- Created `config.py` to load settings from `config.json`, environment variables, and defaults
+- Removed scattered configuration (`settings.ini` and hardcoded values)
+- All system components now use consistent configuration access through `get_config()`
+- Environment-specific settings easily manageable through a single file
+
+#### Singleton Controllers:
+- All controllers converted to follow singleton pattern with `.instance()` method
+- Ensures consistent state management across the application
+- Prevents duplicate instances and resource conflicts
+- Controllers affected: `AdminController`, `FacultyController`, `ConsultationController`, `RFIDController`, and new `StudentController`
+
+#### Robust Database Session Management:
+- Created `@db_operation_with_retry` decorator for transactional operations
+- Standardized `try/finally close_db()` pattern for read operations
+- Guaranteed session closing to prevent leaks and connection pool exhaustion
+- Enhanced error handling with automatic retry logic
+
+#### RFID Performance Optimization:
+- Added in-memory student cache in `RFIDService`
+- Significantly reduced database queries per scan
+- Periodic cache refresh mechanism
+- Configurable VID/PID for hardware compatibility
+
+#### Security Enhancements:
+- Validated bcrypt password hashing for admin accounts
+- Added database fields for account lockout mechanism (`failed_login_attempts`, `last_failed_login_at`, `account_locked_until`)
+- Structured TLS support for MQTT communications
+- More secure credential handling via configuration
+
+#### Unified Keyboard Management:
+- Single `KeyboardManager` replaces multiple keyboard handlers
+- Configuration-driven keyboard preferences
+- Fallback mechanisms for various environments
+- Removed `direct_keyboard.py` to eliminate redundancy
+
+#### Files Modified:
+- `central_system/config.py` (created)
+- `central_system/controllers/*.py` (all controllers updated to singleton pattern)
+- `central_system/models/base.py` (improved session management)
+- `central_system/services/rfid_service.py` (student data caching)
+- `central_system/services/mqtt_service.py` (configuration-driven, TLS-ready)
+- `central_system/utils/keyboard_manager.py` (unified keyboard handling)
+- `central_system/models/admin.py` (account lockout fields)
+- `central_system/main.py` (configuration-driven initialization)
+- `central_system/views/dashboard_window.py` (singleton controller usage, more efficient UI updates)
+- `central_system/views/admin_dashboard_window.py` (singleton controller usage)
+
+### Removed Files:
+- `central_system/settings.ini` (replaced by configuration system)
+- `central_system/utils/direct_keyboard.py` (consolidated into KeyboardManager)
+
+### Testing Improvements:
+- Made test/demo code conditional via configuration flags
+- Added `system.ensure_test_faculty_available` configuration option
+- More reliable testing approach across different environments
+- Clearer separation between production and development environments
+
 ## 1. On-Screen Keyboard Improvements
 
 ### Issues Fixed:

@@ -7,7 +7,7 @@ import subprocess
 from PyQt5.QtCore import QObject, pyqtSignal
 
 # Set up logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s') # REMOVED - Rely on central config
 logger = logging.getLogger(__name__)
 
 class RFIDService(QObject):
@@ -25,17 +25,25 @@ class RFIDService(QObject):
     def __init__(self):
         super(RFIDService, self).__init__()
         self.os_platform = sys.platform
-        self.device_path = os.environ.get('RFID_DEVICE_PATH', None)
-        self.simulation_mode = os.environ.get('RFID_SIMULATION_MODE', 'false').lower() == 'true'
+        # Get central config instance first
+        from ..config import get_config # Ensure get_config is imported
+        self.config = get_config()
 
-        # Target RFID reader VID/PID
-        self.target_vid = "ffff"
-        self.target_pid = "0035"
+        self.device_path = self.config.get('rfid.device_path', None) # Use config
+        self.simulation_mode = self.config.get('rfid.simulation_mode', False) # Use config
+
+        # Target RFID reader VID/PID from config.py
+        self.target_vid = self.config.get('rfid.target_vid', 'ffff')
+        self.target_pid = self.config.get('rfid.target_pid', '0035')
 
         # Events and callbacks
         self.callbacks = []
         self.running = False
         self.read_thread = None
+        
+        # In-memory cache for student RFID UIDs
+        self.student_rfid_cache = {} # Dict to store {rfid_uid: student_object}
+        self.cache_lock = threading.Lock() # To protect access to the cache
 
         # Connect the signal to the notification method to ensure thread safety
         self.card_read_signal.connect(self._notify_callbacks_safe)
@@ -247,64 +255,33 @@ class RFIDService(QObject):
     def _notify_callbacks_safe(self, rfid_uid):
         """
         Thread-safe notification of callbacks via Qt signals.
-        Also attempts to look up the student based on the RFID UID.
+        Looks up the student from an internal cache.
 
         Args:
             rfid_uid (str): The RFID UID that was read
         """
-        logger.info(f"RFID Service notifying callbacks for UID: {rfid_uid}")
+        logger.info(f"RFID Service received UID for notification: {rfid_uid}")
 
-        # CRITICAL: Force a database session refresh to ensure we have the latest data
-        try:
-            from ..models import get_db
-            db = get_db()
-            # Force SQLAlchemy to create a new session
-            db.close()
-            db = get_db(force_new=True)
-            logger.info("Forced database session refresh to ensure latest student data")
-        except Exception as e:
-            logger.error(f"Error refreshing database session: {str(e)}")
-            import traceback
-            logger.error(f"Traceback: {traceback.format_exc()}")
-
-        # Attempt to verify the student immediately
         student = None
-        try:
-            from ..models import Student, get_db  # Lazy import to avoid circular dependencies
-            db = get_db()
-
-            # Log the query we're about to execute
-            logger.info(f"Looking up student with RFID UID: {rfid_uid}")
-
-            # Try an exact match first
-            student = db.query(Student).filter(Student.rfid_uid == rfid_uid).first()
-
-            # If no exact match, try case-insensitive match
+        with self.cache_lock:
+            # Try exact match from cache
+            student = self.student_rfid_cache.get(rfid_uid)
             if not student:
-                logger.info(f"No exact match found, trying case-insensitive match for RFID: {rfid_uid}")
-                # For PostgreSQL
-                try:
-                    student = db.query(Student).filter(Student.rfid_uid.ilike(rfid_uid)).first()
-                except:
-                    # For SQLite
-                    student = db.query(Student).filter(Student.rfid_uid.lower() == rfid_uid.lower()).first()
+                # Try case-insensitive match from cache keys if exact failed
+                for cached_uid, cached_student in self.student_rfid_cache.items():
+                    if cached_uid.lower() == rfid_uid.lower():
+                        student = cached_student
+                        logger.info(f"Found student via case-insensitive match in cache: {student.name}")
+                        break
 
-            if student:
-                logger.info(f"Student verified by RFIDService: {student.name} with ID: {student.id}")
-                # Log the student details for debugging
-                logger.info(f"Student details - Name: {student.name}, Department: {student.department}, RFID: {student.rfid_uid}")
-            else:
-                # Log all students in the database for debugging
-                all_students = db.query(Student).all()
-                logger.warning(f"No student found for RFID {rfid_uid} by RFIDService")
-                logger.info(f"Available students in database: {len(all_students)}")
-                for s in all_students:
-                    logger.info(f"  - ID: {s.id}, Name: {s.name}, RFID: {s.rfid_uid}")
-        except Exception as e:
-            logger.error(f"Error verifying student in RFIDService: {str(e)}")
-            import traceback
-            logger.error(f"Traceback: {traceback.format_exc()}")
-            student = None  # Ensure student is None if lookup fails
+        if student:
+            logger.info(f"Student {student.name} (ID: {student.id}) found in cache for RFID UID: {rfid_uid}")
+        else:
+            logger.warning(f"No student found in cache for RFID UID: {rfid_uid}")
+            # Optionally, log available UIDs in cache for debugging (at DEBUG level)
+            if logger.isEnabledFor(logging.DEBUG):
+                with self.cache_lock:
+                    logger.debug(f"Available RFID UIDs in cache: {list(self.student_rfid_cache.keys())}")
 
         # Make a copy of callbacks to avoid issues if callbacks are modified during iteration
         callbacks_to_notify = list(self.callbacks)
@@ -400,12 +377,16 @@ class RFIDService(QObject):
             current_rfid = ""
             last_event_time = 0
 
-            logger.info("RFID reader is active and waiting for cards (supports 13.56 MHz)")
+            logger.info("RFID reader is active and waiting for cards (supports 13.56 MHz)") # Log once
+            initial_wait_logged = True
 
             while self.running:
                 try:
                     # Enhanced debugging - log all events for debugging
-                    logger.info("Waiting for RFID card events...")
+                    # logger.info("Waiting for RFID card events...") # REMOVED - too verbose
+                    if not initial_wait_logged:
+                        logger.info("RFID reader is active and waiting for cards (supports 13.56 MHz)")
+                        initial_wait_logged = True
 
                     for event in device.read_loop():
                         if not self.running:
@@ -496,36 +477,35 @@ class RFIDService(QObject):
 
     def refresh_student_data(self):
         """
-        Refresh the student data cache.
+        Refresh the student data cache from the database.
         This should be called when students are added, updated, or deleted.
         """
-        logger.info("Refreshing RFID service student data cache")
+        logger.info("Attempting to refresh RFID service student data cache")
+        new_cache = {}
         try:
-            from ..models import Student, get_db
+            from ..models import Student, get_db, close_db # Ensure close_db is imported here
 
-            # Force a new database session to ensure we get fresh data
-            db = get_db(force_new=True)
+            # Get a new session to ensure fresh data from DB
+            db = get_db(force_new=True) # Force new session for refresh
+            db.expire_all() # Ensure subsequent queries hit the DB for this session
 
-            # Explicitly expire all objects to force a refresh from the database
-            db.expire_all()
-
-            # Query all students
             students = db.query(Student).all()
-            logger.info(f"Refreshed student data cache, found {len(students)} students")
+            for student_obj in students:
+                if student_obj.rfid_uid:
+                    # Store a simplified student representation or the full object
+                    # For simplicity, let's store the object, but ensure it's handled correctly if it becomes detached
+                    new_cache[student_obj.rfid_uid] = student_obj 
+            
+            with self.cache_lock:
+                self.student_rfid_cache = new_cache
+            logger.info(f"RFID student cache refreshed with {len(new_cache)} entries.")
 
-            # Log all students for debugging
-            for student in students:
-                logger.info(f"  - ID: {student.id}, Name: {student.name}, RFID: {student.rfid_uid}")
-
-            # Close the database session to ensure it's not kept open
-            db.close()
-
-            return True
         except Exception as e:
             logger.error(f"Error refreshing student data cache: {str(e)}")
-            import traceback
-            logger.error(f"Traceback: {traceback.format_exc()}")
-            return False
+            # Consider if db session needs rollback here if an error occurs mid-transaction, though it's a read op.
+        finally:
+            if 'db' in locals() and db is not None: # Check if db was successfully initialized
+                close_db(db_session=db) # Pass the specific session to close
 
     def simulate_card_read(self, rfid_uid=None):
         """

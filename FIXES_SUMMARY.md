@@ -2,6 +2,92 @@
 
 This document summarizes all the fixes and improvements made to the ConsultEase codebase to address UI issues, bugs, and errors.
 
+## RECENT: Major Architecture Refactoring
+
+### Centralized Configuration
+- **Issue**: Configuration was scattered across different files (`settings.ini`, environment variables, hardcoded values).
+- **Fix**: Created a unified configuration system with `config.py` loading from `config.json`, environment variables, and default values.
+- **Files Modified**:
+  - Created `central_system/config.py` with robust configuration loading
+  - Removed `central_system/settings.ini`
+  - Updated all services and controllers to use the new configuration system
+
+### Singleton Controllers
+- **Issue**: Multiple controller instances could be created, leading to state inconsistencies.
+- **Fix**: Converted all controllers to follow the singleton pattern with a common `.instance()` method.
+- **Files Modified**:
+  - `central_system/controllers/admin_controller.py`
+  - `central_system/controllers/faculty_controller.py`
+  - `central_system/controllers/consultation_controller.py`
+  - `central_system/controllers/rfid_controller.py`
+  - Created `central_system/controllers/student_controller.py`
+
+### Database Session Management
+- **Issue**: Inconsistent handling of database sessions leading to potential leaks and errors.
+- **Fix**: Standardized session management with a `@db_operation_with_retry` decorator and `try/finally close_db()` blocks.
+- **Files Modified**:
+  - Enhanced `central_system/models/base.py` with the decorator
+  - Updated all controller methods to use the standardized patterns
+
+### RFID Service Improvements
+- **Issue**: Excessive database queries for each RFID scan.
+- **Fix**: Implemented an in-memory student cache that refreshes periodically.
+- **Files Modified**:
+  - `central_system/services/rfid_service.py`
+
+### MQTT Service Refactoring
+- **Issue**: Direct `settings.ini` access and hardcoded client ID in MQTT service.
+- **Fix**: 
+  - Now uses `get_config()` for all MQTT settings
+  - Client ID is base_id + random suffix for uniqueness
+  - Added structure for TLS configuration
+- **Files Modified**:
+  - `central_system/services/mqtt_service.py`
+
+### Legacy MQTT Topic Removal
+- **Issue**: Redundant subscription to legacy MQTT faculty status topic.
+- **Fix**: Removed legacy topic handling after confirming ESP32 uses the specific topic format.
+- **Files Modified**:
+  - `central_system/controllers/faculty_controller.py`
+
+### Keyboard Management Consolidation
+- **Issue**: Multiple keyboard handlers with overlapping functionality.
+- **Fix**: Consolidated into single `KeyboardManager` with configuration for preferred/fallback keyboards.
+- **Files Modified**:
+  - Enhanced `central_system/utils/keyboard_manager.py`
+  - Removed `central_system/utils/direct_keyboard.py`
+  - Updated `central_system/main.py` to use the unified manager
+
+### Security Enhancements
+- **Issue**: Basic password hashing and no account lockout mechanism.
+- **Fix**:
+  - Added fields for account lockout to `Admin` model
+  - Validated bcrypt password hashing implementation
+- **Files Modified**:
+  - `central_system/models/admin.py`
+
+### Test Code Conditionals
+- **Issue**: Development/test code running in all environments.
+- **Fix**: Made test code conditional based on configuration flags.
+- **Files Modified**:
+  - Added `system.ensure_test_faculty_available` to `config.py`
+  - Updated `main.py` to conditionally run test code
+
+### Logging Standardization
+- **Issue**: Multiple redundant `logging.basicConfig()` calls.
+- **Fix**: Removed redundant initialization, centralized logging setup.
+- **Files Modified**:
+  - Multiple files across the codebase
+
+### View Layer Efficiency
+- **Issue**: Inefficient UI updates in some components.
+- **Fix**: 
+  - `FacultyCard.update_faculty()` now updates widgets directly instead of full re-initialization
+  - `DashboardWindow` and `AdminDashboardWindow` tabs updated to use singleton controllers
+- **Files Modified**:
+  - `central_system/views/dashboard_window.py`
+  - `central_system/views/admin_dashboard_window.py`
+
 ## 1. BLE Connectivity Fixes
 
 ### 1.1 BLE UUID Mismatch
@@ -150,3 +236,6 @@ This document summarizes all the fixes and improvements made to the ConsultEase 
 3. **Implement Error Handling Strategy**: Create a consistent error handling strategy across the application.
 4. **Optimize Database Queries**: Review and optimize database queries for better performance.
 5. **Add Unit Tests**: Create comprehensive unit tests for the improved components.
+6. **Complete TLS for MQTT**: Generate/obtain certificates and implement MQTT TLS.
+7. **Implement Admin Account Lockout**: Add logic to `AdminController.authenticate` to enforce lockout using the new model fields.
+8. **Document Configuration Options**: Create comprehensive documentation for all `config.json` settings.

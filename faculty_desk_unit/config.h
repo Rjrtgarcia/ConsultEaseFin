@@ -22,7 +22,6 @@
 #define FACULTY_ID 3  // This should match the faculty ID in the database
 #define FACULTY_NAME "Jeysibn"  // This should match the faculty name in the database
 #define FACULTY_DEPARTMENT "Computer Science"  // This should match the faculty department in the database
-#define ALWAYS_AVAILABLE false  // Set to false to make faculty availability depend on BLE connection
 
 // BLE Configuration
 #define BLE_SCAN_INTERVAL 5000  // Scan interval in milliseconds

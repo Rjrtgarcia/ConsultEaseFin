@@ -7,8 +7,11 @@ from PyQt5.QtGui import QIcon, QColor, QPixmap
 
 import os
 import logging
+import time # Moved import time here
 from .base_window import BaseWindow
 from .consultation_panel import ConsultationPanel
+from ..controllers import FacultyController, ConsultationController
+from ..utils.icons import IconProvider, Icons
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -31,9 +34,9 @@ class FacultyCard(QFrame):
         self.setFrameShape(QFrame.StyledPanel)
 
         # Set fixed width and minimum height for consistent card size
-        # Increased width to accommodate longer faculty names
-        self.setFixedWidth(280)
-        self.setMinimumHeight(180)
+        # Reduced width as per user preference
+        self.setFixedWidth(240)
+        self.setMinimumHeight(160)
 
         # Set size policy to prevent stretching
         self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Minimum)
@@ -44,44 +47,29 @@ class FacultyCard(QFrame):
         # Set styling based on faculty status
         self.update_style()
 
-        # Main layout with proper margins for card-like appearance
+        # Main layout with improved margins for card-like appearance
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(12, 12, 12, 12)
-        main_layout.setSpacing(8)
+        main_layout.setContentsMargins(10, 10, 10, 10)  # Reduced margins
+        main_layout.setSpacing(6)  # Reduced spacing
         main_layout.setAlignment(Qt.AlignCenter)
 
         # Faculty info layout (image + text)
         info_layout = QHBoxLayout()
         info_layout.setAlignment(Qt.AlignCenter)
 
-        # Faculty image - reduced size with improved styling
-        image_label = QLabel()
-        image_label.setFixedSize(60, 60)
-        image_label.setStyleSheet("""
+        # Faculty image - further reduced size with improved styling
+        self.image_label = QLabel()
+        self.image_label.setFixedSize(50, 50)  # Smaller image
+        self.image_label.setStyleSheet("""
             border: 1px solid #ddd;
-            border-radius: 30px;
+            border-radius: 25px;  # Adjusted radius to match size
             background-color: white;
             padding: 2px;
         """)
-        image_label.setScaledContents(True)
+        self.image_label.setScaledContents(True)
+        self._load_faculty_image() # Helper method to load image
 
-        # Try to load faculty image
-        if hasattr(self.faculty, 'get_image_path') and self.faculty.image_path:
-            try:
-                image_path = self.faculty.get_image_path()
-                if image_path and os.path.exists(image_path):
-                    pixmap = QPixmap(image_path)
-                    if not pixmap.isNull():
-                        # Create circular mask for the image
-                        image_label.setPixmap(pixmap)
-                    else:
-                        logger.warning(f"Could not load image for faculty {self.faculty.name}: {image_path}")
-                else:
-                    logger.warning(f"Image path not found for faculty {self.faculty.name}: {image_path}")
-            except Exception as e:
-                logger.error(f"Error loading faculty image: {str(e)}")
-
-        info_layout.addWidget(image_label)
+        info_layout.addWidget(self.image_label)
 
         # Faculty text info
         text_layout = QVBoxLayout()
@@ -89,33 +77,35 @@ class FacultyCard(QFrame):
         text_layout.setSpacing(4)  # Increased spacing between name and department
         text_layout.setContentsMargins(0, 0, 0, 0)  # Remove margins to maximize text space
 
-        # Faculty name - improved styling for better readability
-        name_label = QLabel(self.faculty.name)
-        name_label.setStyleSheet("""
+        # Faculty name - improved styling for better readability with no border
+        self.name_label = QLabel(self.faculty.name)
+        self.name_label.setStyleSheet("""
             font-size: 15pt;
             font-weight: bold;
             padding: 0;
             margin: 0;
+            border: none;
         """)
-        name_label.setAlignment(Qt.AlignLeft)
-        name_label.setWordWrap(True)
-        name_label.setMinimumWidth(180)  # Ensure enough width for text
-        name_label.setMaximumWidth(200)  # Limit maximum width
-        text_layout.addWidget(name_label)
+        self.name_label.setAlignment(Qt.AlignLeft)
+        self.name_label.setWordWrap(True)
+        self.name_label.setMinimumWidth(180)  # Ensure enough width for text
+        self.name_label.setMaximumWidth(200)  # Limit maximum width
+        text_layout.addWidget(self.name_label)
 
-        # Department - improved styling
-        dept_label = QLabel(self.faculty.department)
-        dept_label.setStyleSheet("""
+        # Department - improved styling with no border
+        self.dept_label = QLabel(self.faculty.department)
+        self.dept_label.setStyleSheet("""
             font-size: 11pt;
             color: #666;
             padding: 0;
             margin: 0;
+            border: none;
         """)
-        dept_label.setAlignment(Qt.AlignLeft)
-        dept_label.setWordWrap(True)
-        dept_label.setMinimumWidth(180)  # Ensure enough width for text
-        dept_label.setMaximumWidth(200)  # Limit maximum width
-        text_layout.addWidget(dept_label)
+        self.dept_label.setAlignment(Qt.AlignLeft)
+        self.dept_label.setWordWrap(True)
+        self.dept_label.setMinimumWidth(180)  # Ensure enough width for text
+        self.dept_label.setMaximumWidth(200)  # Limit maximum width
+        text_layout.addWidget(self.dept_label)
 
         info_layout.addLayout(text_layout)
         main_layout.addLayout(info_layout)
@@ -132,27 +122,19 @@ class FacultyCard(QFrame):
         status_layout.setAlignment(Qt.AlignLeft)
         status_layout.setSpacing(4)
 
-        status_icon = QLabel("●")
-        if self.faculty.status:
-            # No border on status icon, reduced font size
-            status_icon.setStyleSheet("font-size: 12pt; color: #4caf50; border: none;")
-            status_text = QLabel("Available")
-            # No border on status text, reduced font size
-            status_text.setStyleSheet("font-size: 11pt; color: #4caf50; border: none;")
-        else:
-            status_icon.setStyleSheet("font-size: 12pt; color: #f44336; border: none;")
-            status_text = QLabel("Unavailable")
-            status_text.setStyleSheet("font-size: 11pt; color: #f44336; border: none;")
+        self.status_icon_label = QLabel("●")
+        self.status_text_label = QLabel() # Initialize status_text_label here
+        self._update_status_widgets() # Helper method
 
-        status_layout.addWidget(status_icon)
-        status_layout.addWidget(status_text)
+        status_layout.addWidget(self.status_icon_label)
+        status_layout.addWidget(self.status_text_label)
         status_layout.addStretch()
         main_layout.addLayout(status_layout)
 
         # Request consultation button - more compact with improved styling
-        request_button = QPushButton("Request Consultation")
-        request_button.setEnabled(self.faculty.status)
-        request_button.setStyleSheet("""
+        self.request_button = QPushButton("Request Consultation")
+        self.request_button.setEnabled(self.faculty.status)
+        self.request_button.setStyleSheet("""
             QPushButton {
                 font-size: 10pt;
                 padding: 6px;
@@ -169,8 +151,8 @@ class FacultyCard(QFrame):
                 color: #ECEFF1;
             }
         """)
-        request_button.clicked.connect(self.request_consultation)
-        main_layout.addWidget(request_button)
+        self.request_button.clicked.connect(self.request_consultation)
+        main_layout.addWidget(self.request_button)
 
     def _create_shadow_effect(self):
         """
@@ -195,6 +177,8 @@ class FacultyCard(QFrame):
                     background-color: #e8f5e9;
                     border: 1px solid #4caf50;
                     border-radius: 8px;
+                    margin: 5px;  /* Added margin for better visual separation */
+                    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);  /* Subtle shadow */
                 }
             ''')
         else:
@@ -203,211 +187,78 @@ class FacultyCard(QFrame):
                     background-color: #ffebee;
                     border: 1px solid #f44336;
                     border-radius: 8px;
+                    margin: 5px;  /* Added margin for better visual separation */
+                    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);  /* Subtle shadow */
                 }
             ''')
 
+    def _load_faculty_image(self):
+        pixmap_loaded = False
+        if hasattr(self.faculty, 'get_image_path') and self.faculty.image_path:
+            try:
+                image_path = self.faculty.get_image_path()
+                if image_path and os.path.exists(image_path):
+                    pixmap = QPixmap(image_path)
+                    if not pixmap.isNull():
+                        self.image_label.setPixmap(pixmap)
+                        pixmap_loaded = True
+                    else:
+                        logger.warning(f"Could not load image for faculty {self.faculty.name}: {image_path} (pixmap isNull)")
+                else:
+                    logger.warning(f"Image path not found or is invalid for faculty {self.faculty.name}: {image_path}")
+            except Exception as e:
+                logger.error(f"Error loading faculty image for {self.faculty.name} from {getattr(self.faculty, 'image_path', 'N/A')}: {str(e)}")
+        
+        if not pixmap_loaded:
+            # Attempt to load a default user icon
+            try:
+                # Assuming IconProvider and Icons are imported, and Icons.USER exists
+                default_icon = IconProvider.get_icon(Icons.USER, QSize(50, 50))
+                if default_icon and not default_icon.isNull():
+                    self.image_label.setPixmap(default_icon.pixmap(QSize(50,50)))
+                else:
+                    # Fallback if IconProvider fails or returns null icon
+                    logger.warning(f"Default user icon (Icons.USER) could not be loaded. Using basic placeholder for {self.faculty.name}.")
+                    fallback_pixmap = QPixmap(QSize(50, 50))
+                    fallback_pixmap.fill(QColor("#e0e0e0")) # Light gray background
+                    self.image_label.setPixmap(fallback_pixmap)
+            except Exception as e:
+                logger.error(f"Exception while trying to load default user icon for {self.faculty.name}: {str(e)}")
+                # Last resort basic placeholder
+                fallback_pixmap = QPixmap(QSize(50, 50))
+                fallback_pixmap.fill(QColor("#e0e0e0")) # Light gray background
+                self.image_label.setPixmap(fallback_pixmap)
+
+    def _update_status_widgets(self):
+        if self.faculty.status:
+            self.status_icon_label.setStyleSheet("font-size: 12pt; color: #4caf50; border: none;")
+            self.status_text_label.setText("Available") # Update existing label
+            self.status_text_label.setStyleSheet("font-size: 11pt; color: #4caf50; border: none;")
+            self.request_button.setEnabled(self.faculty.status)
+        else:
+            self.status_icon_label.setStyleSheet("font-size: 12pt; color: #f44336; border: none;")
+            self.status_text_label.setText("Unavailable") # Update existing label
+            self.status_text_label.setStyleSheet("font-size: 11pt; color: #f44336; border: none;")
+            self.request_button.setEnabled(self.faculty.status)
+
     def update_faculty(self, faculty):
         """
-        Update the faculty information.
+        Update the faculty information efficiently.
         """
         self.faculty = faculty
-        self.update_style()
-        # Refresh the UI
-        self.setParent(None)
-        self.init_ui()
+        self.update_style() # Updates card background/border
+
+        # Update specific widgets
+        self.name_label.setText(self.faculty.name)
+        self.dept_label.setText(self.faculty.department)
+        self._load_faculty_image() # Reload image if it changed
+        self._update_status_widgets() # Updates status icon, text, and button state
 
     def request_consultation(self):
         """
         Emit signal to request a consultation with this faculty.
         """
         self.consultation_requested.emit(self.faculty)
-
-class ConsultationRequestForm(QFrame):
-    """
-    Form to request a consultation with a faculty member.
-    """
-    request_submitted = pyqtSignal(object, str, str)
-
-    def __init__(self, faculty=None, parent=None):
-        super().__init__(parent)
-        self.faculty = faculty
-        self.init_ui()
-
-    def init_ui(self):
-        """
-        Initialize the consultation request form UI.
-        """
-        self.setFrameShape(QFrame.StyledPanel)
-        self.setStyleSheet('''
-            QFrame {
-                background-color: #f5f5f5;
-                border: 1px solid #ddd;
-                border-radius: 10px;
-            }
-        ''')
-
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(20, 20, 20, 20)
-
-        # Form title
-        title_label = QLabel("Request Consultation")
-        title_label.setStyleSheet("font-size: 20pt; font-weight: bold;")
-        main_layout.addWidget(title_label)
-
-        # Faculty information
-        if self.faculty:
-            # Create a layout for faculty info with image
-            faculty_info_layout = QHBoxLayout()
-
-            # Faculty image
-            image_label = QLabel()
-            image_label.setFixedSize(60, 60)
-            image_label.setStyleSheet("border: 1px solid #ddd; border-radius: 30px; background-color: white;")
-            image_label.setScaledContents(True)
-
-            # Try to load faculty image
-            if hasattr(self.faculty, 'get_image_path') and self.faculty.image_path:
-                try:
-                    image_path = self.faculty.get_image_path()
-                    if image_path and os.path.exists(image_path):
-                        pixmap = QPixmap(image_path)
-                        if not pixmap.isNull():
-                            image_label.setPixmap(pixmap)
-                except Exception as e:
-                    logger.error(f"Error loading faculty image in consultation form: {str(e)}")
-
-            faculty_info_layout.addWidget(image_label)
-
-            # Faculty text info
-            faculty_info = QLabel(f"Faculty: {self.faculty.name} ({self.faculty.department})")
-            faculty_info.setStyleSheet("font-size: 14pt;")
-            faculty_info_layout.addWidget(faculty_info)
-            faculty_info_layout.addStretch()
-
-            main_layout.addLayout(faculty_info_layout)
-        else:
-            # If no faculty is selected, show a dropdown
-            faculty_label = QLabel("Select Faculty:")
-            faculty_label.setStyleSheet("font-size: 14pt;")
-            main_layout.addWidget(faculty_label)
-
-            self.faculty_combo = QComboBox()
-            self.faculty_combo.setStyleSheet("font-size: 14pt; padding: 8px;")
-            # Faculty options would be populated separately
-            main_layout.addWidget(self.faculty_combo)
-
-        # Course code input
-        course_label = QLabel("Course Code (optional):")
-        course_label.setStyleSheet("font-size: 14pt;")
-        main_layout.addWidget(course_label)
-
-        self.course_input = QLineEdit()
-        self.course_input.setStyleSheet("font-size: 14pt; padding: 8px;")
-        main_layout.addWidget(self.course_input)
-
-        # Message input
-        message_label = QLabel("Consultation Details:")
-        message_label.setStyleSheet("font-size: 14pt;")
-        main_layout.addWidget(message_label)
-
-        self.message_input = QTextEdit()
-        self.message_input.setStyleSheet("font-size: 14pt; padding: 8px;")
-        self.message_input.setMinimumHeight(150)
-        main_layout.addWidget(self.message_input)
-
-        # Submit button
-        button_layout = QHBoxLayout()
-
-        cancel_button = QPushButton("Cancel")
-        cancel_button.setStyleSheet('''
-            QPushButton {
-                background-color: #f44336;
-                min-width: 120px;
-            }
-        ''')
-        cancel_button.clicked.connect(self.cancel_request)
-
-        submit_button = QPushButton("Submit Request")
-        submit_button.setStyleSheet('''
-            QPushButton {
-                background-color: #4caf50;
-                min-width: 120px;
-            }
-        ''')
-        submit_button.clicked.connect(self.submit_request)
-
-        button_layout.addWidget(cancel_button)
-        button_layout.addStretch()
-        button_layout.addWidget(submit_button)
-
-        main_layout.addLayout(button_layout)
-
-    def set_faculty(self, faculty):
-        """
-        Set the faculty for the consultation request.
-        """
-        self.faculty = faculty
-        self.init_ui()
-
-    def set_faculty_options(self, faculties):
-        """
-        Set the faculty options for the dropdown.
-        Only show available faculty members.
-        """
-        if hasattr(self, 'faculty_combo'):
-            self.faculty_combo.clear()
-            available_count = 0
-
-            for faculty in faculties:
-                # Only add available faculty to the dropdown
-                if hasattr(faculty, 'status') and faculty.status:
-                    self.faculty_combo.addItem(f"{faculty.name} ({faculty.department})", faculty)
-                    available_count += 1
-
-            # Show a message if no faculty is available
-            if available_count == 0:
-                self.faculty_combo.addItem("No faculty members are currently available", None)
-
-    def get_selected_faculty(self):
-        """
-        Get the selected faculty from the dropdown.
-        """
-        if hasattr(self, 'faculty_combo') and self.faculty_combo.count() > 0:
-            return self.faculty_combo.currentData()
-        return self.faculty
-
-    def submit_request(self):
-        """
-        Handle the submission of the consultation request.
-        """
-        faculty = self.get_selected_faculty()
-        if not faculty:
-            QMessageBox.warning(self, "Consultation Request", "Please select a faculty member.")
-            return
-
-        # Check if faculty is available
-        if hasattr(faculty, 'status') and not faculty.status:
-            QMessageBox.warning(self, "Consultation Request",
-                               f"Faculty {faculty.name} is currently unavailable. Please select an available faculty member.")
-            return
-
-        message = self.message_input.toPlainText().strip()
-        if not message:
-            QMessageBox.warning(self, "Consultation Request", "Please enter consultation details.")
-            return
-
-        course_code = self.course_input.text().strip()
-
-        # Emit signal with the request details
-        self.request_submitted.emit(faculty, message, course_code)
-
-    def cancel_request(self):
-        """
-        Cancel the consultation request.
-        """
-        self.message_input.clear()
-        self.course_input.clear()
-        self.setVisible(False)
 
 class DashboardWindow(BaseWindow):
     """
@@ -417,14 +268,38 @@ class DashboardWindow(BaseWindow):
     consultation_requested = pyqtSignal(object, str, str)
 
     def __init__(self, student=None, parent=None):
-        self.student = student
         super().__init__(parent)
+        self.student = student
+
+        # Get controller instances (now singletons)
+        self.faculty_controller = FacultyController.instance()
+        self.consultation_controller = ConsultationController.instance()
+
+        # UI elements for faculty grid feedback
+        self.loading_label = QLabel("Loading faculty data...")
+        self.loading_label.setStyleSheet("font-size: 14pt; color: #7f8c8d; padding: 20px; background-color: transparent;")
+        self.loading_label.setAlignment(Qt.AlignCenter)
+        self.loading_label.setVisible(False)
+
+        self.no_results_label = QLabel("No faculty members found matching your criteria.")
+        self.no_results_label.setStyleSheet("font-size: 14pt; color: #7f8c8d; padding: 20px; background-color: #f5f5f5; border-radius: 10px;")
+        self.no_results_label.setAlignment(Qt.AlignCenter)
+        self.no_results_label.setVisible(False)
+        
+        # Store faculty cards to manage them directly
+        self._faculty_cards_widgets = []
+
+        # Initialize UI components
         self.init_ui()
 
-        # Set up auto-refresh timer for faculty status
+        # Set up auto-refresh timer for faculty status with further reduced frequency
         self.refresh_timer = QTimer(self)
         self.refresh_timer.timeout.connect(self.refresh_faculty_status)
-        self.refresh_timer.start(30000)  # Refresh every 30 seconds
+        self.refresh_timer.start(120000)  # Refresh every 120 seconds (2 minutes) to reduce loading indicators
+
+        # Track consecutive no-change refreshes to further reduce refresh frequency when idle
+        self._consecutive_no_changes = 0
+        self._max_refresh_interval = 300000  # 5 minutes maximum interval
 
         # Log student info for debugging
         if student:
@@ -504,12 +379,15 @@ class DashboardWindow(BaseWindow):
 
         search_icon = QLabel()
         try:
-            search_icon_pixmap = QPixmap("resources/icons/search.png")
-            if not search_icon_pixmap.isNull():
-                search_icon.setPixmap(search_icon_pixmap.scaled(16, 16, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-        except:
-            # If icon not available, use text
-            search_icon.setText("🔍")
+            # search_icon_pixmap = QPixmap("resources/icons/search.png") # Old way
+            search_icon_obj = IconProvider.get_icon(Icons.SEARCH if hasattr(Icons, 'SEARCH') else "search")
+            if search_icon_obj and not search_icon_obj.isNull():
+                search_icon.setPixmap(search_icon_obj.pixmap(QSize(16, 16))) # Use pixmap() from QIcon
+            else:
+                search_icon.setText("🔍") # Fallback text
+        except Exception as e:
+            logger.error(f"Error loading search icon: {e}")
+            search_icon.setText("🔍") # Fallback text
 
         search_layout.addWidget(search_icon)
 
@@ -568,9 +446,9 @@ class DashboardWindow(BaseWindow):
 
         # Faculty grid in a scroll area with improved spacing and alignment
         self.faculty_grid = QGridLayout()
-        self.faculty_grid.setSpacing(20)  # Increased spacing between cards
+        self.faculty_grid.setSpacing(15)  # Reduced spacing between cards for better use of space
         self.faculty_grid.setAlignment(Qt.AlignTop | Qt.AlignHCenter)  # Align to top and center horizontally
-        self.faculty_grid.setContentsMargins(15, 15, 15, 15)  # Add margins around the grid
+        self.faculty_grid.setContentsMargins(10, 10, 10, 10)  # Reduced margins around the grid
 
         # Create a scroll area for the faculty grid
         faculty_scroll = QScrollArea()
@@ -648,96 +526,98 @@ class DashboardWindow(BaseWindow):
     def populate_faculty_grid(self, faculties):
         """
         Populate the faculty grid with faculty cards.
+        Optimized for performance with batch processing and reduced UI updates.
 
         Args:
             faculties (list): List of faculty objects
         """
-        # Clear existing grid
-        while self.faculty_grid.count():
-            item = self.faculty_grid.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
+        # Temporarily disable updates to reduce flickering and improve performance
+        self.setUpdatesEnabled(False)
 
-        # Calculate optimal number of columns based on screen width
-        screen_width = QApplication.desktop().screenGeometry().width()
+        try:
+            # Clear existing faculty cards from the grid and delete them
+            for card_widget in self._faculty_cards_widgets:
+                self.faculty_grid.removeWidget(card_widget)
+                card_widget.deleteLater()
+            self._faculty_cards_widgets.clear()
 
-        # Fixed card width (matches the width set in FacultyCard)
-        card_width = 280  # Updated to match the increased FacultyCard width
+            # Remove feedback labels if they are present
+            # Check if widgets are part of the layout before removing
+            if self.loading_label.parent() is self.faculty_grid.parentWidget(): # Or check layout directly
+                 self.faculty_grid.removeWidget(self.loading_label)
+            self.loading_label.setVisible(False)
 
-        # Grid spacing (matches the spacing set in faculty_grid)
-        spacing = 20
+            if self.no_results_label.parent() is self.faculty_grid.parentWidget():
+                 self.faculty_grid.removeWidget(self.no_results_label)
+            self.no_results_label.setVisible(False)
 
-        # Get the actual width of the faculty grid container
-        grid_container_width = self.faculty_grid.parentWidget().width()
-        if grid_container_width <= 0:  # If not yet available, estimate based on screen
-            grid_container_width = int(screen_width * 0.6)  # 60% of screen for faculty grid
+            # Calculate optimal number of columns based on screen width
+            screen_width = QApplication.desktop().screenGeometry().width()
+            card_width = 240
+            spacing = 15
+            grid_container_width = self.faculty_grid.parentWidget().width()
+            if grid_container_width <= 0:
+                grid_container_width = int(screen_width * 0.6)
+            grid_container_width -= 30
+            max_cols = max(1, int(grid_container_width / (card_width + spacing)))
+            if screen_width < 800:
+                max_cols = 1
 
-        # Account for grid margins
-        grid_container_width -= 30  # 15px left + 15px right margin
-
-        # Calculate how many cards can fit in a row, accounting for spacing
-        max_cols = max(1, int(grid_container_width / (card_width + spacing)))
-
-        # Adjust for very small screens
-        if screen_width < 800:
-            max_cols = 1  # Force single column on very small screens
-
-        # Add faculty cards to grid with centering containers
-        row, col = 0, 0
-
-        for faculty in faculties:
-            # Create a container widget to center the card
-            container = QWidget()
-            container.setStyleSheet("background-color: transparent;")
-            container_layout = QHBoxLayout(container)
-            container_layout.setContentsMargins(0, 0, 0, 0)
-            container_layout.setAlignment(Qt.AlignCenter)
-
-            # Create the faculty card
-            card = FacultyCard(faculty)
-            card.consultation_requested.connect(self.show_consultation_form)
-
-            # Add card to container
-            container_layout.addWidget(card)
-
-            # Add container to grid
-            self.faculty_grid.addWidget(container, row, col)
-
-            col += 1
-            if col >= max_cols:
-                col = 0
-                row += 1
-
-        # If no faculty found, show a message
-        if not faculties:
-            no_results = QLabel("No faculty members found matching your criteria")
-            no_results.setStyleSheet("""
-                font-size: 14pt;
-                color: #7f8c8d;
-                padding: 20px;
-                background-color: #f5f5f5;
-                border-radius: 10px;
-            """)
-            no_results.setAlignment(Qt.AlignCenter)
-            self.faculty_grid.addWidget(no_results, 0, 0, 1, max_cols)  # Span all columns
+            if not faculties:
+                # If no faculty found, show the no_results_label
+                if self.no_results_label.parentWidget() is None:
+                    self.faculty_grid.addWidget(self.no_results_label, 0, 0, 1, max_cols)
+                self.no_results_label.setVisible(True)
+            else:
+                # Add faculty cards to grid
+                row, col = 0, 0
+                for faculty in faculties:
+                    container = QWidget()
+                    container.setStyleSheet("background-color: transparent;")
+                    container_layout = QHBoxLayout(container)
+                    container_layout.setContentsMargins(0, 0, 0, 0)
+                    container_layout.setAlignment(Qt.AlignCenter)
+                    card = FacultyCard(faculty)
+                    card.consultation_requested.connect(self.show_consultation_form)
+                    container_layout.addWidget(card)
+                    self.faculty_grid.addWidget(container, row, col)
+                    self._faculty_cards_widgets.append(container) # Store the container
+                    col += 1
+                    if col >= max_cols:
+                        col = 0
+                        row += 1
+        finally:
+            self.setUpdatesEnabled(True)
 
     def filter_faculty(self):
         """
         Filter faculty grid based on search text and filter selection.
+        Uses a debounce mechanism to prevent excessive updates.
+        """
+        # Cancel any pending filter operation
+        if hasattr(self, '_filter_timer') and self._filter_timer.isActive():
+            self._filter_timer.stop()
+
+        # Create a new timer for debouncing
+        if not hasattr(self, '_filter_timer'):
+            self._filter_timer = QTimer(self)
+            self._filter_timer.setSingleShot(True)
+            self._filter_timer.timeout.connect(self._perform_filter)
+
+        # Start the timer - will trigger _perform_filter after 300ms
+        self._filter_timer.start(300)
+
+    def _perform_filter(self):
+        """
+        Actually perform the faculty filtering after debounce delay.
         """
         try:
-            # Import faculty controller
-            from ..controllers import FacultyController
-
             # Get search text and filter value
             search_text = self.search_input.text().strip()
             filter_available = self.filter_combo.currentData()
 
-            # Get faculty controller
-            faculty_controller = FacultyController()
-
             # Get filtered faculty list
-            faculties = faculty_controller.get_all_faculty(
+            faculties = self.faculty_controller.get_all_faculty(
                 filter_available=filter_available,
                 search_term=search_text
             )
@@ -748,48 +628,125 @@ class DashboardWindow(BaseWindow):
             # Ensure scroll area starts at the top
             if hasattr(self, 'faculty_scroll') and self.faculty_scroll:
                 self.faculty_scroll.verticalScrollBar().setValue(0)
+
+            # Update current faculty data for future comparisons
+            self._current_faculty_data = self._extract_faculty_data(faculties)
+
         except Exception as e:
-            import logging
-            logger = logging.getLogger(__name__)
             logger.error(f"Error filtering faculty: {str(e)}")
             self.show_notification("Error filtering faculty list", "error")
 
     def refresh_faculty_status(self):
         """
-        Refresh the faculty status from the server.
+        Refresh the faculty status from the server with optimizations to reduce loading indicators.
+        Implements adaptive refresh rate based on activity.
         """
         try:
-            # Import faculty controller
-            from ..controllers import FacultyController
+            # Store current scroll position to restore it later
+            current_scroll_position = 0
+            if hasattr(self, 'faculty_scroll') and self.faculty_scroll:
+                current_scroll_position = self.faculty_scroll.verticalScrollBar().value()
 
             # Get current filter settings
             search_text = self.search_input.text().strip()
             filter_available = self.filter_combo.currentData()
 
-            # Get faculty controller
-            faculty_controller = FacultyController()
-
             # Get updated faculty list with current filters
-            faculties = faculty_controller.get_all_faculty(
+            faculties = self.faculty_controller.get_all_faculty(
                 filter_available=filter_available,
                 search_term=search_text
             )
 
-            # Update the grid
+            # Check if we have current faculty data to compare
+            if hasattr(self, '_current_faculty_data'):
+                # Compare with previous data to see if anything changed
+                if self._compare_faculty_data(self._current_faculty_data, faculties):
+                    # No changes detected, increment consecutive no-change counter
+                    self._consecutive_no_changes += 1
+                    logger.debug(f"No faculty status changes detected ({self._consecutive_no_changes} consecutive), skipping UI update")
+
+                    # Adjust refresh rate based on consecutive no-changes
+                    if self._consecutive_no_changes >= 3:
+                        # After 3 consecutive no-changes, slow down the refresh rate
+                        current_interval = self.refresh_timer.interval()
+                        if current_interval < self._max_refresh_interval:
+                            # Increase interval by 60 seconds, up to the maximum
+                            new_interval = min(current_interval + 60000, self._max_refresh_interval)
+                            self.refresh_timer.setInterval(new_interval)
+                            logger.debug(f"Reduced refresh frequency to {new_interval/1000} seconds due to inactivity")
+
+                    return
+                else:
+                    # Changes detected, reset consecutive no-change counter and restore normal refresh rate
+                    self._consecutive_no_changes = 0
+                    if self.refresh_timer.interval() > 120000:  # If we're at a slower rate
+                        self.refresh_timer.setInterval(120000)  # Reset to base rate of 2 minutes
+                        logger.debug("Restored normal refresh rate due to detected changes")
+
+            # Store the new faculty data for future comparisons
+            self._current_faculty_data = self._extract_faculty_data(faculties)
+
+            # Update the grid only if there are changes or this is the first load
             self.populate_faculty_grid(faculties)
 
-            # Ensure scroll area starts at the top
+            # Restore previous scroll position instead of always scrolling to top
             if hasattr(self, 'faculty_scroll') and self.faculty_scroll:
-                self.faculty_scroll.verticalScrollBar().setValue(0)
+                self.faculty_scroll.verticalScrollBar().setValue(current_scroll_position)
 
-            # Also refresh consultation history if student is logged in
-            if self.student:
+            # Also refresh consultation history if student is logged in, but less frequently
+            # import time # Moved to top of file
+
+            # Initialize last refresh time if not set
+            if self.student and not hasattr(self, '_last_history_refresh'):
+                self._last_history_refresh = time.time()
+
+            current_time = time.time()
+            # Only refresh history every 3 minutes (180 seconds) - increased from 2 minutes
+            if self.student and (current_time - getattr(self, '_last_history_refresh', 0) > 180):
                 self.consultation_panel.refresh_history()
+                self._last_history_refresh = current_time
+
         except Exception as e:
-            import logging
-            logger = logging.getLogger(__name__)
             logger.error(f"Error refreshing faculty status: {str(e)}")
-            self.show_notification("Error refreshing faculty status", "error")
+            # Only show notification for serious errors, not for every refresh issue
+            if "Connection refused" in str(e) or "Database error" in str(e):
+                self.show_notification("Error refreshing faculty status", "error")
+
+            # Reset consecutive no-change counter on errors to ensure we don't slow down too much
+            self._consecutive_no_changes = 0
+
+    def _extract_faculty_data(self, faculties):
+        """
+        Extract relevant data from faculty objects for comparison.
+
+        Args:
+            faculties (list): List of faculty objects
+
+        Returns:
+            list: List of tuples with faculty ID, name, and status
+        """
+        return [(f.id, f.name, f.status) for f in faculties]
+
+    def _compare_faculty_data(self, old_data, new_faculties):
+        """
+        Compare old and new faculty data to detect changes.
+
+        Args:
+            old_data (list): Previous faculty data
+            new_faculties (list): New faculty objects
+
+        Returns:
+            bool: True if data is the same, False if there are changes
+        """
+        # Extract data from new faculty objects
+        new_data = self._extract_faculty_data(new_faculties)
+
+        # Quick length check
+        if len(old_data) != len(new_data):
+            return False
+
+        # Convert to sets for comparison (ignoring order)
+        return set(old_data) == set(new_data)
 
     def show_consultation_form(self, faculty):
         """
@@ -808,9 +765,7 @@ class DashboardWindow(BaseWindow):
 
         # Also populate the dropdown with all available faculty
         try:
-            from ..controllers import FacultyController
-            faculty_controller = FacultyController()
-            available_faculty = faculty_controller.get_all_faculty(filter_available=True)
+            available_faculty = self.faculty_controller.get_all_faculty(filter_available=True)
 
             # Set the faculty and faculty options in the consultation panel
             self.consultation_panel.set_faculty(faculty)
@@ -821,57 +776,39 @@ class DashboardWindow(BaseWindow):
     def handle_consultation_request(self, faculty, message, course_code):
         """
         Handle consultation request submission.
+        This method is now primarily for showing user feedback after the ConsultationPanel 
+        has handled the actual creation logic.
 
         Args:
             faculty (object): Faculty object
             message (str): Consultation request message
             course_code (str): Optional course code
         """
+        # The actual consultation creation is handled by ConsultationPanel emitting this signal
+        # after it has successfully created the consultation via its controller.
+        # This handler in DashboardWindow is now primarily for user feedback.
+
         try:
-            # Import consultation controller
-            from ..controllers import ConsultationController
+            # Show confirmation message
+            QMessageBox.information(
+                self,
+                "Consultation Request",
+                f"Your consultation request with {faculty.name} has been submitted."
+            )
 
-            # Get consultation controller
-            consultation_controller = ConsultationController()
-
-            # Create consultation
-            if self.student:
-                consultation = consultation_controller.create_consultation(
-                    student_id=self.student.id,
-                    faculty_id=faculty.id,
-                    request_message=message,
-                    course_code=course_code
-                )
-
-                if consultation:
-                    # Show confirmation
-                    QMessageBox.information(
-                        self,
-                        "Consultation Request",
-                        f"Your consultation request with {faculty.name} has been submitted."
-                    )
-
-                    # Refresh the consultation history
-                    self.consultation_panel.refresh_history()
-                else:
-                    QMessageBox.warning(
-                        self,
-                        "Consultation Request",
-                        f"Failed to submit consultation request. Please try again."
-                    )
-            else:
-                # No student logged in
-                QMessageBox.warning(
-                    self,
-                    "Consultation Request",
-                    "You must be logged in to submit a consultation request."
-                )
+            # Ensure the consultation panel (which contains the history) is refreshed
+            # This might be redundant if ConsultationPanel already refreshes its history tab
+            # after successful submission, but ensures consistency.
+            self.consultation_panel.refresh_history()
+            
         except Exception as e:
-            logger.error(f"Error creating consultation: {str(e)}")
+            # This exception handling might be for cases where faculty object is malformed for the message string,
+            # or if refresh_history itself fails, though create_consultation errors are handled in ConsultationPanel.
+            logger.error(f"Error in DashboardWindow.handle_consultation_request (post-submission feedback): {str(e)}")
             QMessageBox.warning(
                 self,
                 "Consultation Request",
-                f"An error occurred while submitting your consultation request: {str(e)}"
+                f"An error occurred while finalizing the consultation request display: {str(e)}"
             )
 
     def handle_consultation_cancel(self, consultation_id):
@@ -882,14 +819,8 @@ class DashboardWindow(BaseWindow):
             consultation_id (int): ID of the consultation to cancel
         """
         try:
-            # Import consultation controller
-            from ..controllers import ConsultationController
-
-            # Get consultation controller
-            consultation_controller = ConsultationController()
-
             # Cancel consultation
-            consultation = consultation_controller.cancel_consultation(consultation_id)
+            consultation = self.consultation_controller.cancel_consultation(consultation_id)
 
             if consultation:
                 # Show confirmation
@@ -920,9 +851,6 @@ class DashboardWindow(BaseWindow):
         Save the current splitter state to settings.
         """
         try:
-            # Import QSettings
-            from PyQt5.QtCore import QSettings
-
             # Create settings object
             settings = QSettings("ConsultEase", "Dashboard")
 
@@ -939,9 +867,6 @@ class DashboardWindow(BaseWindow):
         Restore the splitter state from settings.
         """
         try:
-            # Import QSettings
-            from PyQt5.QtCore import QSettings
-
             # Create settings object
             settings = QSettings("ConsultEase", "Dashboard")
 
@@ -982,19 +907,8 @@ class DashboardWindow(BaseWindow):
             message_type (str): Type of message ('success', 'error', 'warning', or 'info')
         """
         try:
-            # Import notification manager
-            from ..utils.notification import NotificationManager
-
-            # Map message types
-            type_mapping = {
-                "success": NotificationManager.SUCCESS,
-                "error": NotificationManager.ERROR,
-                "warning": NotificationManager.WARNING,
-                "info": NotificationManager.INFO
-            }
-
             # Get standardized message type
-            std_type = type_mapping.get(message_type.lower(), NotificationManager.INFO)
+            std_type = NotificationManager.get_standardized_type(message_type)
 
             # Show notification using the manager
             title = message_type.capitalize()
@@ -1036,14 +950,8 @@ class DashboardWindow(BaseWindow):
         This method finds an available faculty and shows the consultation form.
         """
         try:
-            # Import faculty controller
-            from ..controllers import FacultyController
-
-            # Get faculty controller
-            faculty_controller = FacultyController()
-
             # Get available faculty
-            available_faculty = faculty_controller.get_all_faculty(filter_available=True)
+            available_faculty = self.faculty_controller.get_all_faculty(filter_available=True)
 
             if available_faculty:
                 # Use the first available faculty

@@ -9,12 +9,14 @@ from PyQt5.QtGui import QIcon, QFont, QTextCursor
 import os
 import logging
 from .base_window import BaseWindow
-from ..controllers import FacultyController
-from ..models import Student, get_db, Faculty
+from ..controllers import FacultyController, ConsultationController, AdminController, StudentController
+from ..models import Student, get_db, Faculty, close_db
 from ..services import get_rfid_service
 from ..utils.input_sanitizer import (
     sanitize_string, sanitize_email, sanitize_filename, sanitize_path, sanitize_boolean
 )
+from ..models.base import db_operation_with_retry
+from ..config import get_config
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -27,11 +29,17 @@ class AdminDashboardWindow(BaseWindow):
     faculty_updated = pyqtSignal()
     student_updated = pyqtSignal()
     change_window = pyqtSignal(str, object)  # Add explicit signal if it's missing
+    admin_username_changed_signal = pyqtSignal(str) # Define the signal
 
     def __init__(self, admin=None, parent=None):
-        self.admin = admin
         super().__init__(parent)
+        self.admin = admin # Should now always be an Admin model object or None
+        self.config = get_config()
         self.init_ui()
+
+        # Connect signals
+        if hasattr(self.system_tab, 'actual_admin_username_changed_signal'):
+             self.system_tab.actual_admin_username_changed_signal.connect(self.handle_admin_username_changed_on_dashboard)
 
     def init_ui(self):
         """
@@ -50,17 +58,13 @@ class AdminDashboardWindow(BaseWindow):
         header_layout = QHBoxLayout()
 
         # Admin welcome label
-        admin_username = "Admin"
-        if self.admin:
-            # Handle admin as either an object or a dictionary
-            if isinstance(self.admin, dict):
-                admin_username = self.admin.get('username', 'Admin')
-            else:
-                admin_username = getattr(self.admin, 'username', 'Admin')
+        admin_username = "Admin" # Default
+        if self.admin: # self.admin is now expected to be an Admin model object
+            admin_username = getattr(self.admin, 'username', 'Admin')
 
-        admin_label = QLabel(f"Admin Dashboard - Logged in as: {admin_username}")
-        admin_label.setStyleSheet("font-size: 16pt; font-weight: bold;")
-        header_layout.addWidget(admin_label)
+        self.admin_header_label = QLabel(f"Admin Dashboard - Logged in as: {admin_username}")
+        self.admin_header_label.setStyleSheet("font-size: 16pt; font-weight: bold;")
+        header_layout.addWidget(self.admin_header_label)
 
         # Logout button - smaller size
         logout_button = QPushButton("Logout")
@@ -93,7 +97,7 @@ class AdminDashboardWindow(BaseWindow):
         self.student_tab = StudentManagementTab()
         self.student_tab.student_updated.connect(self.handle_student_updated)
 
-        self.system_tab = SystemMaintenanceTab()
+        self.system_tab = SystemMaintenanceTab(admin_info_context=self.admin, dashboard_window_ref=self)
 
         # Add tabs to tab widget
         self.tab_widget.addTab(self.faculty_tab, "Faculty Management")
@@ -111,7 +115,7 @@ class AdminDashboardWindow(BaseWindow):
         scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
 
-        # Style the scroll area to match the application theme
+        # Style the scroll area with improved visibility and touch-friendliness
         scroll_area.setStyleSheet("""
             QScrollArea {
                 border: none;
@@ -120,16 +124,16 @@ class AdminDashboardWindow(BaseWindow):
             QScrollBar:vertical {
                 border: none;
                 background: #f0f0f0;
-                width: 12px;
+                width: 15px;  /* Increased width for better touch targets */
                 margin: 0px;
             }
             QScrollBar::handle:vertical {
-                background: #c0c0c0;
-                min-height: 20px;
-                border-radius: 6px;
+                background: #adb5bd;  /* Darker color for better visibility */
+                min-height: 30px;  /* Increased minimum height for better touch targets */
+                border-radius: 7px;
             }
             QScrollBar::handle:vertical:hover {
-                background: #a0a0a0;
+                background: #868e96;  /* Even darker on hover */
             }
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
                 height: 0px;
@@ -184,6 +188,21 @@ class AdminDashboardWindow(BaseWindow):
         # Forward signal
         self.student_updated.emit()
 
+    def handle_admin_username_changed_on_dashboard(self, new_username):
+        logger.info(f"AdminDashboard: Handling admin username change to: {new_username}")
+        if self.admin: # self.admin is now expected to be an Admin model object
+            # Assuming self.admin is the Admin object
+            try:
+                self.admin.username = new_username
+            except AttributeError:
+                logger.error(f"AdminDashboard: self.admin (type: {type(self.admin)}) does not have a username attribute or is not the expected object.")
+        
+        if hasattr(self, 'admin_header_label'):
+            self.admin_header_label.setText(f"Admin Dashboard - Logged in as: {new_username}")
+            logger.info(f"AdminDashboard: Updated header label to: {self.admin_header_label.text()}")
+        else:
+            logger.warning("AdminDashboard: admin_header_label not found for update.")
+
 class FacultyManagementTab(QWidget):
     """
     Tab for managing faculty members.
@@ -193,7 +212,7 @@ class FacultyManagementTab(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.faculty_controller = FacultyController()
+        self.faculty_controller = FacultyController.instance()
         self.init_ui()
 
     def init_ui(self):
@@ -233,8 +252,8 @@ class FacultyManagementTab(QWidget):
 
         # Faculty table
         self.faculty_table = QTableWidget()
-        self.faculty_table.setColumnCount(7)
-        self.faculty_table.setHorizontalHeaderLabels(["ID", "Name", "Department", "Email", "BLE ID", "Status", "Always Available"])
+        self.faculty_table.setColumnCount(6)
+        self.faculty_table.setHorizontalHeaderLabels(["ID", "Name", "Department", "Email", "BLE ID", "Status"])
         self.faculty_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.faculty_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.faculty_table.setSelectionBehavior(QTableWidget.SelectRows)
@@ -254,7 +273,7 @@ class FacultyManagementTab(QWidget):
         scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
 
-        # Style the scroll area to match the application theme
+        # Style the scroll area with improved visibility and touch-friendliness
         scroll_area.setStyleSheet("""
             QScrollArea {
                 border: none;
@@ -263,16 +282,16 @@ class FacultyManagementTab(QWidget):
             QScrollBar:vertical {
                 border: none;
                 background: #f0f0f0;
-                width: 12px;
+                width: 15px;  /* Increased width for better touch targets */
                 margin: 0px;
             }
             QScrollBar::handle:vertical {
-                background: #c0c0c0;
-                min-height: 20px;
-                border-radius: 6px;
+                background: #adb5bd;  /* Darker color for better visibility */
+                min-height: 30px;  /* Increased minimum height for better touch targets */
+                border-radius: 7px;
             }
             QScrollBar::handle:vertical:hover {
-                background: #a0a0a0;
+                background: #868e96;  /* Even darker on hover */
             }
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
                 height: 0px;
@@ -318,12 +337,6 @@ class FacultyManagementTab(QWidget):
                 else:
                     status_item.setBackground(Qt.red)
                 self.faculty_table.setItem(row_position, 5, status_item)
-
-                # Add always available status
-                always_available_item = QTableWidgetItem("Yes" if faculty.always_available else "No")
-                if faculty.always_available:
-                    always_available_item.setBackground(Qt.green)
-                self.faculty_table.setItem(row_position, 6, always_available_item)
 
         except Exception as e:
             logger.error(f"Error refreshing faculty data: {str(e)}")
@@ -397,11 +410,8 @@ class FacultyManagementTab(QWidget):
                 else:
                     image_path = None
 
-                # Get always available flag
-                always_available = sanitize_boolean(dialog.always_available_checkbox.isChecked())
-
                 # Add faculty using controller
-                faculty = self.faculty_controller.add_faculty(name, department, email, ble_id, image_path, always_available)
+                faculty = self.faculty_controller.add_faculty(name, department, email, ble_id, image_path)
 
                 if faculty:
                     QMessageBox.information(self, "Add Faculty", f"Faculty '{name}' added successfully.")
@@ -443,11 +453,9 @@ class FacultyManagementTab(QWidget):
         dialog.department_input.setText(faculty.department)
         dialog.email_input.setText(faculty.email)
         dialog.ble_id_input.setText(faculty.ble_id)
-        dialog.always_available_checkbox.setChecked(faculty.always_available)
 
         # Set image path if available
         if faculty.image_path:
-            dialog.image_path = faculty.get_image_path()
             dialog.image_path_input.setText(faculty.image_path)
 
         # Ensure dialog appears on top
@@ -488,12 +496,9 @@ class FacultyManagementTab(QWidget):
                     # Keep the existing image path
                     image_path = faculty.image_path
 
-                # Get always available flag
-                always_available = dialog.always_available_checkbox.isChecked()
-
                 # Update faculty using controller
                 updated_faculty = self.faculty_controller.update_faculty(
-                    faculty_id, name, department, email, ble_id, image_path, always_available
+                    faculty_id, name, department, email, ble_id, image_path
                 )
 
                 if updated_faculty:
@@ -554,74 +559,43 @@ class FacultyDialog(QDialog):
     def __init__(self, faculty_id=None, parent=None):
         super().__init__(parent)
         self.faculty_id = faculty_id
-        self.image_path = None
-
-        # Set window flags to ensure dialog stays on top and has proper modal behavior
-        self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
-        self.setWindowModality(Qt.ApplicationModal)
-
+        self.faculty_controller = FacultyController.instance() # Get controller instance
+        self.original_ble_id = None # To track changes in BLE ID for validation
+        self.original_email = None # To track changes in email for validation
         self.init_ui()
+        if self.faculty_id:
+            self.load_faculty_data()
 
     def init_ui(self):
-        """
-        Initialize the UI components.
-        """
-        # Set title based on mode (add or edit)
         self.setWindowTitle("Edit Faculty" if self.faculty_id else "Add Faculty")
-
-        # Main layout
         layout = QVBoxLayout()
-
-        # Form layout for inputs
         form_layout = QFormLayout()
 
-        # Name input
         self.name_input = QLineEdit()
         form_layout.addRow("Name:", self.name_input)
-
-        # Department input
         self.department_input = QLineEdit()
         form_layout.addRow("Department:", self.department_input)
-
-        # Email input
         self.email_input = QLineEdit()
         form_layout.addRow("Email:", self.email_input)
-
-        # BLE ID input
         self.ble_id_input = QLineEdit()
-        form_layout.addRow("BLE ID:", self.ble_id_input)
+        form_layout.addRow("BLE ID (MAC or UUID):", self.ble_id_input) # Clarified label
 
-        # Always available checkbox
-        self.always_available_checkbox = QCheckBox("Always Available (BLE Always On)")
-        self.always_available_checkbox.setToolTip("If checked, this faculty member will always be shown as available, regardless of BLE status")
-        form_layout.addRow("", self.always_available_checkbox)
-
-        # Image selection
         image_layout = QHBoxLayout()
         self.image_path_input = QLineEdit()
         self.image_path_input.setReadOnly(True)
         self.image_path_input.setPlaceholderText("No image selected")
-
         browse_button = QPushButton("Browse...")
         browse_button.clicked.connect(self.browse_image)
-
         image_layout.addWidget(self.image_path_input)
         image_layout.addWidget(browse_button)
-
         form_layout.addRow("Profile Image:", image_layout)
 
         layout.addLayout(form_layout)
-
-        # Buttons
         button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         button_box.accepted.connect(self.accept)
         button_box.rejected.connect(self.reject)
         layout.addWidget(button_box)
-
         self.setLayout(layout)
-
-        # If editing, the faculty data will be populated by the caller
-        # No need to fetch data here as it's passed in when the dialog is created
 
     def browse_image(self):
         """
@@ -634,32 +608,86 @@ class FacultyDialog(QDialog):
         if file_dialog.exec_():
             selected_files = file_dialog.selectedFiles()
             if selected_files:
-                self.image_path = selected_files[0]
-                self.image_path_input.setText(self.image_path)
+                self.image_path_input.setText(selected_files[0])
 
     def accept(self):
         """
-        Validate and accept the dialog.
+        Handle dialog acceptance (OK button click).
+        Validates input and calls the appropriate controller method.
         """
-        # Validate inputs
-        if not self.name_input.text().strip():
-            QMessageBox.warning(self, "Validation Error", "Please enter a name.")
+        name = sanitize_string(self.name_input.text())
+        department = sanitize_string(self.department_input.text())
+        email = sanitize_email(self.email_input.text())
+        ble_id = sanitize_string(self.ble_id_input.text()) # Sanitized, can be empty
+        image_path = sanitize_path(self.image_path_input.text()) # Sanitized, can be empty
+
+        if not name or not department or not email:
+            QMessageBox.warning(self, "Input Error", "Name, department, and email are required.")
             return
 
-        if not self.department_input.text().strip():
-            QMessageBox.warning(self, "Validation Error", "Please enter a department.")
+        # More specific email validation (optional, basic one done by sanitize_email)
+        if "@" not in email or "." not in email.split("@")[-1]:
+            QMessageBox.warning(self, "Input Error", "Please enter a valid email address.")
             return
 
-        if not self.email_input.text().strip():
-            QMessageBox.warning(self, "Validation Error", "Please enter an email.")
-            return
+        try:
+            if self.faculty_id:
+                # Update existing faculty
+                self.faculty_controller.update_faculty(
+                    faculty_id=self.faculty_id,
+                    name=name,
+                    department=department,
+                    email=email,
+                    ble_id=ble_id if ble_id else None, 
+                    image_path=image_path if image_path else None
+                )
+                QMessageBox.information(self, "Success", "Faculty updated successfully.")
+            else:
+                # Add new faculty
+                self.faculty_controller.add_faculty(
+                    name=name,
+                    department=department,
+                    email=email,
+                    ble_id=ble_id if ble_id else None, 
+                    image_path=image_path if image_path else None
+                )
+                QMessageBox.information(self, "Success", "Faculty added successfully.")
+            
+            super().accept() # Call accept only if controller operations were successful
 
-        if not self.ble_id_input.text().strip():
-            QMessageBox.warning(self, "Validation Error", "Please enter a BLE ID.")
-            return
+        except ValueError as ve:
+            logger.warning(f"Validation error during faculty save: {str(ve)}")
+            QMessageBox.warning(self, "Error", str(ve))
+            # Do not call super().accept() here, so the dialog stays open
+        except Exception as e:
+            logger.error(f"Error saving faculty: {e}", exc_info=True)
+            QMessageBox.critical(self, "Error", f"An unexpected error occurred: {e}")
+            # Do not call super().accept() here, so the dialog stays open
 
-        # If all validations pass, accept the dialog
-        super().accept()
+    def reject(self):
+        super().reject()
+
+    def load_faculty_data(self):
+        """
+        Load existing faculty data into the dialog fields when editing.
+        """
+        if not self.faculty_id:
+            return # Should not happen if called correctly
+
+        faculty = self.faculty_controller.get_faculty_by_id(self.faculty_id)
+        if faculty:
+            self.name_input.setText(faculty.name)
+            self.department_input.setText(faculty.department)
+            self.email_input.setText(faculty.email)
+            self.original_email = faculty.email # Store original for reference
+            
+            self.ble_id_input.setText(faculty.ble_id if faculty.ble_id else "")
+            self.original_ble_id = faculty.ble_id # Store original for reference
+            
+            self.image_path_input.setText(faculty.image_path if faculty.image_path else "")
+        else:
+            QMessageBox.warning(self, "Error", f"Could not load data for faculty ID: {self.faculty_id}")
+            self.close() # Close dialog if data cannot be loaded
 
 class StudentManagementTab(QWidget):
     """
@@ -670,787 +698,401 @@ class StudentManagementTab(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.student_controller = StudentController.instance()
+        self.rfid_service = get_rfid_service()
+        self.scan_dialog = None
         self.init_ui()
 
-        # Initialize RFID service
-        self.rfid_service = get_rfid_service()
-
-        # For scanning RFID cards
-        self.scanning_for_rfid = False
-        self.scan_dialog = None
-        self.rfid_callback = None
-
     def __del__(self):
-        """
-        Destructor to ensure cleanup happens when the object is destroyed.
-        """
-        try:
-            self.cleanup()
-        except Exception as e:
-            # Can't use logger here as it might be None during shutdown
-            print(f"Error in StudentManagementTab destructor: {str(e)}")
+        self.cleanup()
 
     def init_ui(self):
-        """
-        Initialize the UI components.
-        """
-        # Create a container widget for the scroll area
         container = QWidget()
-
-        # Main layout
         main_layout = QVBoxLayout(container)
-
-        # Buttons for actions
         button_layout = QHBoxLayout()
-
         self.add_button = QPushButton("Add Student")
-        self.add_button.setStyleSheet("background-color: #4CAF50; color: white;")
         self.add_button.clicked.connect(self.add_student)
         button_layout.addWidget(self.add_button)
-
         self.edit_button = QPushButton("Edit Student")
         self.edit_button.clicked.connect(self.edit_student)
         button_layout.addWidget(self.edit_button)
-
         self.delete_button = QPushButton("Delete Student")
-        self.delete_button.setStyleSheet("background-color: #F44336; color: white;")
         self.delete_button.clicked.connect(self.delete_student)
         button_layout.addWidget(self.delete_button)
-
-        self.scan_button = QPushButton("Scan RFID")
-        self.scan_button.clicked.connect(self.scan_rfid)
+        self.scan_button = QPushButton("Scan RFID for Table")
+        self.scan_button.clicked.connect(self.scan_rfid_for_table_selection)
         button_layout.addWidget(self.scan_button)
-
         self.refresh_button = QPushButton("Refresh")
         self.refresh_button.clicked.connect(self.refresh_data)
         button_layout.addWidget(self.refresh_button)
-
         button_layout.addStretch()
-
         main_layout.addLayout(button_layout)
-
-        # Student table
         self.student_table = QTableWidget()
         self.student_table.setColumnCount(4)
         self.student_table.setHorizontalHeaderLabels(["ID", "Name", "Department", "RFID UID"])
-        self.student_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.student_table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.student_table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.student_table.setSelectionMode(QTableWidget.SingleSelection)
-
         main_layout.addWidget(self.student_table)
-
-        # Add some spacing at the bottom for better appearance
-        main_layout.addSpacing(10)
-
-        # Create a scroll area
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
         scroll_area.setWidget(container)
-
-        # Only show scrollbars when needed
-        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-
-        # Style the scroll area to match the application theme
-        scroll_area.setStyleSheet("""
-            QScrollArea {
-                border: none;
-                background-color: transparent;
-            }
-            QScrollBar:vertical {
-                border: none;
-                background: #f0f0f0;
-                width: 12px;
-                margin: 0px;
-            }
-            QScrollBar::handle:vertical {
-                background: #c0c0c0;
-                min-height: 20px;
-                border-radius: 6px;
-            }
-            QScrollBar::handle:vertical:hover {
-                background: #a0a0a0;
-            }
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-                height: 0px;
-            }
-            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
-                background: none;
-            }
-        """)
-
-        # Create a layout for the tab and add the scroll area
         tab_layout = QVBoxLayout(self)
-        tab_layout.setContentsMargins(0, 0, 0, 0)
+        tab_layout.setContentsMargins(0,0,0,0)
         tab_layout.addWidget(scroll_area)
-
-        # Initial data load
         self.refresh_data()
 
     def cleanup(self):
-        """
-        Clean up resources when the tab is closed or the window is closed.
-        """
         logger.info("Cleaning up StudentManagementTab resources")
-
-        # Close any open scan dialog
         if self.scan_dialog and self.scan_dialog.isVisible():
             self.scan_dialog.close()
             self.scan_dialog = None
 
-        # Unregister any RFID callbacks
-        if self.rfid_callback:
-            try:
-                self.rfid_service.unregister_callback(self.rfid_callback)
-                self.rfid_callback = None
-                logger.info("Unregistered RFID callback")
-            except Exception as e:
-                logger.error(f"Error unregistering RFID callback: {str(e)}")
-
     def refresh_data(self):
-        """
-        Refresh the student data in the table.
-        """
-        # Clear the table
-        self.student_table.setRowCount(0)
-
         try:
-            # Get students from database
-            db = get_db()
-            students = db.query(Student).all()
-
-            for student in students:
-                row_position = self.student_table.rowCount()
-                self.student_table.insertRow(row_position)
-
-                # Add data to each column
-                self.student_table.setItem(row_position, 0, QTableWidgetItem(str(student.id)))
-                self.student_table.setItem(row_position, 1, QTableWidgetItem(student.name))
-                self.student_table.setItem(row_position, 2, QTableWidgetItem(student.department))
-                self.student_table.setItem(row_position, 3, QTableWidgetItem(student.rfid_uid))
-
+            self.student_table.setRowCount(0)
+            students = self.student_controller.get_all_students()
+            if students:
+                for student in students:
+                    row_position = self.student_table.rowCount()
+                    self.student_table.insertRow(row_position)
+                    self.student_table.setItem(row_position, 0, QTableWidgetItem(str(student.id)))
+                    self.student_table.setItem(row_position, 1, QTableWidgetItem(student.name))
+                    self.student_table.setItem(row_position, 2, QTableWidgetItem(student.department))
+                    self.student_table.setItem(row_position, 3, QTableWidgetItem(student.rfid_uid))
+            else:
+                logger.info("No students found by controller during refresh.")
         except Exception as e:
-            logger.error(f"Error refreshing student data: {str(e)}")
+            logger.error(f"Error refreshing student data via controller: {str(e)}")
             QMessageBox.warning(self, "Data Error", f"Failed to refresh student data: {str(e)}")
 
     def add_student(self):
-        """
-        Show dialog to add a new student.
-        """
-        # Import all necessary modules at the top level
-        import traceback
-
-        # Create dialog with this tab as the parent
-        dialog = StudentDialog(parent=self)
-
-        # Ensure dialog appears on top
-        dialog.show()
-        dialog.raise_()
-        dialog.activateWindow()
-
+        dialog = StudentDialog(self.student_controller, self.rfid_service, parent=self)
         if dialog.exec_() == QDialog.Accepted:
-            try:
-                name = dialog.name_input.text().strip()
-                department = dialog.department_input.text().strip()
-                rfid_uid = dialog.rfid_uid
+            name = dialog.name_edit.text().strip()
+            department = dialog.department_edit.text().strip()
+            rfid_uid = dialog.rfid_edit.text().strip()
 
-                logger.info(f"Adding new student: Name={name}, Department={department}, RFID={rfid_uid}")
-
-                # Use a separate function to handle the database operations
-                self._add_student_to_database(name, department, rfid_uid)
-
-            except Exception as e:
-                logger.error(f"Error adding student: {str(e)}")
-                logger.error(f"Traceback: {traceback.format_exc()}")
-                QMessageBox.warning(self, "Add Student", f"Error adding student: {str(e)}")
-
-    def _add_student_to_database(self, name, department, rfid_uid):
-        """
-        Add a student to the database and refresh the RFID service.
-
-        Args:
-            name (str): Student name
-            department (str): Student department
-            rfid_uid (str): Student RFID UID
-        """
-        # Import all necessary modules
-        import traceback
-        from ..models import Student, get_db
-        from ..services import get_rfid_service
-
-        try:
-            # Get a database connection
-            db = get_db()
-
-            # Check if RFID already exists
-            existing = db.query(Student).filter(Student.rfid_uid == rfid_uid).first()
-            if existing:
-                QMessageBox.warning(self, "Add Student", f"A student with RFID {rfid_uid} already exists.")
+            if not (name and department and rfid_uid):
+                QMessageBox.warning(self, "Input Error", "Name, Department, and RFID UID are required.")
                 return
-
-            # Create new student
-            new_student = Student(
-                name=name,
-                department=department,
-                rfid_uid=rfid_uid
-            )
-
-            # Add and commit
-            db.add(new_student)
-            db.commit()
-            logger.info(f"Added student to database: {name} with RFID: {rfid_uid}")
-
-            # Get the RFID service and refresh it
-            rfid_service = get_rfid_service()
-            rfid_service.refresh_student_data()
-            logger.info(f"Refreshed RFID service after adding student: {name}")
-
-            # Show success message
-            QMessageBox.information(self, "Add Student", f"Student '{name}' added successfully.")
-
-            # Refresh the UI and emit signal
-            self.refresh_data()
-            self.student_updated.emit()
-
-            # Log all students for debugging
+            
+            logger.info(f"Attempting to add student via controller: {name}, Dept: {department}, RFID: {rfid_uid}")
             try:
-                # Use a new database connection to ensure we get fresh data
-                fresh_db = get_db(force_new=True)
-                all_students = fresh_db.query(Student).all()
-                logger.info(f"Available students in database after adding: {len(all_students)}")
-                for s in all_students:
-                    logger.info(f"  - ID: {s.id}, Name: {s.name}, RFID: {s.rfid_uid}")
-                fresh_db.close()
-            except Exception as e:
-                logger.error(f"Error logging students: {str(e)}")
-
-        except Exception as e:
-            logger.error(f"Error in _add_student_to_database: {str(e)}")
-            logger.error(f"Traceback: {traceback.format_exc()}")
-            QMessageBox.warning(self, "Add Student", f"Error adding student to database: {str(e)}")
+                new_student = self.student_controller.add_student(name=name, department=department, rfid_uid=rfid_uid)
+                
+                if new_student:
+                    QMessageBox.information(self, "Add Student", f"Student '{new_student.name}' added successfully.")
+                    self.refresh_data()
+                    self.student_updated.emit()
+                    logger.info(f"Student '{new_student.name}' added and UI updated.")
+                # No else needed, as controller raises ValueError for known issues (e.g., RFID exists)
+                # or db_operation_with_retry handles other DB exceptions.
+            except ValueError as ve: 
+                logger.error(f"Failed to add student: {str(ve)}")
+                QMessageBox.warning(self, "Add Student Error", str(ve))
+            except Exception as e: 
+                logger.error(f"Unexpected error adding student via controller: {str(e)}", exc_info=True)
+                QMessageBox.critical(self, "Add Student Error", "An unexpected error occurred.")
 
     def edit_student(self):
         """
         Show dialog to edit the selected student.
         """
-        # Import all necessary modules at the top level
-        import traceback
-        from ..models import Student, get_db
-
-        # Get selected row
         selected_rows = self.student_table.selectionModel().selectedRows()
         if not selected_rows:
             QMessageBox.warning(self, "Edit Student", "Please select a student to edit.")
             return
 
-        # Get student ID from the first column
         row_index = selected_rows[0].row()
-        student_id = int(self.student_table.item(row_index, 0).text())
-
+        student_id_text = self.student_table.item(row_index, 0).text()
         try:
-            # Get student from database
-            db = get_db()
-            student = db.query(Student).filter(Student.id == student_id).first()
+            student_id = int(student_id_text)
+        except ValueError:
+            logger.error(f"Invalid student ID in table: {student_id_text}")
+            QMessageBox.critical(self, "Error", "Invalid student ID selected.")
+            return
+        
+        current_student = self.student_controller.get_student_by_id(student_id)
 
-            if not student:
-                QMessageBox.warning(self, "Edit Student", f"Student with ID {student_id} not found.")
-                return
+        if not current_student:
+            QMessageBox.warning(self, "Edit Student", f"Student with ID {student_id} not found.")
+            return
 
-            # Create and populate dialog with this tab as the parent
-            dialog = StudentDialog(student_id=student_id, parent=self)
-            dialog.name_input.setText(student.name)
-            dialog.department_input.setText(student.department)
-            dialog.rfid_input.setText(student.rfid_uid)
-            dialog.rfid_uid = student.rfid_uid
+        dialog = StudentDialog(self.student_controller, self.rfid_service, student_id=student_id, current_rfid=current_student.rfid_uid, parent=self)
+        dialog.name_edit.setText(current_student.name)
+        dialog.department_edit.setText(current_student.department)
+        dialog.rfid_edit.setText(current_student.rfid_uid)
+        dialog.rfid_uid = current_student.rfid_uid
 
-            # Ensure dialog appears on top
-            dialog.show()
-            dialog.raise_()
-            dialog.activateWindow()
+        if dialog.exec_() == QDialog.Accepted:
+            try:
+                name = dialog.name_edit.text().strip()
+                department = dialog.department_edit.text().strip()
+                rfid_uid = dialog.rfid_edit.text().strip()
 
-            if dialog.exec_() == QDialog.Accepted:
-                name = dialog.name_input.text().strip()
-                department = dialog.department_input.text().strip()
-                rfid_uid = dialog.rfid_uid
-
-                logger.info(f"Editing student: ID={student_id}, Name={name}, Department={department}, RFID={rfid_uid}")
-
-                # Use a separate function to handle the database operations
-                self._update_student_in_database(student_id, name, department, rfid_uid)
-
-        except Exception as e:
-            logger.error(f"Error editing student: {str(e)}")
-            logger.error(f"Traceback: {traceback.format_exc()}")
-            QMessageBox.warning(self, "Edit Student", f"Error editing student: {str(e)}")
-
-    def _update_student_in_database(self, student_id, name, department, rfid_uid):
-        """
-        Update a student in the database and refresh the RFID service.
-
-        Args:
-            student_id (int): Student ID
-            name (str): Student name
-            department (str): Student department
-            rfid_uid (str): Student RFID UID
-        """
-        # Import all necessary modules
-        import traceback
-        from ..models import Student, get_db
-        from ..services import get_rfid_service
-
-        try:
-            # Get a database connection
-            db = get_db()
-
-            # Get the student
-            student = db.query(Student).filter(Student.id == student_id).first()
-            if not student:
-                QMessageBox.warning(self, "Edit Student", f"Student with ID {student_id} not found.")
-                return
-
-            # Check if new RFID already exists (if changed)
-            if rfid_uid != student.rfid_uid:
-                existing = db.query(Student).filter(Student.rfid_uid == rfid_uid).first()
-                if existing and existing.id != student_id:
-                    QMessageBox.warning(self, "Edit Student", f"A student with RFID {rfid_uid} already exists.")
+                if not (name and department and rfid_uid):
+                    QMessageBox.warning(self, "Input Error", "Name, Department, and RFID UID are required.")
                     return
 
-            # Update student
-            student.name = name
-            student.department = department
-            student.rfid_uid = rfid_uid
-
-            # Commit changes
-            db.commit()
-            logger.info(f"Updated student in database: ID={student_id}, Name={name}, RFID={rfid_uid}")
-
-            # Get the RFID service and refresh it
-            rfid_service = get_rfid_service()
-            rfid_service.refresh_student_data()
-            logger.info(f"Refreshed RFID service after updating student: {name}")
-
-            # Show success message
-            QMessageBox.information(self, "Edit Student", f"Student '{name}' updated successfully.")
-
-            # Refresh the UI and emit signal
-            self.refresh_data()
-            self.student_updated.emit()
-
-            # Log all students for debugging
-            try:
-                # Use a new database connection to ensure we get fresh data
-                fresh_db = get_db(force_new=True)
-                all_students = fresh_db.query(Student).all()
-                logger.info(f"Available students in database after updating: {len(all_students)}")
-                for s in all_students:
-                    logger.info(f"  - ID: {s.id}, Name: {s.name}, RFID: {s.rfid_uid}")
-                fresh_db.close()
+                logger.info(f"Attempting to update student via controller: ID={student_id}, Name={name}, Dept={department}, RFID={rfid_uid}")
+                updated_student = self.student_controller.update_student(
+                    student_id=student_id, name=name, department=department, rfid_uid=rfid_uid
+                )
+                
+                if updated_student: 
+                    QMessageBox.information(self, "Edit Student", f"Student '{updated_student.name}' updated successfully.")
+                    self.refresh_data()
+                    self.student_updated.emit()
+                    logger.info(f"Student '{updated_student.name}' updated and UI refreshed.")
+            except ValueError as ve: 
+                logger.error(f"Validation error updating student: {str(ve)}")
+                QMessageBox.warning(self, "Update Student Error", str(ve))
             except Exception as e:
-                logger.error(f"Error logging students: {str(e)}")
-
-        except Exception as e:
-            logger.error(f"Error in _update_student_in_database: {str(e)}")
-            logger.error(f"Traceback: {traceback.format_exc()}")
-            QMessageBox.warning(self, "Edit Student", f"Error updating student in database: {str(e)}")
+                logger.error(f"Unexpected error updating student via controller: {str(e)}", exc_info=True)
+                QMessageBox.critical(self, "Update Student Error", "An unexpected error occurred while updating.")
 
     def delete_student(self):
-        """
-        Delete the selected student.
-        """
-        # Import all necessary modules at the top level
-        import traceback
-
-        # Get selected row
         selected_rows = self.student_table.selectionModel().selectedRows()
         if not selected_rows:
             QMessageBox.warning(self, "Delete Student", "Please select a student to delete.")
             return
 
-        # Get student ID and name from the table
         row_index = selected_rows[0].row()
-        student_id = int(self.student_table.item(row_index, 0).text())
+        student_id_text = self.student_table.item(row_index, 0).text()
         student_name = self.student_table.item(row_index, 1).text()
+        try:
+            student_id = int(student_id_text)
+        except ValueError:
+            logger.error(f"Invalid student ID for deletion: {student_id_text}")
+            QMessageBox.critical(self, "Error", "Invalid student ID selected for deletion.")
+            return
 
-        # Confirm deletion
-        reply = QMessageBox.question(
-            self,
-            "Delete Student",
-            f"Are you sure you want to delete student '{student_name}'?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
-        )
+        reply = QMessageBox.question(self, "Delete Student",
+            f"Are you sure you want to delete student '{student_name}' (ID: {student_id})? This action cannot be undone.",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
 
         if reply == QMessageBox.Yes:
             try:
-                logger.info(f"Deleting student: ID={student_id}, Name={student_name}")
-
-                # Use a separate function to handle the database operations
-                self._delete_student_from_database(student_id, student_name)
-
+                logger.info(f"Attempting to delete student via controller: ID={student_id}, Name={student_name}")
+                success = self.student_controller.delete_student(student_id=student_id)
+                
+                if success:
+                    QMessageBox.information(self, "Delete Student", f"Student '{student_name}' deleted successfully.")
+                    self.refresh_data()
+                    self.student_updated.emit()
+                    logger.info(f"Student '{student_name}' deleted and UI refreshed.")
+            except ValueError as ve: 
+                logger.error(f"Failed to delete student: {str(ve)}")
+                QMessageBox.warning(self, "Delete Student Error", str(ve))
             except Exception as e:
-                logger.error(f"Error deleting student: {str(e)}")
-                logger.error(f"Traceback: {traceback.format_exc()}")
-                QMessageBox.warning(self, "Delete Student", f"Error deleting student: {str(e)}")
+                logger.error(f"Unexpected error deleting student via controller: {str(e)}", exc_info=True)
+                QMessageBox.critical(self, "Delete Student Error", f"Could not delete student '{student_name}'. An unexpected error occurred.")
 
-    def _delete_student_from_database(self, student_id, student_name):
-        """
-        Delete a student from the database and refresh the RFID service.
-
-        Args:
-            student_id (int): Student ID
-            student_name (str): Student name
-        """
-        # Import all necessary modules
-        import traceback
-        from ..models import Student, get_db
-        from ..services import get_rfid_service
-
-        try:
-            # Get a database connection
-            db = get_db()
-
-            # Get the student
-            student = db.query(Student).filter(Student.id == student_id).first()
-            if not student:
-                QMessageBox.warning(self, "Delete Student", f"Student with ID {student_id} not found.")
-                return
-
-            # Delete the student
-            db.delete(student)
-            db.commit()
-            logger.info(f"Deleted student from database: ID={student_id}, Name={student_name}")
-
-            # Get the RFID service and refresh it
-            rfid_service = get_rfid_service()
-            rfid_service.refresh_student_data()
-            logger.info(f"Refreshed RFID service after deleting student: {student_name}")
-
-            # Show success message
-            QMessageBox.information(self, "Delete Student", f"Student '{student_name}' deleted successfully.")
-
-            # Refresh the UI and emit signal
-            self.refresh_data()
-            self.student_updated.emit()
-
-            # Log all students for debugging
-            try:
-                # Use a new database connection to ensure we get fresh data
-                fresh_db = get_db(force_new=True)
-                all_students = fresh_db.query(Student).all()
-                logger.info(f"Available students in database after deletion: {len(all_students)}")
-                for s in all_students:
-                    logger.info(f"  - ID: {s.id}, Name: {s.name}, RFID: {s.rfid_uid}")
-                fresh_db.close()
-            except Exception as e:
-                logger.error(f"Error logging students: {str(e)}")
-
-        except Exception as e:
-            logger.error(f"Error in _delete_student_from_database: {str(e)}")
-            logger.error(f"Traceback: {traceback.format_exc()}")
-            QMessageBox.warning(self, "Delete Student", f"Error deleting student from database: {str(e)}")
-
-    def scan_rfid(self):
-        """
-        Scan RFID card for student registration.
-        """
-        dialog = RFIDScanDialog(self.rfid_service, parent=self)
-        self.scan_dialog = dialog
-
-        # Ensure dialog appears on top
-        dialog.show()
-        dialog.raise_()
-        dialog.activateWindow()
-
-        if dialog.exec_() == QDialog.Accepted:
-            rfid_uid = dialog.get_rfid_uid()
+    def scan_rfid_for_table_selection(self):
+        rfid_scan_dialog = RFIDScanDialog(self.rfid_service, parent=self)
+        if rfid_scan_dialog.exec_() == QDialog.Accepted:
+            rfid_uid = rfid_scan_dialog.get_rfid_uid()
             if rfid_uid:
-                QMessageBox.information(self, "RFID Scan", f"RFID card scanned: {rfid_uid}")
-
-                # Look up student by RFID
-                try:
-                    db = get_db()
-                    student = db.query(Student).filter(Student.rfid_uid == rfid_uid).first()
-
-                    if student:
-                        # Select the student in the table
-                        for row in range(self.student_table.rowCount()):
-                            if self.student_table.item(row, 3).text() == rfid_uid:
-                                self.student_table.selectRow(row)
-                                QMessageBox.information(
-                                    self,
-                                    "Student Found",
-                                    f"Student found: {student.name}\nDepartment: {student.department}"
-                                )
-                                break
-                    else:
-                        # No student with this RFID
-                        reply = QMessageBox.question(
-                            self,
-                            "Add New Student",
-                            f"No student found with RFID: {rfid_uid}\nWould you like to add a new student with this RFID?",
-                            QMessageBox.Yes | QMessageBox.No,
-                            QMessageBox.Yes
-                        )
-
-                        if reply == QMessageBox.Yes:
-                            # Pre-fill the RFID field in the student dialog with this as parent
-                            dialog = StudentDialog(parent=self)
-                            dialog.rfid_uid = rfid_uid
-                            dialog.rfid_input.setText(rfid_uid)
-
-                            # Ensure dialog appears on top
-                            dialog.show()
-                            dialog.raise_()
-                            dialog.activateWindow()
-
-                            if dialog.exec_() == QDialog.Accepted:
-                                try:
-                                    name = dialog.name_input.text().strip()
-                                    department = dialog.department_input.text().strip()
-
-                                    logger.info(f"Adding new student via RFID scan: Name={name}, Department={department}, RFID={rfid_uid}")
-
-                                    # Use the existing method to add the student to the database
-                                    self._add_student_to_database(name, department, rfid_uid)
-
-                                except Exception as e:
-                                    logger.error(f"Error adding student: {str(e)}")
-                                    QMessageBox.warning(self, "Add Student", f"Error adding student: {str(e)}")
-
-                except Exception as e:
-                    logger.error(f"Error looking up student by RFID: {str(e)}")
-                    QMessageBox.warning(self, "RFID Lookup Error", f"Error looking up student: {str(e)}")
+                student = self.student_controller.get_student_by_rfid(rfid_uid)
+                if student:
+                    for row in range(self.student_table.rowCount()):
+                        if self.student_table.item(row, 3).text() == rfid_uid:
+                            self.student_table.selectRow(row)
+                            QMessageBox.information(self, "Student Found", f"Student '{student.name}' selected in table.")
+                            return
+                    QMessageBox.information(self, "Student Found", f"Student '{student.name}' (RFID: {rfid_uid}) found but might not be visible due to table filters/paging (if any).")
+                else:
+                    QMessageBox.information(self, "Student Not Found", f"No student found with RFID: {rfid_uid}")
+            else:
+                logger.info("Admin tab RFID Scan dialog cancelled or no UID obtained.")
 
 class StudentDialog(QDialog):
     """
     Dialog for adding or editing students.
     """
-    def __init__(self, student_id=None, parent=None):
-        # Ensure parent is properly set
+    def __init__(self, student_controller, rfid_service, student_id=None, current_rfid=None, parent=None):
         super().__init__(parent)
+        self.student_controller = student_controller
+        self.rfid_service = rfid_service
         self.student_id = student_id
-        self.rfid_uid = ""
-        self.rfid_service = get_rfid_service()
-
-        # Set window flags to ensure dialog stays on top and has proper modal behavior
-        self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
-        self.setWindowModality(Qt.ApplicationModal)
-
-        # Track if we're currently scanning
-        self.is_scanning = False
-
-        # Store a reference to our scan callback
-        self.scan_callback = None
-
+        self.original_rfid_uid = current_rfid # Store original RFID for edit mode if needed for complex validation
+        self.rfid_uid = current_rfid # This will be updated by scan_rfid or manual input
+        self.scan_dialog_instance = None
         self.init_ui()
 
-        # If we're in simulation mode, enable the simulate button
-        self.simulation_mode = os.environ.get('RFID_SIMULATION_MODE', 'true').lower() == 'true'
+        if self.student_id:
+            self.setWindowTitle("Edit Student")
+            self.load_student_data()
+        else:
+            self.setWindowTitle("Add Student")
 
     def init_ui(self):
-        """
-        Initialize the UI components.
-        """
-        # Set title based on mode (add or edit)
         self.setWindowTitle("Edit Student" if self.student_id else "Add Student")
-
-        # Main layout
         layout = QVBoxLayout()
-
-        # Form layout for inputs
         form_layout = QFormLayout()
 
-        # Name input
-        self.name_input = QLineEdit()
-        form_layout.addRow("Name:", self.name_input)
+        self.name_edit = QLineEdit()
+        self.name_edit.setPlaceholderText("Enter student name")
+        form_layout.addRow("Name:", self.name_edit)
 
-        # Department input
-        self.department_input = QLineEdit()
-        form_layout.addRow("Department:", self.department_input)
+        self.department_edit = QLineEdit()
+        self.department_edit.setPlaceholderText("Enter department")
+        form_layout.addRow("Department:", self.department_edit)
 
-        # RFID UID input and scan button
+        self.rfid_edit = QLineEdit()
+        self.rfid_edit.setPlaceholderText("Click 'Scan RFID' or enter manually")
+        self.rfid_scan_button = QPushButton("Scan RFID")
+        self.rfid_scan_button.setIcon(self.theme.get_icon(QStyle.SP_MediaPlay)) # Placeholder icon
+        self.rfid_scan_button.clicked.connect(self.scan_rfid)
+
         rfid_layout = QHBoxLayout()
-        self.rfid_input = QLineEdit()
-        self.rfid_input.setReadOnly(True)
-        rfid_layout.addWidget(self.rfid_input, 1)
-
-        scan_button = QPushButton("Scan RFID")
-        scan_button.clicked.connect(self.scan_rfid)
-        rfid_layout.addWidget(scan_button)
-
+        rfid_layout.addWidget(self.rfid_edit)
+        rfid_layout.addWidget(self.rfid_scan_button)
         form_layout.addRow("RFID UID:", rfid_layout)
 
         layout.addLayout(form_layout)
 
-        # Buttons
-        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        # Progress Indicator (optional, can be shown during blocking operations)
+        self.progress_indicator = ProgressIndicator(self)
+        self.progress_indicator.setVisible(False)
+        layout.addWidget(self.progress_indicator)
+
+        button_box = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         button_box.accepted.connect(self.accept)
         button_box.rejected.connect(self.reject)
         layout.addWidget(button_box)
 
-        self.setLayout(layout)
+        self.scan_dialog = None # Initialize scan_dialog attribute
 
-        # If editing, the student data will be populated by the caller
-        # No need to fetch data here as it's passed in when the dialog is created
+        if self.student_id:
+            self.load_student_data()
+
+    def load_student_data(self):
+        if not self.student_id:
+            return
+        try:
+            # Ensure get_student_by_id does not require a db session as argument
+            # or is called within a session managed by the controller if needed for lazy loading
+            student = self.student_controller.get_student_by_id(self.student_id)
+            if student:
+                self.name_edit.setText(student.name)
+                self.department_edit.setText(student.department)
+                self.rfid_edit.setText(student.rfid_uid)
+                self.original_rfid_uid = student.rfid_uid
+            else:
+                QMessageBox.warning(self, "Error", "Student not found.")
+                self.reject() # or disable save
+        except Exception as e:
+            logger.error(f"Error loading student data: {e}")
+            QMessageBox.critical(self, "Error", f"Could not load student details: {e}")
+            self.reject()
 
     def scan_rfid(self):
-        """
-        Scan RFID card.
-        """
-        try:
-            logger.info("StudentDialog: Starting RFID scan")
+        # Ensure rfid_service is passed and available
+        if not hasattr(self, 'rfid_service') or not self.rfid_service:
+            QMessageBox.critical(self, "Error", "RFID Service not available.")
+            return
 
-            # Create our own RFID scan handler to receive directly from the service
-            def handle_scan(student=None, rfid_uid=None):
-                if not rfid_uid:
-                    return
-
-                logger.info(f"StudentDialog: RFID scan received: {rfid_uid}")
-                self.rfid_uid = rfid_uid
-                self.rfid_input.setText(self.rfid_uid)
-
-                # If this was a simulation, trigger the animation to stop
-                if self.rfid_scan_dialog and self.rfid_scan_dialog.isVisible():
-                    self.rfid_scan_dialog.handle_rfid_scan(student, rfid_uid)
-
-            # Store the callback reference to prevent garbage collection
-            self.scan_callback = handle_scan
-
-            # Register our callback with the RFID service
-            self.rfid_service.register_callback(self.scan_callback)
-            self.is_scanning = True
-
-            # Create and show the dialog with this dialog as parent
-            self.rfid_scan_dialog = RFIDScanDialog(self.rfid_service, parent=self)
-
-            # Ensure dialog appears on top
-            self.rfid_scan_dialog.show()
-            self.rfid_scan_dialog.raise_()
-            self.rfid_scan_dialog.activateWindow()
-
-            # Wait for the dialog to complete
-            result = self.rfid_scan_dialog.exec_()
-
-            # When the dialog completes, get the value
-            if result == QDialog.Accepted:
-                rfid_uid = self.rfid_scan_dialog.get_rfid_uid()
-                if rfid_uid:
-                    logger.info(f"StudentDialog: Dialog returned RFID: {rfid_uid}")
-                    self.rfid_uid = rfid_uid
-                    self.rfid_input.setText(self.rfid_uid)
-
-            # Clean up our callback
-            try:
-                if self.scan_callback:
-                    self.rfid_service.unregister_callback(self.scan_callback)
-                    self.scan_callback = None
-                self.is_scanning = False
-            except Exception as e:
-                logger.error(f"Error unregistering RFID callback: {str(e)}")
-
-        except Exception as e:
-            logger.error(f"Error in student RFID scan: {str(e)}")
-            QMessageBox.warning(self, "RFID Scan Error", f"An error occurred while scanning: {str(e)}")
-
-    def closeEvent(self, event):
-        """Handle dialog close to clean up callback"""
-        # Clean up our callback if we're still scanning
-        if hasattr(self, 'scan_callback') and self.scan_callback and self.is_scanning:
-            try:
-                self.rfid_service.unregister_callback(self.scan_callback)
-                self.scan_callback = None
-                self.is_scanning = False
-                logger.info("Unregistered RFID callback in StudentDialog closeEvent")
-            except Exception as e:
-                logger.error(f"Error unregistering RFID callback in closeEvent: {str(e)}")
-        super().closeEvent(event)
+        # Pass self.rfid_service to RFIDScanDialog
+        self.scan_dialog = RFIDScanDialog(self.rfid_service, parent=self)
+        if self.scan_dialog.exec_() == QDialog.Accepted:
+            rfid_uid = self.scan_dialog.rfid_uid
+            if rfid_uid:
+                self.rfid_edit.setText(rfid_uid)
+        self.scan_dialog.deleteLater() # Ensure dialog is cleaned up
+        self.scan_dialog = None
 
     def accept(self):
-        """
-        Validate and accept the dialog.
-        """
-        # Validate inputs
-        if not self.name_input.text().strip():
-            QMessageBox.warning(self, "Validation Error", "Please enter a name.")
+        name = sanitize_string(self.name_edit.text())
+        department = sanitize_string(self.department_edit.text())
+        rfid_uid = sanitize_string(self.rfid_edit.text())
+
+        if not name or not department or not rfid_uid:
+            QMessageBox.warning(self, "Input Error", "All fields (Name, Department, RFID UID) are required.")
             return
 
-        if not self.department_input.text().strip():
-            QMessageBox.warning(self, "Validation Error", "Please enter a department.")
-            return
+        self.progress_indicator.start_animation()
+        self.progress_indicator.setVisible(True)
+        QApplication.processEvents() # Ensure UI updates
 
-        if not self.rfid_uid:
-            QMessageBox.warning(self, "Validation Error", "Please scan an RFID card.")
-            return
+        try:
+            if self.student_id: # Update existing student
+                # The controller's update_student method should handle checking if the new RFID UID
+                # conflicts with another student, not the one being edited.
+                self.student_controller.update_student(
+                    student_id=self.student_id,
+                    name=name,
+                    department=department,
+                    rfid_uid=rfid_uid
+                )
+                QMessageBox.information(self, "Success", "Student updated successfully.")
+            else: # Add new student
+                self.student_controller.add_student(
+                    name=name,
+                    department=department,
+                    rfid_uid=rfid_uid
+                )
+                QMessageBox.information(self, "Success", "Student added successfully.")
+            
+            super().accept() # Call QDialog.accept() to close dialog and signal success
+        except ValueError as ve:
+            logger.warning(f"Validation error while saving student: {ve}")
+            QMessageBox.warning(self, "Validation Error", str(ve))
+        except Exception as e:
+            logger.error(f"Error saving student: {e}", exc_info=True)
+            QMessageBox.critical(self, "Error", f"An unexpected error occurred: {e}")
+        finally:
+            self.progress_indicator.stop_animation()
+            self.progress_indicator.setVisible(False)
 
-        # If all validations pass, accept the dialog
-        super().accept()
+    def reject(self):
+        super().reject()
 
 class RFIDScanDialog(QDialog):
-    """
-    Dialog for RFID card scanning.
-    """
     def __init__(self, rfid_service=None, parent=None):
-        # Ensure parent is properly set
         super().__init__(parent)
         self.rfid_uid = ""
         self.rfid_service = rfid_service or get_rfid_service()
 
-        # Set window flags to ensure dialog stays on top and has proper modal behavior
         self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
         self.setWindowModality(Qt.ApplicationModal)
 
-        # Track whether we've received a scan
         self.scan_received = False
 
         self.init_ui()
 
-        # Add a direct callback reference to prevent garbage collection
         self.callback_fn = self.handle_rfid_scan
 
-        # Register RFID callback - ensure we're using the instance method
         self.rfid_service.register_callback(self.callback_fn)
 
-        # Start the scanning animation
         self.scanning_timer = QTimer(self)
         self.scanning_timer.timeout.connect(self.update_animation)
-        self.scanning_timer.start(500)  # Update every 500ms
+        self.scanning_timer.start(500)
 
-        # For development, add a simulate button
         if os.environ.get('RFID_SIMULATION_MODE', 'true').lower() == 'true':
             self.simulate_button = QPushButton("Simulate Scan")
             self.simulate_button.clicked.connect(self.simulate_scan)
             self.layout().addWidget(self.simulate_button, alignment=Qt.AlignCenter)
 
     def init_ui(self):
-        """
-        Initialize the UI components.
-        """
         self.setWindowTitle("RFID Scan")
-        self.setFixedSize(350, 350)  # Make dialog taller for manual input
+        self.setFixedSize(350, 350)
 
-        # Main layout
         layout = QVBoxLayout()
 
-        # Instructions
         instruction_label = QLabel("Please scan the 13.56 MHz RFID card...")
         instruction_label.setAlignment(Qt.AlignCenter)
         instruction_label.setStyleSheet("font-size: 14pt;")
         layout.addWidget(instruction_label)
 
-        # Animation label
         self.animation_label = QLabel("🔄")
         self.animation_label.setAlignment(Qt.AlignCenter)
         self.animation_label.setStyleSheet("font-size: 48pt; color: #4a86e8;")
         layout.addWidget(self.animation_label)
 
-        # Status label
         self.status_label = QLabel("Scanning...")
         self.status_label.setAlignment(Qt.AlignCenter)
         self.status_label.setStyleSheet("font-size: 12pt; color: #4a86e8;")
         layout.addWidget(self.status_label)
 
-        # Add manual input section
         manual_section = QGroupBox("Manual RFID Input")
         manual_layout = QVBoxLayout()
 
@@ -1469,7 +1111,6 @@ class RFIDScanDialog(QDialog):
         manual_section.setLayout(manual_layout)
         layout.addWidget(manual_section)
 
-        # Cancel button
         cancel_button = QPushButton("Cancel")
         cancel_button.clicked.connect(self.reject)
         layout.addWidget(cancel_button, alignment=Qt.AlignCenter)
@@ -1477,9 +1118,6 @@ class RFIDScanDialog(QDialog):
         self.setLayout(layout)
 
     def handle_manual_input(self):
-        """
-        Handle manual RFID input.
-        """
         uid = self.manual_input.text().strip().upper()
         if uid:
             logger.info(f"Manual RFID input: {uid}")
@@ -1491,16 +1129,12 @@ class RFIDScanDialog(QDialog):
             QTimer.singleShot(2000, lambda: self.reset_status_label())
 
     def reset_status_label(self):
-        """Reset the status label to its default state"""
-        if not self.scan_received:  # Only reset if we haven't received a scan
+        if not self.scan_received:
             self.status_label.setText("Scanning...")
             self.status_label.setStyleSheet("font-size: 12pt; color: #4a86e8;")
 
     def update_animation(self):
-        """
-        Update the scanning animation.
-        """
-        if self.scan_received:  # Don't update if we've received a scan
+        if self.scan_received:
             return
 
         animations = ["🔄", "🔁", "🔃", "🔂"]
@@ -1509,12 +1143,8 @@ class RFIDScanDialog(QDialog):
         self.animation_label.setText(animations[next_index])
 
     def handle_rfid_scan(self, student=None, rfid_uid=None):
-        """
-        Handle RFID scan event.
-        """
         logger.info(f"RFIDScanDialog received scan: {rfid_uid}")
 
-        # Ignore if no UID was provided or if we already received a scan
         if not rfid_uid or self.scan_received:
             logger.info(f"Ignoring scan - no UID or already received: {rfid_uid}")
             return
@@ -1522,14 +1152,12 @@ class RFIDScanDialog(QDialog):
         self.scan_received = True
         self.rfid_uid = rfid_uid
 
-        # Update UI
         self.scanning_timer.stop()
         self.animation_label.setText("✅")
         self.animation_label.setStyleSheet("font-size: 48pt; color: #4caf50;")
         self.status_label.setText(f"Card detected: {self.rfid_uid}")
         self.status_label.setStyleSheet("font-size: 12pt; color: #4caf50;")
 
-        # If a student was found with this RFID, show a warning
         if student:
             QMessageBox.warning(
                 self,
@@ -1537,12 +1165,9 @@ class RFIDScanDialog(QDialog):
                 f"This RFID card is already registered to student:\n{student.name}"
             )
 
-        # Auto-accept after a delay
         QTimer.singleShot(1500, self.accept)
 
     def closeEvent(self, event):
-        """Handle dialog close to clean up callback"""
-        # Unregister callback to prevent memory leaks
         if hasattr(self, 'callback_fn') and self.callback_fn:
             try:
                 self.rfid_service.unregister_callback(self.callback_fn)
@@ -1552,8 +1177,6 @@ class RFIDScanDialog(QDialog):
         super().closeEvent(event)
 
     def reject(self):
-        """Override reject to clean up callback"""
-        # Unregister callback to prevent memory leaks
         if hasattr(self, 'callback_fn') and self.callback_fn:
             try:
                 self.rfid_service.unregister_callback(self.callback_fn)
@@ -1563,8 +1186,6 @@ class RFIDScanDialog(QDialog):
         super().reject()
 
     def accept(self):
-        """Override accept to clean up callback"""
-        # Unregister callback to prevent memory leaks
         if hasattr(self, 'callback_fn') and self.callback_fn:
             try:
                 self.rfid_service.unregister_callback(self.callback_fn)
@@ -1574,778 +1195,385 @@ class RFIDScanDialog(QDialog):
         super().accept()
 
     def simulate_scan(self):
-        """
-        Simulate a successful RFID scan.
-        """
         try:
-            # Disable the simulate button to prevent multiple clicks
             if hasattr(self, 'simulate_button'):
                 self.simulate_button.setEnabled(False)
 
-            # Only simulate if no real scan has occurred yet
             if not self.scan_received:
                 logger.info("Simulating RFID scan from RFIDScanDialog")
 
-                # Generate a random RFID number
                 import random
                 random_uid = ''.join(random.choices('0123456789ABCDEF', k=8))
                 logger.info(f"Generated random RFID: {random_uid}")
 
-                # Call the service's simulate method
                 self.rfid_service.simulate_card_read(random_uid)
 
                 logger.info(f"Simulation complete, RFID: {random_uid}")
         except Exception as e:
             logger.error(f"Error in RFID simulation: {str(e)}")
             self.status_label.setText(f"Simulation error: {str(e)}")
-            # Re-enable the button if there was an error
             if hasattr(self, 'simulate_button'):
                 self.simulate_button.setEnabled(True)
 
     def get_rfid_uid(self):
-        """
-        Get the scanned RFID UID.
-        """
         return self.rfid_uid
 
 class SystemMaintenanceTab(QWidget):
-    """
-    Tab for system maintenance tasks.
-    """
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.consultation_controller = None
-        self.admin_controller = None
-        self.init_ui()
+    actual_admin_username_changed_signal = pyqtSignal(str)
+
+    def __init__(self, admin_info_context=None, dashboard_window_ref=None, parent=None):
+        super().__init__(parent if parent else dashboard_window_ref) 
+        self.config = get_config()
+        self.admin_info_context = admin_info_context
+        self.dashboard_window_ref = dashboard_window_ref
+        self.faculty_controller = FacultyController.instance()
+        self.consultation_controller = ConsultationController.instance()
+        self.admin_controller = AdminController.instance()
+        self.init_ui() 
         self.load_faculty_list()
 
     def init_ui(self):
-        """
-        Initialize the UI components.
-        """
-        # Create a container widget for the scroll area
         container = QWidget()
-
-        # Main layout
         main_layout = QVBoxLayout(container)
+        main_layout.setContentsMargins(10,10,10,10)
+        main_layout.setSpacing(15)
 
-        # Database section
         database_group = QGroupBox("Database Maintenance")
         database_layout = QVBoxLayout()
-
-        # Backup/restore buttons
         backup_button = QPushButton("Backup Database")
         backup_button.clicked.connect(self.backup_database)
         database_layout.addWidget(backup_button)
-
         restore_button = QPushButton("Restore Database")
         restore_button.clicked.connect(self.restore_database)
         database_layout.addWidget(restore_button)
-
         database_group.setLayout(database_layout)
         main_layout.addWidget(database_group)
 
-        # Admin Account Management section
         admin_group = QGroupBox("Admin Account Management")
-        admin_layout = QVBoxLayout()
-
-        # Change Username section
+        admin_account_main_layout = QVBoxLayout()
         username_form = QFormLayout()
-        self.current_password_username = QLineEdit()
-        self.current_password_username.setEchoMode(QLineEdit.Password)
-        username_form.addRow("Current Password:", self.current_password_username)
-
+        self.current_password_username_input = QLineEdit()
+        self.current_password_username_input.setEchoMode(QLineEdit.Password)
+        username_form.addRow("Current Password (for username change):", self.current_password_username_input)
         self.new_username_input = QLineEdit()
         username_form.addRow("New Username:", self.new_username_input)
-
         change_username_button = QPushButton("Change Username")
         change_username_button.clicked.connect(self.change_admin_username)
         username_form.addRow("", change_username_button)
-
-        admin_layout.addLayout(username_form)
-
-        # Add a separator
+        admin_account_main_layout.addLayout(username_form)
         separator = QFrame()
         separator.setFrameShape(QFrame.HLine)
         separator.setFrameShadow(QFrame.Sunken)
-        admin_layout.addWidget(separator)
-
-        # Change Password section
+        admin_account_main_layout.addWidget(separator)
         password_form = QFormLayout()
-        self.current_password_input = QLineEdit()
-        self.current_password_input.setEchoMode(QLineEdit.Password)
-        password_form.addRow("Current Password:", self.current_password_input)
-
+        self.current_password_password_input = QLineEdit()
+        self.current_password_password_input.setEchoMode(QLineEdit.Password)
+        password_form.addRow("Current Password (for password change):", self.current_password_password_input)
         self.new_password_input = QLineEdit()
         self.new_password_input.setEchoMode(QLineEdit.Password)
         password_form.addRow("New Password:", self.new_password_input)
-
         self.confirm_password_input = QLineEdit()
         self.confirm_password_input.setEchoMode(QLineEdit.Password)
-        password_form.addRow("Confirm Password:", self.confirm_password_input)
-
+        password_form.addRow("Confirm New Password:", self.confirm_password_input)
         change_password_button = QPushButton("Change Password")
         change_password_button.clicked.connect(self.change_admin_password)
         password_form.addRow("", change_password_button)
-
-        admin_layout.addLayout(password_form)
-        admin_group.setLayout(admin_layout)
+        admin_account_main_layout.addLayout(password_form)
+        admin_group.setLayout(admin_account_main_layout)
         main_layout.addWidget(admin_group)
 
-        # System logs section
         logs_group = QGroupBox("System Logs")
         logs_layout = QVBoxLayout()
-
         view_logs_button = QPushButton("View Logs")
         view_logs_button.clicked.connect(self.view_logs)
         logs_layout.addWidget(view_logs_button)
-
         logs_group.setLayout(logs_layout)
         main_layout.addWidget(logs_group)
 
-        # Faculty Desk Unit section
-        faculty_desk_group = QGroupBox("Faculty Desk Unit")
+        faculty_desk_group = QGroupBox("Faculty Desk Unit Test")
         faculty_desk_layout = QVBoxLayout()
-
-        # Add a dropdown to select faculty
-        faculty_layout = QHBoxLayout()
+        faculty_select_layout = QHBoxLayout()
         faculty_label = QLabel("Select Faculty:")
         self.faculty_combo = QComboBox()
         self.faculty_combo.setMinimumWidth(200)
-        faculty_layout.addWidget(faculty_label)
-        faculty_layout.addWidget(self.faculty_combo)
-        faculty_desk_layout.addLayout(faculty_layout)
-
-        # Add a button to test the connection
+        faculty_select_layout.addWidget(faculty_label)
+        faculty_select_layout.addWidget(self.faculty_combo)
+        faculty_desk_layout.addLayout(faculty_select_layout)
         test_connection_button = QPushButton("Test Faculty Desk Connection")
         test_connection_button.clicked.connect(self.test_faculty_desk_connection)
         faculty_desk_layout.addWidget(test_connection_button)
-
         faculty_desk_group.setLayout(faculty_desk_layout)
         main_layout.addWidget(faculty_desk_group)
 
-        # System settings section
         settings_group = QGroupBox("System Settings")
         settings_layout = QFormLayout()
-
-        # MQTT settings
-        self.mqtt_host_input = QLineEdit(os.environ.get('MQTT_BROKER_HOST', 'localhost'))
+        self.mqtt_host_input = QLineEdit(self.config.get('mqtt.broker_host', 'localhost'))
         settings_layout.addRow("MQTT Broker Host:", self.mqtt_host_input)
-
-        self.mqtt_port_input = QLineEdit(os.environ.get('MQTT_BROKER_PORT', '1883'))
+        self.mqtt_port_input = QLineEdit(str(self.config.get('mqtt.broker_port', 1883)))
         settings_layout.addRow("MQTT Broker Port:", self.mqtt_port_input)
-
-        # Auto-start settings
         self.auto_start_checkbox = QCheckBox()
-        self.auto_start_checkbox.setChecked(True)
+        self.auto_start_checkbox.setChecked(self.config.get('system.auto_start', True))
         settings_layout.addRow("Auto-start on boot:", self.auto_start_checkbox)
-
-        # Save button
         save_settings_button = QPushButton("Save Settings")
         save_settings_button.clicked.connect(self.save_settings)
         settings_layout.addRow("", save_settings_button)
-
         settings_group.setLayout(settings_layout)
         main_layout.addWidget(settings_group)
 
-        # Add some spacing at the bottom for better appearance
-        main_layout.addSpacing(20)
+        main_layout.addStretch()
 
-        # Create a scroll area for the system maintenance tab
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
         scroll_area.setWidget(container)
-
-        # Only show scrollbars when needed
-        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-
-        # Style the scroll area to match the application theme
-        scroll_area.setStyleSheet("""
-            QScrollArea {
-                border: none;
-                background-color: transparent;
-            }
-            QScrollBar:vertical {
-                border: none;
-                background: #f0f0f0;
-                width: 12px;
-                margin: 0px;
-            }
-            QScrollBar::handle:vertical {
-                background: #c0c0c0;
-                min-height: 20px;
-                border-radius: 6px;
-            }
-            QScrollBar::handle:vertical:hover {
-                background: #a0a0a0;
-            }
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-                height: 0px;
-            }
-            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
-                background: none;
-            }
-        """)
-
-        # Create a layout for the tab and add the scroll area
+        scroll_area.setStyleSheet(""" QScrollArea { border: none; background-color: transparent; } 
+                                      QScrollBar:vertical { border: none; background: #f0f0f0; width: 15px; margin: 0px; } 
+                                      QScrollBar::handle:vertical { background: #adb5bd; min-height: 30px; border-radius: 7px; } 
+                                      QScrollBar::handle:vertical:hover { background: #868e96; } 
+                                      QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; } 
+                                      QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: none; } """)
         tab_layout = QVBoxLayout(self)
-        tab_layout.setContentsMargins(0, 0, 0, 0)
+        tab_layout.setContentsMargins(0,0,0,0)
         tab_layout.addWidget(scroll_area)
-
+    
     def backup_database(self):
-        """
-        Backup the database to a file.
-        """
-        file_path, _ = QFileDialog.getSaveFileName(
-            self,
-            "Backup Database",
-            os.path.expanduser("~/consultease_backup.db"),
-            "Database Files (*.db *.sql)"
-        )
-
-        if file_path:
-            try:
-                # Get database type
-                from ..models.base import DB_TYPE
-
-                # Show progress dialog
-                progress_dialog = QMessageBox(self)
-                progress_dialog.setWindowTitle("Database Backup")
-                progress_dialog.setText("Backing up database, please wait...")
-                progress_dialog.setStandardButtons(QMessageBox.NoButton)
-                progress_dialog.show()
-                QApplication.processEvents()
-
-                if DB_TYPE.lower() == 'sqlite':
-                    # For SQLite, just copy the file
-                    from ..models.base import DB_PATH
-                    import shutil
-
-                    # Create backup command for display
-                    backup_cmd = f"Copy {DB_PATH} to {file_path}"
-
-                    # Ask for confirmation
-                    progress_dialog.close()
-                    reply = QMessageBox.question(
-                        self,
-                        "Backup Database",
-                        f"The system will backup the SQLite database:\n\n{backup_cmd}\n\nContinue?",
-                        QMessageBox.Yes | QMessageBox.No,
-                        QMessageBox.Yes
-                    )
-
-                    if reply == QMessageBox.Yes:
-                        progress_dialog.show()
-                        QApplication.processEvents()
-
-                        # Copy the SQLite database file
-                        shutil.copy2(DB_PATH, file_path)
-                        success = True
-                    else:
-                        success = False
-                else:
-                    # For PostgreSQL, use pg_dump
-                    from ..models.base import DB_USER, DB_PASSWORD, DB_HOST, DB_NAME
-
-                    # Create backup command
-                    backup_cmd = f"pg_dump -U {DB_USER} -h {DB_HOST} -d {DB_NAME} -f {file_path}"
-
-                    # Ask for confirmation
-                    progress_dialog.close()
-                    reply = QMessageBox.question(
-                        self,
-                        "Backup Database",
-                        f"The system will execute the following command:\n\n{backup_cmd}\n\nContinue?",
-                        QMessageBox.Yes | QMessageBox.No,
-                        QMessageBox.Yes
-                    )
-
-                    if reply == QMessageBox.Yes:
-                        progress_dialog.show()
-                        QApplication.processEvents()
-
-                        # Execute the command
-                        import subprocess
-                        env = os.environ.copy()
-                        env["PGPASSWORD"] = DB_PASSWORD
-                        result = subprocess.run(
-                            backup_cmd,
-                            shell=True,
-                            env=env,
-                            stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE
-                        )
-
-                        success = (result.returncode == 0)
-                    else:
-                        success = False
-
-                # Close progress dialog
-                progress_dialog.close()
-
-                if success:
-                    QMessageBox.information(self, "Backup Database", f"Database backup saved to:\n{file_path}")
-                else:
-                    if 'result' in locals() and hasattr(result, 'stderr'):
-                        error_msg = result.stderr.decode('utf-8')
-                        QMessageBox.critical(self, "Backup Error", f"Failed to backup database:\n{error_msg}")
-                    else:
-                        QMessageBox.critical(self, "Backup Error", "Backup operation was cancelled or failed.")
-
-            except Exception as e:
-                logger.error(f"Error backing up database: {str(e)}")
-                QMessageBox.critical(self, "Backup Error", f"Error backing up database: {str(e)}")
+        logger.warning("Database backup functionality is not fully implemented yet.")
+        # Recommendation for pg_dump (security - avoid shell=True):
+        # DB_USER = self.config.get('database.user')
+        # DB_HOST = self.config.get('database.host')
+        # DB_NAME = self.config.get('database.name')
+        # file_path = 'backup.sql' # Should be a configurable path
+        # env = os.environ.copy()
+        # if self.config.get('database.password'):
+        #     env['PGPASSWORD'] = self.config.get('database.password')
+        # cmd_list = ['pg_dump', '-U', DB_USER, '-h', DB_HOST, '-d', DB_NAME, '-f', file_path]
+        # try:
+        #     result = subprocess.run(cmd_list, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False, text=True)
+        #     if result.returncode == 0:
+        #         QMessageBox.information(self, "Backup", f"Database backup successful to {file_path}")
+        #     else:
+        #         logger.error(f"Database backup failed. STDERR: {result.stderr}")
+        #         QMessageBox.critical(self, "Backup Error", f"Database backup failed: {result.stderr}")
+        # except FileNotFoundError:
+        #     logger.error("pg_dump command not found. Ensure PostgreSQL client tools are installed and in PATH.")
+        #     QMessageBox.critical(self, "Backup Error", "pg_dump command not found. Ensure PostgreSQL client tools are installed and in PATH.")
+        # except Exception as e:
+        #     logger.error(f"Error during database backup: {e}")
+        #     QMessageBox.critical(self, "Backup Error", f"An unexpected error occurred: {e}")
+        QMessageBox.information(self, "Not Implemented", "Database backup is not yet implemented.")
+        # raise NotImplementedError("Database backup functionality needs to be securely implemented.")
 
     def restore_database(self):
-        """
-        Restore the database from a file.
-        """
-        file_path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Restore Database",
-            os.path.expanduser("~"),
-            "Database Files (*.db *.sql)"
-        )
-
-        if file_path:
-            # Confirm restore
-            reply = QMessageBox.warning(
-                self,
-                "Restore Database",
-                "Restoring the database will overwrite all current data. Are you sure you want to continue?",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No
-            )
-
-            if reply == QMessageBox.Yes:
-                try:
-                    # Get database type
-                    from ..models.base import DB_TYPE
-
-                    # Show progress dialog
-                    progress_dialog = QMessageBox(self)
-                    progress_dialog.setWindowTitle("Database Restore")
-                    progress_dialog.setText("Restoring database, please wait...")
-                    progress_dialog.setStandardButtons(QMessageBox.NoButton)
-                    progress_dialog.show()
-                    QApplication.processEvents()
-
-                    success = False
-
-                    if DB_TYPE.lower() == 'sqlite':
-                        # For SQLite, just copy the file
-                        from ..models.base import DB_PATH
-                        import shutil
-
-                        # Create restore command for display
-                        restore_cmd = f"Copy {file_path} to {DB_PATH}"
-
-                        # Make a backup of the current database first
-                        backup_path = f"{DB_PATH}.bak"
-                        if os.path.exists(DB_PATH):
-                            shutil.copy2(DB_PATH, backup_path)
-                            logger.info(f"Created backup of current database at {backup_path}")
-
-                        # Copy the backup file to the database location
-                        shutil.copy2(file_path, DB_PATH)
-
-                        # Verify the restore
-                        if os.path.exists(DB_PATH) and os.path.getsize(DB_PATH) > 0:
-                            success = True
-                        else:
-                            # Restore from backup if the restore failed
-                            if os.path.exists(backup_path):
-                                shutil.copy2(backup_path, DB_PATH)
-                                logger.warning("Restore failed, reverted to backup")
-                    else:
-                        # For PostgreSQL, use psql
-                        from ..models.base import DB_USER, DB_PASSWORD, DB_HOST, DB_NAME
-
-                        # Create restore command
-                        restore_cmd = f"psql -U {DB_USER} -h {DB_HOST} -d {DB_NAME} -f {file_path}"
-
-                        # Execute the command
-                        import subprocess
-                        env = os.environ.copy()
-                        env["PGPASSWORD"] = DB_PASSWORD
-                        result = subprocess.run(
-                            restore_cmd,
-                            shell=True,
-                            env=env,
-                            stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE
-                        )
-
-                        success = (result.returncode == 0)
-
-                    # Close progress dialog
-                    progress_dialog.close()
-
-                    if success:
-                        QMessageBox.information(self, "Restore Database", f"Database restored from:\n{file_path}")
-
-                        # Inform the user that a restart is needed
-                        QMessageBox.information(
-                            self,
-                            "Restart Required",
-                            "The database has been restored. Please restart the application for changes to take effect."
-                        )
-                    else:
-                        if 'result' in locals() and hasattr(result, 'stderr'):
-                            error_msg = result.stderr.decode('utf-8')
-                            QMessageBox.critical(self, "Restore Error", f"Failed to restore database:\n{error_msg}")
-                        else:
-                            QMessageBox.critical(self, "Restore Error", "Failed to restore database.")
-
-                except Exception as e:
-                    logger.error(f"Error restoring database: {str(e)}")
-                    QMessageBox.critical(self, "Restore Error", f"Error restoring database: {str(e)}")
+        logger.warning("Database restore functionality is not fully implemented yet.")
+        # Recommendation for psql (security - avoid shell=True):
+        # Similar structure to backup_database, using 'psql' instead of 'pg_dump'
+        # Ensure to handle potential issues like database existence, user permissions etc.
+        QMessageBox.information(self, "Not Implemented", "Database restore is not yet implemented.")
+        # raise NotImplementedError("Database restore functionality needs to be securely implemented.")
 
     def view_logs(self):
-        """
-        View system logs.
-        """
-        # Create a log viewer dialog
         log_dialog = LogViewerDialog(self)
         log_dialog.exec_()
 
     def load_faculty_list(self):
-        """
-        Load the list of faculty members into the dropdown.
-        """
         try:
-            # Import the faculty controller
-            from ..controllers import FacultyController
-            faculty_controller = FacultyController()
-
-            # Get all faculty members
-            faculties = faculty_controller.get_all_faculty()
-
-            # Clear the dropdown
+            faculties = self.faculty_controller.get_all_faculty()
             self.faculty_combo.clear()
-
-            # Add faculty members to the dropdown
             for faculty in faculties:
                 self.faculty_combo.addItem(f"{faculty.name} (ID: {faculty.id})", faculty.id)
-
-            logger.info(f"Loaded {len(faculties)} faculty members into dropdown")
+            logger.info(f"Loaded {len(faculties)} faculty members into SystemMaintenanceTab dropdown")
         except Exception as e:
-            logger.error(f"Error loading faculty list: {str(e)}")
+            logger.error(f"Error loading faculty list for SystemMaintenanceTab: {str(e)}")
             QMessageBox.warning(self, "Error", f"Failed to load faculty list: {str(e)}")
 
     def test_faculty_desk_connection(self):
-        """
-        Test the connection to the selected faculty desk unit.
-        """
         try:
-            # Get the selected faculty ID
             if self.faculty_combo.count() == 0:
-                QMessageBox.warning(self, "Test Connection", "No faculty members available. Please add faculty members first.")
+                QMessageBox.warning(self, "Test Connection", "No faculty. Add faculty first.")
                 return
-
             faculty_id = self.faculty_combo.currentData()
-            faculty_name = self.faculty_combo.currentText().split(" (ID:")[0]
-
             if not faculty_id:
-                QMessageBox.warning(self, "Test Connection", "Please select a faculty member.")
+                QMessageBox.warning(self, "Test Connection", "Please select a faculty.")
                 return
-
-            # Import the consultation controller if not already imported
-            if not self.consultation_controller:
-                from ..controllers import ConsultationController
-                self.consultation_controller = ConsultationController()
-
-            # Show a progress dialog
+            faculty_name = self.faculty_combo.currentText().split(" (ID:")[0]
+            
             progress_dialog = QMessageBox(self)
             progress_dialog.setWindowTitle("Testing Connection")
-            progress_dialog.setText(f"Sending test message to faculty desk unit for {faculty_name}...\nPlease check the faculty desk unit display.")
+            progress_dialog.setText(f"Sending test to {faculty_name}... Check desk unit.")
             progress_dialog.setStandardButtons(QMessageBox.NoButton)
             progress_dialog.show()
             QApplication.processEvents()
 
-            # Send a test message
             success = self.consultation_controller.test_faculty_desk_connection(faculty_id)
-
-            # Close the progress dialog
             progress_dialog.close()
 
             if success:
-                QMessageBox.information(self, "Test Connection",
-                    f"Test message sent successfully to faculty desk unit for {faculty_name}.\n\n"
-                    f"If the faculty desk unit did not receive the message, please check:\n"
-                    f"1. The faculty desk unit is powered on and connected to WiFi\n"
-                    f"2. The MQTT broker is running and accessible\n"
-                    f"3. The faculty ID in the faculty desk unit matches the faculty ID in the database\n"
-                    f"4. The MQTT topics are correctly configured")
+                QMessageBox.information(self, "Test Connection", f"Test message sent to {faculty_name}.")
             else:
-                QMessageBox.warning(self, "Test Connection",
-                    f"Failed to send test message to faculty desk unit for {faculty_name}.\n\n"
-                    f"Please check:\n"
-                    f"1. The MQTT broker is running and accessible\n"
-                    f"2. The MQTT broker host and port are correctly configured\n"
-                    f"3. The network connection is working")
-
+                QMessageBox.warning(self, "Test Connection", f"Failed to send test message to {faculty_name}. Check MQTT settings and connectivity.")
         except Exception as e:
+            if 'progress_dialog' in locals() and progress_dialog.isVisible(): progress_dialog.close()
             logger.error(f"Error testing faculty desk connection: {str(e)}")
-            QMessageBox.critical(self, "Test Connection", f"Error testing faculty desk connection: {str(e)}")
+            QMessageBox.critical(self, "Test Connection Error", str(e))
 
     def change_admin_username(self):
-        """
-        Change the admin username.
-        """
         try:
-            # Get the current admin info from the parent window
-            parent_window = self.window()
-            if not hasattr(parent_window, 'admin') or not parent_window.admin:
-                QMessageBox.warning(self, "Admin Error", "No admin user is currently logged in.")
+            if not self.admin_info_context:
+                QMessageBox.warning(self, "Admin Error", "Admin context not available.")
                 return
-
-            # Get admin ID
-            admin_id = parent_window.admin.get('id') if isinstance(parent_window.admin, dict) else parent_window.admin.id
-
-            # Get input values
-            current_password = self.current_password_username.text()
+            admin_id = self.admin_info_context.get('id') if isinstance(self.admin_info_context, dict) else self.admin_info_context.id
+            
+            current_password = self.current_password_username_input.text()
             new_username = self.new_username_input.text().strip()
-
-            # Validate inputs
-            if not current_password:
-                QMessageBox.warning(self, "Validation Error", "Please enter your current password.")
+            if not (current_password and new_username):
+                QMessageBox.warning(self, "Input Error", "All fields for username change are required.")
                 return
 
-            if not new_username:
-                QMessageBox.warning(self, "Validation Error", "Please enter a new username.")
-                return
-
-            # Initialize admin controller if needed
-            if not self.admin_controller:
-                from ..controllers import AdminController
-                self.admin_controller = AdminController()
-
-            # Change username
             success = self.admin_controller.change_username(admin_id, current_password, new_username)
-
             if success:
-                # Update the admin info in the parent window
-                if isinstance(parent_window.admin, dict):
-                    parent_window.admin['username'] = new_username
-                else:
-                    parent_window.admin.username = new_username
+                self.actual_admin_username_changed_signal.emit(new_username)
+                if isinstance(self.admin_info_context, dict):
+                    self.admin_info_context['username'] = new_username
 
-                # Update the header label in the parent window
-                for child in parent_window.findChildren(QLabel):
-                    if "Logged in as:" in child.text():
-                        child.setText(f"Admin Dashboard - Logged in as: {new_username}")
-                        break
-
-                QMessageBox.information(self, "Username Changed", "Your username has been changed successfully.")
-
-                # Clear the input fields
-                self.current_password_username.clear()
+                QMessageBox.information(self, "Username Changed", "Username changed successfully.")
+                self.current_password_username_input.clear()
                 self.new_username_input.clear()
             else:
-                QMessageBox.warning(self, "Username Change Failed", "Failed to change username. Please check your password and try again.")
-
+                QMessageBox.warning(self, "Username Change Failed", "Failed. Check password or new username may be taken.")
         except Exception as e:
-            logger.error(f"Error changing admin username: {str(e)}")
-            QMessageBox.critical(self, "Username Change Error", f"Error changing username: {str(e)}")
+            logger.error(f"Error changing admin username: {str(e)}", exc_info=True)
+            QMessageBox.critical(self, "Error", f"An unexpected error occurred: {str(e)}")
 
     def change_admin_password(self):
-        """
-        Change the admin password.
-        """
         try:
-            # Get the current admin info from the parent window
-            parent_window = self.window()
-            if not hasattr(parent_window, 'admin') or not parent_window.admin:
-                QMessageBox.warning(self, "Admin Error", "No admin user is currently logged in.")
+            if not self.admin_info_context:
+                QMessageBox.warning(self, "Admin Error", "Admin context not available to identify current admin.")
+                return
+            
+            admin_id = self.admin_info_context.get('id') if isinstance(self.admin_info_context, dict) else self.admin_info_context.id
+            if not admin_id:
+                QMessageBox.warning(self, "Admin Error", "Could not determine Admin ID from context.")
                 return
 
-            # Get admin ID
-            admin_id = parent_window.admin.get('id') if isinstance(parent_window.admin, dict) else parent_window.admin.id
-
-            # Get input values
-            current_password = self.current_password_input.text()
+            current_password = self.current_password_password_input.text()
             new_password = self.new_password_input.text()
             confirm_password = self.confirm_password_input.text()
 
-            # Validate inputs
-            if not current_password:
-                QMessageBox.warning(self, "Validation Error", "Please enter your current password.")
+            if not (current_password and new_password and confirm_password):
+                QMessageBox.warning(self, "Input Error", "All fields are required.")
                 return
-
-            if not new_password:
-                QMessageBox.warning(self, "Validation Error", "Please enter a new password.")
-                return
-
             if new_password != confirm_password:
-                QMessageBox.warning(self, "Validation Error", "New password and confirmation do not match.")
+                QMessageBox.warning(self, "Input Error", "New passwords do not match.")
+                return
+            
+            from ..models.admin import Admin as AdminModel
+            is_strong, msg = AdminModel.validate_password_strength(new_password)
+            if not is_strong:
+                QMessageBox.warning(self, "Password Policy", msg)
                 return
 
-            # Initialize admin controller if needed
-            if not self.admin_controller:
-                from ..controllers import AdminController
-                self.admin_controller = AdminController()
-
-            # Change password
             success = self.admin_controller.change_password(admin_id, current_password, new_password)
-
             if success:
-                QMessageBox.information(self, "Password Changed", "Your password has been changed successfully.")
-
-                # Clear the input fields
-                self.current_password_input.clear()
+                QMessageBox.information(self, "Password Changed", "Password changed successfully.")
+                self.current_password_password_input.clear()
                 self.new_password_input.clear()
                 self.confirm_password_input.clear()
             else:
-                QMessageBox.warning(self, "Password Change Failed", "Failed to change password. Please check your current password and try again.")
-
-        except ValueError as e:
-            # This will catch password validation errors from the Admin model
-            logger.error(f"Password validation error: {str(e)}")
-            QMessageBox.warning(self, "Password Validation Error", str(e))
+                QMessageBox.warning(self, "Password Change Failed", "Failed. Check current password or new password policy.")
+        except ValueError as ve: 
+             QMessageBox.warning(self, "Password Policy/Error", str(ve))
         except Exception as e:
             logger.error(f"Error changing admin password: {str(e)}")
-            QMessageBox.critical(self, "Password Change Error", f"Error changing password: {str(e)}")
+            QMessageBox.critical(self, "Error", str(e))
 
     def save_settings(self):
-        """
-        Save system settings.
-        """
         try:
-            # Get settings values
             mqtt_host = self.mqtt_host_input.text().strip()
-            mqtt_port = self.mqtt_port_input.text().strip()
+            mqtt_port_str = self.mqtt_port_input.text().strip()
             auto_start = self.auto_start_checkbox.isChecked()
 
-            # Validate settings
-            if not mqtt_host:
-                QMessageBox.warning(self, "Validation Error", "Please enter an MQTT broker host.")
+            if not (mqtt_host and mqtt_port_str):
+                QMessageBox.warning(self, "Input Error", "MQTT Host and Port are required.")
+                return
+            try:
+                mqtt_port = int(mqtt_port_str)
+                if not (0 < mqtt_port < 65536):
+                    raise ValueError("Port out of range")
+            except ValueError:
+                QMessageBox.warning(self, "Input Error", "MQTT Port must be a valid number (1-65535).")
                 return
 
-            if not mqtt_port.isdigit():
-                QMessageBox.warning(self, "Validation Error", "MQTT broker port must be a number.")
-                return
-
-            # Create a settings file
-            settings_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "settings.ini")
-
-            with open(settings_path, 'w') as f:
-                f.write("[MQTT]\n")
-                f.write(f"broker_host = {mqtt_host}\n")
-                f.write(f"broker_port = {mqtt_port}\n")
-                f.write("\n[System]\n")
-                f.write(f"auto_start = {str(auto_start).lower()}\n")
-
-            # Update environment variables
-            os.environ['MQTT_BROKER_HOST'] = mqtt_host
-            os.environ['MQTT_BROKER_PORT'] = mqtt_port
-
-            QMessageBox.information(self, "Save Settings", "Settings saved successfully.\nSome settings may require an application restart to take effect.")
-
-            # Reload the faculty list after settings change
+            logger.info(f"Saving settings: MQTT Host={mqtt_host}, Port={mqtt_port}, AutoStart={auto_start}")
+            
+            self.config.set('mqtt.broker_host', mqtt_host)
+            self.config.set('mqtt.broker_port', mqtt_port)
+            self.config.set('system.auto_start', auto_start)
+            
+            if self.config.save():
+                QMessageBox.information(self, "Settings Saved", 
+                    "Settings saved to config.json. Restart application for changes to MQTT broker or auto-start to take full effect.")
+            else:
+                QMessageBox.critical(self, "Save Error", "Failed to save settings to config.json.")
             self.load_faculty_list()
-
         except Exception as e:
             logger.error(f"Error saving settings: {str(e)}")
-            QMessageBox.critical(self, "Save Error", f"Error saving settings: {str(e)}")
+            QMessageBox.critical(self, "Save Error", f"An unexpected error occurred: {str(e)}")
 
 class LogViewerDialog(QDialog):
-    """
-    Dialog for viewing system logs.
-    """
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.config = get_config()
+        self.log_file_path = self.config.get('logging.file', 'consultease.log') 
         self.init_ui()
         self.load_logs()
 
     def init_ui(self):
-        """
-        Initialize the UI components.
-        """
         self.setWindowTitle("System Logs")
         self.resize(800, 600)
-
-        # Main layout
         layout = QVBoxLayout()
-
-        # Log text area
         self.log_text = QTextEdit()
         self.log_text.setReadOnly(True)
-        self.log_text.setLineWrapMode(QTextEdit.NoWrap)
         self.log_text.setFont(QFont("Courier", 10))
         layout.addWidget(self.log_text)
-
-        # Controls
         controls_layout = QHBoxLayout()
-
         self.refresh_button = QPushButton("Refresh")
         self.refresh_button.clicked.connect(self.load_logs)
         controls_layout.addWidget(self.refresh_button)
-
         self.clear_button = QPushButton("Clear Logs")
         self.clear_button.clicked.connect(self.clear_logs)
         controls_layout.addWidget(self.clear_button)
-
         controls_layout.addStretch()
-
         self.close_button = QPushButton("Close")
         self.close_button.clicked.connect(self.accept)
         controls_layout.addWidget(self.close_button)
-
         layout.addLayout(controls_layout)
-
         self.setLayout(layout)
 
     def load_logs(self):
-        """
-        Load and display the system logs.
-        """
         try:
-            log_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "consultease.log")
-
-            if os.path.exists(log_path):
-                with open(log_path, 'r') as f:
+            if os.path.exists(self.log_file_path):
+                with open(self.log_file_path, 'r', encoding='utf-8', errors='replace') as f:
                     log_content = f.read()
-
-                # Set the log content
                 self.log_text.setText(log_content)
-
-                # Scroll to end
-                cursor = self.log_text.textCursor()
-                cursor.movePosition(QTextCursor.End)
-                self.log_text.setTextCursor(cursor)
+                self.log_text.moveCursor(QTextCursor.End)
             else:
-                self.log_text.setText("Log file not found.")
-
+                self.log_text.setText(f"Log file not found at: {self.log_file_path}")
         except Exception as e:
             self.log_text.setText(f"Error loading logs: {str(e)}")
+            logger.error(f"Error loading log file {self.log_file_path}: {e}")
 
     def clear_logs(self):
-        """
-        Clear the system logs.
-        """
         try:
-            log_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "consultease.log")
-
-            # Confirm clear
-            reply = QMessageBox.warning(
-                self,
-                "Clear Logs",
-                "Are you sure you want to clear all logs?",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No
-            )
-
+            reply = QMessageBox.warning(self, "Clear Logs", 
+                f"Are you sure you want to clear the log file: {self.log_file_path}? This cannot be undone.",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
             if reply == QMessageBox.Yes:
-                if os.path.exists(log_path):
-                    with open(log_path, 'w') as f:
-                        f.write("")
-
-                    self.log_text.setText("")
-                    QMessageBox.information(self, "Clear Logs", "Logs cleared successfully.")
+                if os.path.exists(self.log_file_path):
+                    with open(self.log_file_path, 'w', encoding='utf-8') as f:
+                        f.write(f"[{datetime.datetime.now().isoformat()}] Log cleared by admin.\n")
+                    self.log_text.setText("Log cleared by admin.\n")
+                    QMessageBox.information(self, "Logs Cleared", "Log file has been cleared.")
                 else:
-                    QMessageBox.warning(self, "Clear Logs", "Log file not found.")
-
+                    QMessageBox.warning(self, "Clear Logs", f"Log file not found: {self.log_file_path}")
         except Exception as e:
-            QMessageBox.critical(self, "Clear Logs", f"Error clearing logs: {str(e)}")
+            QMessageBox.critical(self, "Clear Logs Error", f"Error clearing logs: {str(e)}")
+            logger.error(f"Error clearing log file {self.log_file_path}: {e}")

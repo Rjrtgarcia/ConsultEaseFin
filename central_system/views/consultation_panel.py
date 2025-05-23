@@ -38,25 +38,28 @@ class ConsultationRequestForm(QFrame):
         self.setFrameShape(QFrame.StyledPanel)
         self.setObjectName("consultation_request_form")
 
-        # Apply theme-based stylesheet with improved readability
+        # Apply theme-based stylesheet with further improved readability
         self.setStyleSheet('''
             QFrame#consultation_request_form {
                 background-color: #f8f9fa;
                 border: 1px solid #dee2e6;
                 border-radius: 10px;
-                padding: 15px;
+                padding: 20px;
             }
             QLabel {
-                font-size: 15pt;
+                font-size: 16pt;
                 color: #212529;
+                font-weight: 500;
+                margin-bottom: 5px;
             }
             QLineEdit, QTextEdit, QComboBox {
                 border: 2px solid #4dabf7;
                 border-radius: 5px;
-                padding: 12px;
+                padding: 15px;
                 background-color: white;
-                font-size: 15pt;
+                font-size: 16pt;
                 color: #212529;
+                margin: 5px 0;
             }
             QLineEdit:focus, QTextEdit:focus, QComboBox:focus {
                 border: 2px solid #228be6;
@@ -64,10 +67,11 @@ class ConsultationRequestForm(QFrame):
             }
             QPushButton {
                 border-radius: 5px;
-                padding: 12px 20px;
-                font-size: 15pt;
+                padding: 15px 25px;
+                font-size: 16pt;
                 font-weight: bold;
                 color: white;
+                margin: 10px 0;
             }
             QPushButton:hover {
                 opacity: 0.9;
@@ -322,52 +326,36 @@ class ConsultationRequestForm(QFrame):
 
     def submit_request(self):
         """
-        Handle the submission of the consultation request with enhanced validation.
+        Handle the submission of the consultation request.
         """
-        # Validate faculty selection
         faculty = self.get_selected_faculty()
         if not faculty:
-            self.show_validation_error("Faculty Selection", "Please select a faculty member.")
-            self.faculty_combo.setFocus()
+            self.show_validation_error("Consultation Request", "Please select a faculty member.")
             return
 
         # Check if faculty is available
         if hasattr(faculty, 'status') and not faculty.status:
-            self.show_validation_error("Faculty Availability",
-                f"Faculty {faculty.name} is currently unavailable. Please select an available faculty member.")
-            self.faculty_combo.setFocus()
+            self.show_validation_error("Consultation Request",
+                                       f"Faculty {faculty.name} is currently unavailable. "
+                                       "Please select an available faculty member.")
             return
 
-        # Validate message content
         message = self.message_input.toPlainText().strip()
         if not message:
-            self.show_validation_error("Consultation Details", "Please enter consultation details.")
-            self.message_input.setFocus()
+            self.show_validation_error("Consultation Request", "Please enter consultation details.")
             return
-
-        # Check message length
+        
         if len(message) > 500:
-            self.show_validation_error("Message Length",
-                "Consultation details are too long. Please limit to 500 characters.")
-            self.message_input.setFocus()
+            self.show_validation_error("Consultation Request", "Consultation details cannot exceed 500 characters.")
             return
 
-        # Check message minimum length for meaningful content
-        if len(message) < 10:
-            self.show_validation_error("Message Content",
-                "Please provide more details about your consultation request (minimum 10 characters).")
-            self.message_input.setFocus()
-            return
-
-        # Validate course code format if provided
         course_code = self.course_input.text().strip()
-        if course_code and not self.is_valid_course_code(course_code):
-            self.show_validation_error("Course Code Format",
-                "Please enter a valid course code (e.g., CS101, MATH202).")
-            self.course_input.setFocus()
-            return
+        # Optional: Validate course_code if is_valid_course_code is implemented and deemed necessary
+        # if course_code and not self.is_valid_course_code(course_code):
+        #     self.show_validation_error("Consultation Request", "Invalid course code format.")
+        #     return
 
-        # All validation passed, emit signal with the request details
+        # Emit signal with the request details
         self.request_submitted.emit(faculty, message, course_code)
 
     def show_validation_error(self, title, message):
@@ -454,6 +442,8 @@ class ConsultationHistoryPanel(QFrame):
         super().__init__(parent)
         self.student = student
         self.consultations = []
+        from ..controllers import ConsultationController # Import here
+        self.consultation_controller = ConsultationController.instance() # Instantiate once
         self.init_ui()
 
     def init_ui(self):
@@ -466,13 +456,13 @@ class ConsultationHistoryPanel(QFrame):
         self.setFrameShape(QFrame.StyledPanel)
         self.setObjectName("consultation_history_panel")
 
-        # Apply theme-based stylesheet with improved readability
+        # Apply theme-based stylesheet with further improved readability
         self.setStyleSheet('''
             QFrame#consultation_history_panel {
                 background-color: #f8f9fa;
                 border: 1px solid #dee2e6;
                 border-radius: 10px;
-                padding: 15px;
+                padding: 20px;
             }
             QTableWidget {
                 border: 1px solid #dee2e6;
@@ -480,19 +470,19 @@ class ConsultationHistoryPanel(QFrame):
                 background-color: white;
                 alternate-background-color: #f1f3f5;
                 gridline-color: #dee2e6;
-                font-size: 15pt;
+                font-size: 16pt;
                 color: #212529;
             }
             QTableWidget::item {
-                padding: 10px;
+                padding: 12px;
                 border-bottom: 1px solid #e9ecef;
             }
             QHeaderView::section {
                 background-color: #228be6;
                 color: white;
-                padding: 12px;
+                padding: 15px;
                 border: none;
-                font-size: 15pt;
+                font-size: 16pt;
                 font-weight: bold;
             }
             QHeaderView::section:first {
@@ -500,6 +490,20 @@ class ConsultationHistoryPanel(QFrame):
             }
             QHeaderView::section:last {
                 border-top-right-radius: 5px;
+            }
+            /* Improve scrollbar visibility */
+            QScrollBar:vertical {
+                background: #f1f3f5;
+                width: 15px;
+                margin: 0px;
+            }
+            QScrollBar::handle:vertical {
+                background: #adb5bd;
+                min-height: 30px;
+                border-radius: 7px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: #868e96;
             }
             QPushButton {
                 border-radius: 5px;
@@ -570,20 +574,11 @@ class ConsultationHistoryPanel(QFrame):
 
             # Define the operation to run with progress updates
             def load_consultations(progress_callback):
-                # Import consultation controller
-                from ..controllers import ConsultationController
-
                 # Update progress
                 progress_callback(10, "Connecting to database...")
 
-                # Get consultation controller
-                consultation_controller = ConsultationController()
-
-                # Update progress
-                progress_callback(30, "Fetching consultation data...")
-
                 # Get consultations for this student
-                consultations = consultation_controller.get_consultations(student_id=self.student.id)
+                consultations = self.consultation_controller.get_consultations(student_id=self.student.id)
 
                 # Update progress
                 progress_callback(80, "Processing results...")
@@ -1101,13 +1096,26 @@ class ConsultationPanel(QTabWidget):
             except ImportError:
                 use_notification_manager = False
 
+            # Get ConsultationController instance
+            consultation_controller = ConsultationController.instance()
+
             # Define the operation to run with progress updates
             def submit_request(progress_callback=None):
                 if progress_callback:
                     progress_callback(20, "Submitting request...")
 
-                # Emit signal to controller
-                self.consultation_requested.emit(faculty, message, course_code)
+                # Directly call the controller to create the consultation
+                created_consultation = consultation_controller.create_consultation(
+                    student_id=self.student.id, 
+                    faculty_id=faculty.id, 
+                    request_message=message, 
+                    course_code=course_code
+                )
+
+                if not created_consultation:
+                    # The controller already logs errors. We might want to raise an exception here
+                    # to be caught by the outer try/except for consistent error messaging.
+                    raise Exception("Failed to create consultation. Controller returned None.")
 
                 if progress_callback:
                     progress_callback(60, "Processing submission...")
@@ -1125,7 +1133,12 @@ class ConsultationPanel(QTabWidget):
                 if progress_callback:
                     progress_callback(100, "Complete!")
 
-                return True
+                # Emit the original signal for DashboardWindow or other listeners,
+                # now with the successfully created consultation object.
+                # This signal becomes more of a "consultation_successfully_created_and_submitted"
+                self.consultation_requested.emit(created_consultation, message, course_code)
+                
+                return True # Indicate success for LoadingDialog
 
             # Use loading dialog if available
             if use_notification_manager:
@@ -1135,10 +1148,12 @@ class ConsultationPanel(QTabWidget):
                     submit_request,
                     title="Submitting Request",
                     message="Submitting your consultation request...",
-                    cancelable=False
+                    cancelable=False # Should not be cancelable once submission starts
                 )
 
-                # Show success message
+                # Show success message (this might be redundant if DashboardWindow also shows one)
+                # Consider if NotificationManager should be used by the primary handler (panel)
+                # or the secondary listener (dashboard). For now, keeping it here.
                 NotificationManager.show_message(
                     self,
                     "Request Submitted",
@@ -1146,8 +1161,8 @@ class ConsultationPanel(QTabWidget):
                     NotificationManager.SUCCESS
                 )
             else:
-                # Fallback to basic implementation
-                submit_request()
+                # Fallback to basic implementation (without loading dialog)
+                submit_request() # This will raise Exception on failure
 
                 # Show success message
                 QMessageBox.information(
@@ -1160,22 +1175,26 @@ class ConsultationPanel(QTabWidget):
             self.animate_tab_change(1)
 
         except Exception as e:
-            logger.error(f"Error submitting consultation request: {str(e)}")
+            logger.error(f"Error submitting consultation request in ConsultationPanel: {str(e)}")
 
             # Show error message
+            error_message_detail = str(e)
+            if "Failed to create consultation" in error_message_detail:
+                 error_message_detail = "The system could not create your consultation request. Please try again."
+            
             try:
                 from ..utils.notification import NotificationManager
                 NotificationManager.show_message(
                     self,
                     "Submission Error",
-                    f"Failed to submit consultation request: {str(e)}",
+                    f"Failed to submit consultation request: {error_message_detail}",
                     NotificationManager.ERROR
                 )
             except ImportError:
                 QMessageBox.warning(
                     self,
                     "Error",
-                    f"Failed to submit consultation request: {str(e)}"
+                    f"Failed to submit consultation request: {error_message_detail}"
                 )
 
     def handle_consultation_cancel(self, consultation_id):
@@ -1190,13 +1209,19 @@ class ConsultationPanel(QTabWidget):
             except ImportError:
                 use_notification_manager = False
 
+            # Get ConsultationController instance
+            consultation_controller = ConsultationController.instance()
+
             # Define the operation to run with progress updates
-            def cancel_consultation(progress_callback=None):
+            def perform_cancel_consultation(progress_callback=None):
                 if progress_callback:
                     progress_callback(30, "Cancelling request...")
 
-                # Emit signal to controller
-                self.consultation_cancelled.emit(consultation_id)
+                # Directly call the controller to cancel the consultation
+                cancelled_consultation = consultation_controller.cancel_consultation(consultation_id)
+                
+                if not cancelled_consultation:
+                    raise Exception("Failed to cancel consultation. Controller returned None or error.")
 
                 if progress_callback:
                     progress_callback(70, "Updating records...")
@@ -1206,8 +1231,13 @@ class ConsultationPanel(QTabWidget):
 
                 if progress_callback:
                     progress_callback(100, "Complete!")
-
-                return True
+                
+                # Emit the original signal, now with the (cancelled) consultation object
+                # if needed by other listeners, though DashboardWindow might not need it anymore
+                # for its primary function of calling the controller.
+                self.consultation_cancelled.emit(consultation_id) # Or emit `cancelled_consultation` if more useful
+                
+                return True # Indicate success for LoadingDialog
 
             # Use loading dialog if available
             if use_notification_manager:
@@ -1222,10 +1252,10 @@ class ConsultationPanel(QTabWidget):
                     # Show loading dialog while cancelling
                     LoadingDialog.show_loading(
                         self,
-                        cancel_consultation,
+                        perform_cancel_consultation,
                         title="Cancelling Request",
                         message="Cancelling your consultation request...",
-                        cancelable=False
+                        cancelable=False # Cancellation process itself should not be cancelable midway
                     )
 
                     # Show success message
@@ -1246,8 +1276,8 @@ class ConsultationPanel(QTabWidget):
                 )
 
                 if reply == QMessageBox.Yes:
-                    # Cancel the consultation
-                    cancel_consultation()
+                    # Cancel the consultation (this will raise Exception on failure)
+                    perform_cancel_consultation()
 
                     # Show success message
                     QMessageBox.information(
@@ -1257,22 +1287,26 @@ class ConsultationPanel(QTabWidget):
                     )
 
         except Exception as e:
-            logger.error(f"Error cancelling consultation: {str(e)}")
+            logger.error(f"Error cancelling consultation in ConsultationPanel: {str(e)}")
 
             # Show error message
+            error_message_detail = str(e)
+            if "Failed to cancel consultation" in error_message_detail:
+                error_message_detail = "The system could not cancel your consultation request. Please try again."
+
             try:
                 from ..utils.notification import NotificationManager
                 NotificationManager.show_message(
                     self,
                     "Cancellation Error",
-                    f"Failed to cancel consultation: {str(e)}",
+                    f"Failed to cancel consultation: {error_message_detail}",
                     NotificationManager.ERROR
                 )
             except ImportError:
                 QMessageBox.warning(
                     self,
                     "Error",
-                    f"Failed to cancel consultation: {str(e)}"
+                    f"Failed to cancel consultation: {error_message_detail}"
                 )
 
     def animate_tab_change(self, tab_index):

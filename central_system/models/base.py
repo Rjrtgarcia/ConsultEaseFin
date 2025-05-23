@@ -10,7 +10,7 @@ import time
 import functools
 
 # Set up logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s') # REMOVED
 logger = logging.getLogger(__name__)
 
 # Import configuration system
@@ -162,7 +162,7 @@ def db_operation_with_retry(max_retries=3, retry_delay=0.5):
                     else:
                         logger.error(f"Database operation failed after {max_retries} attempts: {e}")
                 finally:
-                    db.close()
+                    close_db()  # Ensures SessionLocal.remove() is called
 
             # If we've exhausted all retries, raise the last error
             raise last_error
@@ -190,7 +190,7 @@ def init_db():
         admin_count = db.query(Admin).count()
         if admin_count == 0:
             # Create default admin with bcrypt hashed password
-            password_hash, salt = Admin.hash_password("admin123")
+            password_hash, salt = Admin.hash_password("Admin123!")
             default_admin = Admin(
                 username="admin",
                 password_hash=password_hash,
@@ -199,7 +199,7 @@ def init_db():
                 is_active=True
             )
             db.add(default_admin)
-            logger.info("Created default admin user: admin / admin123")
+            logger.info("Created default admin user: admin / Admin123!")
 
         # Check if faculty table is empty
         faculty_count = db.query(Faculty).count()
@@ -256,5 +256,4 @@ def init_db():
         logger.error(f"Error creating default data: {str(e)}")
         db.rollback()
     finally:
-        db.close()
         close_db()  # Return the connection to the pool

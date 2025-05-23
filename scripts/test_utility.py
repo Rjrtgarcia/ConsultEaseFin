@@ -42,15 +42,15 @@ logger = logging.getLogger(__name__)
 DEFAULT_BROKER = "192.168.1.100"
 DEFAULT_PORT = 1883
 DEFAULT_FACULTY_ID = 1
-DEFAULT_FACULTY_NAME = "Jeysibn"
+DEFAULT_FACULTY_NAME = "TestFaculty"
 DEFAULT_MESSAGE = "Test consultation request from a student. Please check your schedule for availability."
 
 # MQTT Topics
 TOPIC_REQUESTS_JSON = "consultease/faculty/{}/requests"
-TOPIC_REQUESTS_TEXT = "professor/messages"
 TOPIC_FACULTY_MESSAGES = "consultease/faculty/{}/messages"
 TOPIC_STATUS = "consultease/faculty/{}/status"
 TOPIC_SYSTEM_PING = "consultease/system/ping"
+TOPIC_SYSTEM_NOTIFICATIONS = "consultease/system/notifications"
 
 # Message received counter
 messages_received = 0
@@ -63,18 +63,16 @@ def on_connect(client, userdata, flags, rc):
         
         # Subscribe to topics if needed
         if userdata.get('subscribe_all', False):
-            topics = [
-                TOPIC_REQUESTS_JSON.format(userdata['faculty_id']),
-                TOPIC_REQUESTS_TEXT,
-                TOPIC_FACULTY_MESSAGES.format(userdata['faculty_id']),
-                TOPIC_STATUS.format(userdata['faculty_id']),
+            topics_to_subscribe = [
+                TOPIC_REQUESTS_JSON.format(userdata.get('faculty_id', '+')),
+                TOPIC_FACULTY_MESSAGES.format(userdata.get('faculty_id', '+')),
+                TOPIC_STATUS.format(userdata.get('faculty_id', '+')),
                 TOPIC_SYSTEM_PING,
-                # Add wildcard subscription to catch all messages
-                "consultease/#",
-                "professor/#"
+                TOPIC_SYSTEM_NOTIFICATIONS,
+                "consultease/#"
             ]
             
-            for topic in topics:
+            for topic in topics_to_subscribe:
                 client.subscribe(topic)
                 logger.info(f"Subscribed to topic: {topic}")
     else:
@@ -369,53 +367,43 @@ def monitor(args):
         logger.info("Disconnected from MQTT broker")
 
 def send_test_messages(client, faculty_id, faculty_name):
-    """Send test messages to all relevant topics."""
-    logger.info("Sending test messages to all topics...")
-    
-    # Create test messages
-    text_message = f"Test message from MQTT test script.\nTimestamp: {time.time()}"
-    json_message = {
-        'id': 999,
-        'student_id': 123,
-        'student_name': "Test Student",
-        'student_department': "Test Department",
-        'faculty_id': faculty_id,
-        'faculty_name': faculty_name,
-        'request_message': text_message,
-        'course_code': "TEST101",
-        'status': "PENDING",
-        'requested_at': time.time(),
-        'message': text_message
-    }
-    
-    # Simplified message format for faculty desk unit
-    simplified_json = {
-        'message': f"Student: Test Student\nCourse: TEST101\nRequest: {text_message}",
-        'student_name': "Test Student",
-        'course_code': "TEST101",
-        'consultation_id': 999,
+    """Send a variety of test messages to the specified faculty ID."""
+    logger.info(f"Sending test messages to faculty ID {faculty_id} ({faculty_name})...")
+
+    # 1. Consultation Request (JSON)
+    consultation_payload = {
+        'message': f"Consultation request for {faculty_name}",
+        'student_name': "Test Student Alpha",
+        'course_code': "CS101",
+        'consultation_id': random.randint(10000, 99999),
         'timestamp': time.time()
     }
+    client.publish(TOPIC_REQUESTS_JSON.format(faculty_id), json.dumps(consultation_payload), qos=1)
+    logger.info(f"Published to {TOPIC_REQUESTS_JSON.format(faculty_id)}: {consultation_payload}")
+
+    # 2. Simple Text Message to faculty unit's specific message topic
+    text_message_payload = f"Hello {faculty_name}, this is a direct text message from test_utility."
+    client.publish(TOPIC_FACULTY_MESSAGES.format(faculty_id), text_message_payload, qos=1)
+    logger.info(f"Published to {TOPIC_FACULTY_MESSAGES.format(faculty_id)}: {text_message_payload}")
+
+    # 3. Simulate Faculty Status (as if coming from the faculty unit itself)
+    # This is more for testing what the central system does with such a message
+    status_payload_available = json.dumps({"status": True, "device_id": f"ESP32_{faculty_id}", "timestamp": time.time()})
+    client.publish(TOPIC_STATUS.format(faculty_id), status_payload_available, qos=1)
+    logger.info(f"Simulated status (Available) on {TOPIC_STATUS.format(faculty_id)}: {status_payload_available}")
     
-    # Send to all topics
-    topics_and_payloads = [
-        (TOPIC_REQUESTS_JSON.format(faculty_id), json.dumps(json_message)),
-        (TOPIC_REQUESTS_TEXT, text_message),
-        (TOPIC_FACULTY_MESSAGES.format(faculty_id), text_message),
-        (TOPIC_REQUESTS_JSON.format(faculty_id), json.dumps(simplified_json)),
-    ]
+    time.sleep(1) # Brief pause
     
-    for topic, payload in topics_and_payloads:
-        logger.info(f"Publishing to {topic}:")
-        logger.info(f"Payload: {payload}")
-        result = client.publish(topic, payload)
-        if result.rc == mqtt.MQTT_ERR_SUCCESS:
-            logger.info(f"Successfully published to {topic}")
-        else:
-            logger.error(f"Failed to publish to {topic}, error code: {result.rc}")
-        
-        # Wait a bit between messages
-        time.sleep(1)
+    status_payload_unavailable = json.dumps({"status": False, "device_id": f"ESP32_{faculty_id}", "timestamp": time.time()})
+    client.publish(TOPIC_STATUS.format(faculty_id), status_payload_unavailable, qos=1)
+    logger.info(f"Simulated status (Unavailable) on {TOPIC_STATUS.format(faculty_id)}: {status_payload_unavailable}")
+
+    # 4. System Ping (as if from central system, or another component)
+    ping_payload = json.dumps({"sender": "test_utility", "timestamp": time.time()})
+    client.publish(TOPIC_SYSTEM_PING, ping_payload, qos=0)
+    logger.info(f"Published to {TOPIC_SYSTEM_PING}: {ping_payload}")
+    
+    logger.info("Finished sending test messages.")
 
 def main():
     """Main function to parse arguments and run the appropriate command."""

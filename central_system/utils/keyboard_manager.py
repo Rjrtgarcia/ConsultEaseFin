@@ -11,6 +11,9 @@ import threading
 from PyQt5.QtCore import QObject, QTimer, pyqtSignal, QEvent
 from PyQt5.QtWidgets import QApplication, QLineEdit, QTextEdit, QPlainTextEdit
 
+# Import config
+from central_system.config import get_config
+
 logger = logging.getLogger(__name__)
 
 class KeyboardManager(QObject):
@@ -39,14 +42,17 @@ class KeyboardManager(QObject):
         if KeyboardManager._instance is not None:
             return
 
+        # Get central config
+        self.config = get_config()
+
         # Set up keyboard properties
         self.keyboard_visible = False
         self.keyboard_process = None
         self.dbus_available = self._check_dbus_available()
 
-        # Determine preferred keyboard type from environment
-        self.preferred_keyboard = os.environ.get('CONSULTEASE_KEYBOARD', 'squeekboard')
-        self.fallback_keyboard = 'onboard'
+        # Determine preferred keyboard type from config
+        self.preferred_keyboard = self.config.get('keyboard.type', 'squeekboard')
+        self.fallback_keyboard = self.config.get('keyboard.fallback', 'onboard')
 
         # Detect available keyboards
         self._detect_available_keyboards()
@@ -102,10 +108,21 @@ class KeyboardManager(QObject):
         elif self.preferred_keyboard == 'onboard' and self.onboard_available:
             return 'onboard'
 
-        # Fall back to any available keyboard
+        # Then try fallback keyboard if specified and different from preferred
+        if self.fallback_keyboard and self.fallback_keyboard != self.preferred_keyboard:
+            if self.fallback_keyboard == 'squeekboard' and self.squeekboard_available:
+                logger.info(f"Preferred keyboard '{self.preferred_keyboard}' not available or misconfigured, using fallback '{self.fallback_keyboard}'.")
+                return 'squeekboard'
+            elif self.fallback_keyboard == 'onboard' and self.onboard_available:
+                logger.info(f"Preferred keyboard '{self.preferred_keyboard}' not available or misconfigured, using fallback '{self.fallback_keyboard}'.")
+                return 'onboard'
+
+        # If fallback also not available or not specified, try any available
         if self.squeekboard_available:
+            logger.info(f"Preferred keyboard '{self.preferred_keyboard}' and fallback '{self.fallback_keyboard}' not available/configured, using available 'squeekboard'.")
             return 'squeekboard'
         elif self.onboard_available:
+            logger.info(f"Preferred keyboard '{self.preferred_keyboard}' and fallback '{self.fallback_keyboard}' not available/configured, using available 'onboard'.")
             return 'onboard'
 
         # No keyboard available
@@ -346,6 +363,14 @@ class KeyboardManager(QObject):
             return result.returncode == 0
         except Exception:
             return False
+
+    def force_show_keyboard(self):
+        """Force show the keyboard, ensuring it attempts to become visible."""
+        logger.info(f"Force showing keyboard: {self.active_keyboard}")
+        # Reset visibility flag to ensure show_keyboard logic runs
+        self.keyboard_visible = False 
+        self.show_keyboard()
+        # The show_keyboard method itself contains fallbacks (e.g., script for squeekboard if DBus fails)
 
 # Convenience function to get the keyboard manager instance
 def get_keyboard_manager():

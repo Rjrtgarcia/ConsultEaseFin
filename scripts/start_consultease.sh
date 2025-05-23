@@ -9,8 +9,6 @@ set -e
 CONSULTEASE_DIR="$HOME/ConsultEase"
 LOG_DIR="$CONSULTEASE_DIR/logs"
 MAIN_SCRIPT="central_system/main.py"
-KEYBOARD_TYPE="squeekboard"  # or "onboard"
-FULLSCREEN="true"
 
 # Create logs directory if it doesn't exist
 mkdir -p "$LOG_DIR"
@@ -27,6 +25,7 @@ log() {
 # Function to check dependencies
 check_dependencies() {
     log "Checking dependencies..."
+    log "INFO: Core settings (keyboard, fullscreen, etc.) are now managed in central_system/config.json"
     
     # Check Python
     if ! command -v python3 &> /dev/null; then
@@ -43,21 +42,7 @@ check_dependencies() {
     if ! command -v mosquitto_pub &> /dev/null; then
         log "WARNING: Mosquitto clients not found, MQTT operations may fail"
     fi
-    
-    # Check keyboard
-    if [ "$KEYBOARD_TYPE" = "squeekboard" ]; then
-        if ! command -v squeekboard &> /dev/null; then
-            log "WARNING: Squeekboard not found, falling back to onboard"
-            KEYBOARD_TYPE="onboard"
-        fi
-    fi
-    
-    if [ "$KEYBOARD_TYPE" = "onboard" ]; then
-        if ! command -v onboard &> /dev/null; then
-            log "WARNING: Onboard not found, on-screen keyboard may not work"
-        fi
-    fi
-    
+        
     log "Dependency check completed"
 }
 
@@ -87,22 +72,17 @@ check_services() {
 # Function to start the application
 start_application() {
     log "Starting ConsultEase application..."
+    log "INFO: Fullscreen and keyboard preferences are set in central_system/config.json"
     
     # Change to the ConsultEase directory
     cd "$CONSULTEASE_DIR"
     
     # Set environment variables
-    export CONSULTEASE_KEYBOARD="$KEYBOARD_TYPE"
     export PYTHONUNBUFFERED=1
     
     # Start the application
-    if [ "$FULLSCREEN" = "true" ]; then
-        log "Starting in fullscreen mode"
-        python3 "$MAIN_SCRIPT" --fullscreen >> "$LOG_FILE" 2>&1 &
-    else
-        log "Starting in windowed mode"
-        python3 "$MAIN_SCRIPT" >> "$LOG_FILE" 2>&1 &
-    fi
+    log "Starting in mode configured in central_system/config.json (fullscreen true/false)"
+    python3 "$MAIN_SCRIPT" >> "$LOG_FILE" 2>&1 &
     
     APP_PID=$!
     log "Application started with PID: $APP_PID"
@@ -113,7 +93,7 @@ start_application() {
     # Wait for a moment to check if the application crashed immediately
     sleep 2
     if ! ps -p $APP_PID > /dev/null; then
-        log "ERROR: Application failed to start, check the log file: $LOG_FILE"
+        log "ERROR: Application failed to start, check the log file: $LOG_FILE and ensure central_system/config.json is correctly set up."
         exit 1
     fi
     

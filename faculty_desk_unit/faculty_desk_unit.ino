@@ -1,17 +1,14 @@
 #include <WiFi.h>
 #include <PubSubClient.h>  // MQTT client
-#include <BLEDevice.h>
-#include <BLEServer.h>
-#include <BLEUtils.h>
-#include <BLE2902.h>
+#include <NimBLEDevice.h>  // Using NimBLE for scanning
 #include <SPI.h>
 #include <Adafruit_GFX.h>    // Core graphics library
 #include <Adafruit_ST7789.h> // Hardware-specific library for ST7789
 #include <time.h>
 #include "config.h"          // Include configuration file
 
-// Current Date/Time and User
-const char* current_date_time = "2025-05-02 09:46:02";
+// Current Date/Time and User (Consider removing or using NTP only)
+// const char* current_date_time = "2025-05-02 09:46:02"; // Hardcoded, NTP is better
 const char* current_user = FACULTY_NAME;
 
 // WiFi credentials
@@ -21,21 +18,20 @@ const char* password = WIFI_PASSWORD;
 // MQTT Broker settings
 const char* mqtt_server = MQTT_SERVER;
 const int mqtt_port = MQTT_PORT;
-char mqtt_topic_messages[50];
-char mqtt_topic_status[50];
-char mqtt_topic_legacy_messages[50];
-char mqtt_topic_legacy_status[50];
+char mqtt_topic_status[60]; // Increased size for safety
+char mqtt_topic_requests[60];
+char mqtt_topic_legacy_messages[50]; // Kept for receiving, but status publish will be specific
 char mqtt_client_id[50];
 
-// BLE UUIDs - Standardized across all components
-#define SERVICE_UUID        "91BAD35B-F3CB-4FC1-8603-88D5137892A6"
-#define CHARACTERISTIC_UUID "D9473AA3-E6F4-424B-B6E7-A5F94FDDA285"
+// BLE Target Service UUID to scan for (from faculty's beacon)
+static NimBLEUUID facultyBeaconServiceUUID(SERVICE_UUID);
 
-// BLE Connection Management
-unsigned long lastBleSignalTime = 0;
-unsigned long lastStatusUpdate = 0;
-int bleReconnectAttempts = 0;
-bool alwaysAvailable = ALWAYS_AVAILABLE; // Use the value from config.h
+// BLE Scanner variables
+NimBLEScan* pBLEScan;
+bool isFacultyPresent = false;
+unsigned long lastBeaconSignalTime = 0;
+unsigned long lastStatusPublishTime = 0;
+bool bleScanActive = false;
 
 // TFT Display pins for ST7789
 #define TFT_CS    5
@@ -55,14 +51,9 @@ const int   daylightOffset_sec = 3600;
 // Variables
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
-BLEServer* pServer = NULL;
-BLECharacteristic* pCharacteristic = NULL;
-bool deviceConnected = false;
-bool oldDeviceConnected = false;
 char timeStringBuff[50];
 char dateStringBuff[50];
 String lastMessage = "";
-unsigned long lastDisplayUpdate = 0;
 unsigned long lastTimeUpdate = 0;
 
 // National University Philippines Color Scheme
@@ -94,119 +85,65 @@ unsigned long lastTimeUpdate = 0;
 // Gold accent width
 #define ACCENT_WIDTH 5
 
-// BLE Server Callbacks with improved connection handling
-class MyServerCallbacks: public BLEServerCallbacks {
-    void onConnect(BLEServer* pServer) {
-      deviceConnected = true;
-      lastBleSignalTime = millis();  // Record the time of connection
-      bleReconnectAttempts = 0;      // Reset reconnection attempts
-
-      // Publish to both standardized and legacy topics for backward compatibility
-      mqttClient.publish(mqtt_topic_status, "keychain_connected");
-      mqttClient.publish(mqtt_topic_legacy_status, "keychain_connected");
-
-      Serial.println("BLE client connected");
-
-      // Log connection details
-      Serial.print("Connection time: ");
-      Serial.println(lastBleSignalTime);
-    };
-
-    void onDisconnect(BLEServer* pServer) {
-      deviceConnected = false;
-
-      // Publish to both standardized and legacy topics for backward compatibility
-      mqttClient.publish(mqtt_topic_status, "keychain_disconnected");
-      mqttClient.publish(mqtt_topic_legacy_status, "keychain_disconnected");
-
-      Serial.println("BLE client disconnected");
-      Serial.print("Disconnection time: ");
-      Serial.println(millis());
-
-      // Restart advertising so new clients can connect
-      BLEDevice::startAdvertising();
-
-      // Don't reset reconnection attempts here - we'll manage that in the main loop
-      // This allows proper tracking of reconnection attempts
+// BLE Advertised Device Callback for Scanner
+class MyAdvertisedDeviceCallbacks: public NimBLEAdvertisedDeviceCallbacks {
+    void onResult(NimBLEAdvertisedDevice* advertisedDevice) {
+        Serial.print("Advertised Device found: ");
+        Serial.println(advertisedDevice->toString().c_str());
+        // Check if the advertised device has the service UUID we are looking for
+        if (advertisedDevice->isAdvertisingService(facultyBeaconServiceUUID)) {
+            Serial.println("Found our faculty beacon!");
+            isFacultyPresent = true;
+            lastBeaconSignalTime = millis(); // Update time of last sighting
+            // Stop scanning once found to save power, will restart on next interval
+            if(pBLEScan->isScanning()){
+                pBLEScan->stop();
+                bleScanActive = false;
+            }
+            digitalWrite(LED_PIN, HIGH); // Turn on LED or indicate presence
+        } else {
+            // Optional: Handle other devices or just ignore
+        }
     }
 };
 
 // Function to process incoming messages and extract content from JSON if needed
 String processMessage(String message) {
-  // Check if the message is in JSON format (starts with '{')
   if (message.startsWith("{")) {
-    Serial.println("Detected JSON message, attempting to extract content");
-
-    // First try to extract the message field
     int messageStart = message.indexOf("\"message\":\"");
     if (messageStart > 0) {
-      messageStart += 11; // Length of "message":"
+      messageStart += 11;
       int messageEnd = message.indexOf("\"", messageStart);
       if (messageEnd > messageStart) {
         String extractedMessage = message.substring(messageStart, messageEnd);
-        // Replace escaped quotes and newlines
         extractedMessage.replace("\\\"", "\"");
         extractedMessage.replace("\\n", "\n");
-        Serial.print("Extracted message field: ");
-        Serial.println(extractedMessage);
         return extractedMessage;
       }
     }
-
-    // If message field not found, try to extract request_message field
     messageStart = message.indexOf("\"request_message\":\"");
     if (messageStart > 0) {
-      messageStart += 18; // Length of "request_message":"
+      messageStart += 18; 
       int messageEnd = message.indexOf("\"", messageStart);
       if (messageEnd > messageStart) {
         String extractedMessage = message.substring(messageStart, messageEnd);
-        // Replace escaped quotes and newlines
         extractedMessage.replace("\\\"", "\"");
         extractedMessage.replace("\\n", "\n");
-
-        // Try to get student name and course code to format a complete message
         String studentName = "";
         int studentStart = message.indexOf("\"student_name\":\"");
-        if (studentStart > 0) {
-          studentStart += 16; // Length of "student_name":"
-          int studentEnd = message.indexOf("\"", studentStart);
-          if (studentEnd > studentStart) {
-            studentName = message.substring(studentStart, studentEnd);
-          }
-        }
-
+        if (studentStart > 0) { studentStart += 16; int studentEnd = message.indexOf("\"", studentStart); if (studentEnd > studentStart) { studentName = message.substring(studentStart, studentEnd); } }
         String courseCode = "";
         int courseStart = message.indexOf("\"course_code\":\"");
-        if (courseStart > 0) {
-          courseStart += 14; // Length of "course_code":"
-          int courseEnd = message.indexOf("\"", courseStart);
-          if (courseEnd > courseStart) {
-            courseCode = message.substring(courseStart, courseEnd);
-          }
-        }
-
-        // Format a complete message
+        if (courseStart > 0) { courseStart += 14; int courseEnd = message.indexOf("\"", courseStart); if (courseEnd > courseStart) { courseCode = message.substring(courseStart, courseEnd); } }
         String formattedMessage = "";
-        if (studentName != "") {
-          formattedMessage += "Student: " + studentName + "\n";
-        }
-        if (courseCode != "") {
-          formattedMessage += "Course: " + courseCode + "\n";
-        }
+        if (studentName != "") { formattedMessage += "Student: " + studentName + "\n"; }
+        if (courseCode != "") { formattedMessage += "Course: " + courseCode + "\n"; }
         formattedMessage += "Request: " + extractedMessage;
-
-        Serial.print("Formatted message: ");
-        Serial.println(formattedMessage);
         return formattedMessage;
       }
     }
-
-    // If no specific message field found, return the whole JSON for debugging
-    Serial.println("No message field found in JSON, displaying raw JSON");
-    return message;
+    return message; // Return raw JSON if specific fields not found
   }
-
-  // If not JSON, return the original message
   return message;
 }
 
@@ -489,15 +426,6 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
   // Restore the time display
   updateTimeDisplay();
-
-  // Also forward to connected BLE device if any
-  if (deviceConnected) {
-    pCharacteristic->setValue(message.c_str());
-    pCharacteristic->notify();
-
-    // Update the last BLE signal time
-    lastBleSignalTime = millis();
-  }
 }
 
 // Draw the main UI framework - truly seamless design
@@ -624,14 +552,14 @@ void reconnect() {
       Serial.println("connected");
       displaySystemStatus("MQTT connected");
       // Subscribe to message topics (both standardized and legacy topics)
-      mqttClient.subscribe(mqtt_topic_messages);
+      mqttClient.subscribe(mqtt_topic_requests);
       mqttClient.subscribe(mqtt_topic_legacy_messages);
 
       // Also subscribe to system notifications for ping messages
       mqttClient.subscribe(MQTT_TOPIC_NOTIFICATIONS);
 
       Serial.println("Subscribed to topics:");
-      Serial.println(mqtt_topic_messages);
+      Serial.println(mqtt_topic_requests);
       Serial.println(mqtt_topic_legacy_messages);
       Serial.println(MQTT_TOPIC_NOTIFICATIONS);
 
@@ -695,35 +623,16 @@ void drawNULogo(int centerX, int centerY, int size) {
 
 void setup() {
   Serial.begin(115200);
-  Serial.println("Starting National University Philippines Desk Unit");
-  Serial.print("Current user: ");
-  Serial.println(current_user);
-  Serial.print("Current time: ");
-  Serial.println(current_date_time);
+  Serial.println("ConsultEase Faculty Desk Unit Starting (Scanner Mode)...");
+  pinMode(LED_PIN, OUTPUT); // For status indication
+  digitalWrite(LED_PIN, LOW);
 
-  // Initialize always available mode from config
-  alwaysAvailable = ALWAYS_AVAILABLE;
-  Serial.print("Always available mode: ");
-  Serial.println(alwaysAvailable ? "ENABLED" : "DISABLED");
-
-  // Initialize MQTT topics with faculty ID - both standardized and legacy
-  sprintf(mqtt_topic_messages, MQTT_TOPIC_REQUESTS, FACULTY_ID);
+  // Initialize MQTT topics - only need specific status for publishing, specific requests for subscribing
   sprintf(mqtt_topic_status, MQTT_TOPIC_STATUS, FACULTY_ID);
-  strcpy(mqtt_topic_legacy_messages, MQTT_LEGACY_MESSAGES);
-  strcpy(mqtt_topic_legacy_status, MQTT_LEGACY_STATUS);
-  sprintf(mqtt_client_id, "DeskUnit_%s", FACULTY_NAME);
-
-  Serial.println("MQTT topics initialized:");
-  Serial.print("Standard messages topic: ");
-  Serial.println(mqtt_topic_messages);
-  Serial.print("Standard status topic: ");
-  Serial.println(mqtt_topic_status);
-  Serial.print("Legacy messages topic: ");
-  Serial.println(mqtt_topic_legacy_messages);
-  Serial.print("Legacy status topic: ");
-  Serial.println(mqtt_topic_legacy_status);
-  Serial.print("Client ID: ");
-  Serial.println(mqtt_client_id);
+  sprintf(mqtt_topic_requests, MQTT_TOPIC_REQUESTS, FACULTY_ID); // For subscribing to its own requests
+  strcpy(mqtt_topic_legacy_messages, MQTT_LEGACY_MESSAGES); // For subscribing to legacy general messages
+  sprintf(mqtt_client_id, "DeskUnitScanner_%s", FACULTY_NAME);
+  Serial.println("MQTT topics initialized for scanner mode.");
 
   // Initialize SPI communication
   SPI.begin();
@@ -788,266 +697,72 @@ void setup() {
   mqttClient.setServer(mqtt_server, mqtt_port);
   mqttClient.setCallback(callback);
 
-  // Create the BLE Device with faculty name
-  char ble_device_name[50];
-  sprintf(ble_device_name, "ProfDeskUnit_%s", FACULTY_NAME);
-  BLEDevice::init(ble_device_name);
-  Serial.print("BLE Device initialized: ");
-  Serial.println(ble_device_name);
+  // Initialize BLE Device as a Central/Scanner
+  NimBLEDevice::init(""); // Initialize with no specific name for a scanner
+  pBLEScan = NimBLEDevice::getScan(); // Get the scanner
+  pBLEScan->setAdvertisedDeviceCallbacks(new MyAdvertisedDeviceCallbacks());
+  pBLEScan->setActiveScan(true); // Active scan uses more power, but gets scan response data
+  pBLEScan->setInterval(100); // How often to scan
+  pBLEScan->setWindow(99);  // How long to scan for during the interval
+  Serial.println("BLE Scanner initialized.");
+  displaySystemStatus("Scanning for beacon...");
+  lastBeaconSignalTime = millis() - BLE_CONNECTION_TIMEOUT - 1000; // Initialize to disconnected state
+}
 
-  // Create the BLE Server
-  pServer = BLEDevice::createServer();
-  pServer->setCallbacks(new MyServerCallbacks());
-
-  // Create the BLE Service
-  BLEService *pService = pServer->createService(SERVICE_UUID);
-
-  // Create a BLE Characteristic
-  pCharacteristic = pService->createCharacteristic(
-                      CHARACTERISTIC_UUID,
-                      BLECharacteristic::PROPERTY_READ   |
-                      BLECharacteristic::PROPERTY_WRITE  |
-                      BLECharacteristic::PROPERTY_NOTIFY |
-                      BLECharacteristic::PROPERTY_INDICATE
-                    );
-
-  // Create a BLE Descriptor
-  pCharacteristic->addDescriptor(new BLE2902());
-
-  // Start the service
-  pService->start();
-
-  // Start advertising
-  BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
-  pAdvertising->addServiceUUID(SERVICE_UUID);
-  pAdvertising->setScanResponse(false);
-  pAdvertising->setMinPreferred(0x0);
-  BLEDevice::startAdvertising();
-
-  Serial.println("BLE Server ready!");
-  displaySystemStatus("BLE Server ready");
-
-  // Initialize connection status
-  deviceConnected = false;
-  oldDeviceConnected = false;
-  lastBleSignalTime = millis();  // Initialize the last BLE signal time
-
-  // Publish initial status to MQTT (both standardized and legacy topics)
-  mqttClient.publish(mqtt_topic_status, "keychain_disconnected");
-  mqttClient.publish(mqtt_topic_legacy_status, "keychain_disconnected");
-  Serial.println("BLE server ready, waiting for keychain connection");
-  displaySystemStatus("Waiting for keychain...");
-
-  // Update time display
-  updateTimeDisplay();
-
-  // Display ready message - seamless design (preserve gold accent)
-  tft.fillRect(ACCENT_WIDTH, MESSAGE_AREA_TOP, tft.width() - ACCENT_WIDTH, tft.height() - MESSAGE_AREA_TOP - STATUS_HEIGHT, COLOR_MESSAGE_BG);
-
-  // Ensure gold accent is maintained
-  drawGoldAccent();
-
-  // Redraw NU logo
-  drawNULogo(centerX, logoY, 35);
-
-  // Text
-  tft.setCursor(ACCENT_WIDTH + 5, MESSAGE_AREA_TOP + 10);
-  tft.setTextColor(NU_GOLD);
-  tft.setTextSize(2);
-  tft.println("System Ready");
-
-  tft.setCursor(ACCENT_WIDTH + 5, logoY + 50);
-  tft.setTextColor(ST77XX_WHITE);
-  tft.setTextSize(1.5);
-  tft.println("National University");
-
-  tft.setCursor(ACCENT_WIDTH + 5, logoY + 70);
-  tft.println("Professor's Desk Unit");
-
-  tft.setCursor(ACCENT_WIDTH + 5, logoY + 100);
-  tft.setTextColor(NU_LIGHTGOLD);
-  tft.println("Waiting for messages...");
+void publishStatus(bool isPresent) {
+    const char* statusMsg = isPresent ? "keychain_connected" : "keychain_disconnected";
+    // Publish ONLY to specific faculty status topic
+    if (mqttClient.connected()) {
+        mqttClient.publish(mqtt_topic_status, statusMsg);
+        Serial.print("Published to "); Serial.print(mqtt_topic_status); Serial.print(": "); Serial.println(statusMsg);
+    }
+    lastStatusPublishTime = millis();
+    digitalWrite(LED_PIN, isPresent ? HIGH : LOW);
 }
 
 void loop() {
-  // MQTT connection management with improved reliability
-  static unsigned long lastMqttCheckTime = 0;
-  unsigned long currentMillis = millis();
-
-  // Check MQTT connection every 5 seconds
-  if (!mqttClient.connected() || (currentMillis - lastMqttCheckTime > 5000)) {
-    lastMqttCheckTime = currentMillis;
-
-    if (!mqttClient.connected()) {
-      Serial.println("MQTT disconnected, attempting to reconnect...");
-      reconnect();
-    } else {
-      // Periodically check if we're still receiving messages by pinging the broker
-      mqttClient.publish(MQTT_TOPIC_NOTIFICATIONS, "ping");
-    }
-  }
-
-  // Process MQTT messages
+  if (!mqttClient.connected()) { reconnect(); }
   mqttClient.loop();
 
-  // BLE connection management with improved reliability
-  // Handle BLE connection state changes
-  if (deviceConnected && !oldDeviceConnected) {
-    // Just connected
-    oldDeviceConnected = deviceConnected;
-    Serial.println("BLE client connected - updating status");
-    mqttClient.publish(mqtt_topic_status, "keychain_connected");
-    mqttClient.publish(mqtt_topic_legacy_status, "keychain_connected");
-    lastStatusUpdate = currentMillis;
+  unsigned long currentMillis = millis();
 
-    // Show a notification about keychain connection using centralized UI function
-    updateUIArea(3, "Keychain connected!");
-    updateUIArea(1, "Keychain Connected");
-    delay(2000);
-
-    // If we have a last message, redisplay it, otherwise clear
-    if (lastMessage.length() > 0) {
-      displayMessage(lastMessage);
-    } else {
-      tft.fillRect(ACCENT_WIDTH, MESSAGE_AREA_TOP, tft.width() - ACCENT_WIDTH, tft.height() - MESSAGE_AREA_TOP - STATUS_HEIGHT, COLOR_MESSAGE_BG);
-      drawGoldAccent();
-    }
-  }
-
-  if (!deviceConnected && oldDeviceConnected) {
-    // Just disconnected
-    oldDeviceConnected = deviceConnected;
-    Serial.println("BLE client disconnected - updating status");
-
-    // Always update status when BLE disconnects
-    mqttClient.publish(mqtt_topic_status, "keychain_disconnected");
-    mqttClient.publish(mqtt_topic_legacy_status, "keychain_disconnected");
-
-    // Show a notification about keychain disconnection using centralized UI function
-    updateUIArea(3, "Keychain disconnected!");
-    updateUIArea(1, "Keychain Disconnected");
-
-    // Use error color for the disconnection message
-    tft.setCursor(ACCENT_WIDTH + 5, MESSAGE_AREA_TOP + 10);
-    tft.setTextSize(2);
-    tft.setTextColor(COLOR_STATUS_ERROR);
-    tft.println("Keychain Disconnected");
-    delay(2000);
-
-    // If we have a last message, redisplay it, otherwise clear
-    if (lastMessage.length() > 0) {
-      displayMessage(lastMessage);
-    } else {
-      tft.fillRect(ACCENT_WIDTH, MESSAGE_AREA_TOP, tft.width() - ACCENT_WIDTH, tft.height() - MESSAGE_AREA_TOP - STATUS_HEIGHT, COLOR_MESSAGE_BG);
-      drawGoldAccent();
-    }
-
-    // Restart advertising so new clients can connect
-    BLEDevice::startAdvertising();
-  }
-
-  // BLE reconnection logic - improved with better handling for always available mode
-  if (!deviceConnected) {
-    // Check if we've lost connection for longer than the timeout
-    if (currentMillis - lastBleSignalTime > BLE_CONNECTION_TIMEOUT) {
-      // Only attempt reconnection if we haven't exceeded the maximum attempts
-      if (bleReconnectAttempts < BLE_RECONNECT_ATTEMPTS) {
-        Serial.print("BLE connection timed out. Attempting reconnection (");
-        Serial.print(bleReconnectAttempts + 1);
-        Serial.print(" of ");
-        Serial.print(BLE_RECONNECT_ATTEMPTS);
-        Serial.println(")");
-
-        // Restart advertising
-        BLEDevice::startAdvertising();
-
-        // Increment reconnection attempts
-        bleReconnectAttempts++;
-
-        // Update last signal time to prevent rapid reconnection attempts
-        lastBleSignalTime = currentMillis;
-
-        // Display reconnection attempt
-        displaySystemStatus("Attempting BLE reconnection...");
-      } else if (bleReconnectAttempts == BLE_RECONNECT_ATTEMPTS) {
-        // We've reached the maximum number of attempts
-        Serial.println("Maximum BLE reconnection attempts reached");
-
-        // Display status message
-        displaySystemStatus("BLE reconnection failed");
-
-        // Increment to prevent repeated messages
-        bleReconnectAttempts++;
-
-        // Reset the BLE device if we've reached max attempts
-        // This can help recover from some BLE stack issues
-        if (bleReconnectAttempts > BLE_RECONNECT_ATTEMPTS + 5) {
-          Serial.println("Resetting BLE device after multiple failed reconnection attempts");
-          BLEDevice::deinit(true);  // Full deinit
-          delay(1000);
-
-          // Reinitialize BLE
-          char ble_device_name[50];
-          sprintf(ble_device_name, "ProfDeskUnit_%s", FACULTY_NAME);
-          BLEDevice::init(ble_device_name);
-
-          // Recreate server and service
-          pServer = BLEDevice::createServer();
-          pServer->setCallbacks(new MyServerCallbacks());
-          BLEService *pService = pServer->createService(SERVICE_UUID);
-          pCharacteristic = pService->createCharacteristic(
-                            CHARACTERISTIC_UUID,
-                            BLECharacteristic::PROPERTY_READ   |
-                            BLECharacteristic::PROPERTY_WRITE  |
-                            BLECharacteristic::PROPERTY_NOTIFY |
-                            BLECharacteristic::PROPERTY_INDICATE
-                          );
-          pCharacteristic->addDescriptor(new BLE2902());
-          pService->start();
-          BLEDevice::startAdvertising();
-
-          // Reset counters
-          bleReconnectAttempts = 0;
-          lastBleSignalTime = currentMillis;
-          displaySystemStatus("BLE device reset completed");
-        }
+  // BLE Scanning Logic
+  if (!pBLEScan->isScanning()) {
+      if (currentMillis - lastBeaconSignalTime > BLE_SCAN_INTERVAL) { // Time to scan again if beacon hasn't been seen recently
+          Serial.println("Starting BLE scan...");
+          bleScanActive = true;
+          // Start scan for BLE_SCAN_DURATION seconds, non-blocking
+          // The scan results are handled in MyAdvertisedDeviceCallbacks
+          pBLEScan->start(BLE_SCAN_DURATION, nullptr, false); 
       }
-    }
-  } else {
-    // Reset reconnection attempts when connected
-    bleReconnectAttempts = 0;
+  } else { // Still scanning
+      // If scan duration has passed and we are still marked as scanning by our flag
+      // but pBLEScan->isScanning() is false, it means scan finished.
+      // The onResult callback would have set isFacultyPresent if found.
+      // If it wasn't found during the scan, isFacultyPresent would remain false (or become false after timeout)
+      // The timeout logic below will handle this.
+  }
+  
+  // Presence Timeout & Status Publishing Logic
+  bool statusChanged = false;
+  if (isFacultyPresent && (currentMillis - lastBeaconSignalTime > BLE_CONNECTION_TIMEOUT)) {
+    Serial.println("Beacon signal lost (timeout).");
+    isFacultyPresent = false;
+    statusChanged = true;
   }
 
-  // Periodic status updates with improved efficiency
-  if (currentMillis - lastStatusUpdate > 300000) { // Every 5 minutes
-    lastStatusUpdate = currentMillis;
-
-    // Determine status message based on connection state
-    const char* status_message;
-
-    if (deviceConnected) {
-      status_message = "keychain_connected";
-      Serial.println("Periodic BLE connected status update sent");
-    } else {
-      status_message = "keychain_disconnected";
-      Serial.println("Periodic BLE disconnected status update sent");
-    }
-
-    // Send to both standardized and legacy topics
-    mqttClient.publish(mqtt_topic_status, status_message);
-    mqttClient.publish(mqtt_topic_legacy_status, status_message);
-
-    // Also update the display status
-    if (deviceConnected) {
-      displaySystemStatus("BLE connected");
-    } else {
-      displaySystemStatus("BLE disconnected");
-    }
+  // Publish status if it changed OR if it's time for a periodic update (e.g., every 5 mins)
+  if (statusChanged || (currentMillis - lastStatusPublishTime > 300000)) { // 300000ms = 5 minutes
+      publishStatus(isFacultyPresent);
   }
 
-  // Update time display every minute
-  if (currentMillis - lastTimeUpdate > 60000) {
-    lastTimeUpdate = currentMillis;
-    updateTimeDisplay();
+  if (isFacultyPresent && !digitalRead(LED_PIN)) { // Should be on if present
+      digitalWrite(LED_PIN, HIGH);
+  } else if (!isFacultyPresent && digitalRead(LED_PIN)) { // Should be off if not present
+      digitalWrite(LED_PIN, LOW);
   }
+
+  // Update time display every minute (as before)
+  if (currentMillis - lastTimeUpdate > 60000) { lastTimeUpdate = currentMillis; updateTimeDisplay(); }
+  delay(100); // Main loop delay
 }

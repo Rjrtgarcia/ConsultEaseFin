@@ -311,185 +311,82 @@ class DashboardWindow(BaseWindow):
         """
         Initialize the dashboard UI.
         """
-        # Main layout with splitter
-        main_layout = QVBoxLayout()
+        # Main layout
+        main_layout = QVBoxLayout(self)
 
-        # Header with welcome message and student info
+        # Header (Logo and Title)
         header_layout = QHBoxLayout()
+        logo_label = QLabel()
+        pixmap = QPixmap(get_icon_path("logo.png"))
+        logo_label.setPixmap(pixmap.scaled(100, 100, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        header_layout.addWidget(logo_label)
 
-        if self.student:
-            welcome_label = QLabel(f"Welcome, {self.student.name}")
-        else:
-            welcome_label = QLabel("Welcome to ConsultEase")
-        welcome_label.setStyleSheet("font-size: 24pt; font-weight: bold;")
-        header_layout.addWidget(welcome_label)
+        title_label = QLabel("ConsultEase - Faculty Dashboard")
+        title_label.setAlignment(Qt.AlignCenter)
+        title_label.setStyleSheet("font-size: 28px; font-weight: bold; color: #0d3b66;")
+        header_layout.addWidget(title_label, 1) # Add stretch factor to push logo to left
 
-        # Logout button - smaller size as per user preference
-        logout_button = QPushButton("Logout")
-        logout_button.setFixedSize(50, 22)  # Even smaller size
-        logout_button.setStyleSheet("""
-            QPushButton {
-                background-color: #e74c3c;
-                color: white;
-                border-radius: 3px;
-                font-size: 8pt;  /* Smaller font */
-                font-weight: bold;
-                padding: 1px 2px;
-            }
-            QPushButton:hover {
-                background-color: #c0392b;
-            }
-            QPushButton:pressed {
-                background-color: #a82315;
-            }
-        """)
-        logout_button.clicked.connect(self.logout)
-        header_layout.addWidget(logout_button)
-
+        # Add a spacer to balance the logo, or ensure the title takes up more space and centers itself
+        # header_layout.addSpacerItem(QSpacerItem(100, 10, QSizePolicy.Fixed, QSizePolicy.Minimum))
+        
         main_layout.addLayout(header_layout)
 
-        # Main content with faculty grid and consultation form
-        content_splitter = QSplitter(Qt.Horizontal)
 
-        # Get screen size to set proportional initial sizes
-        screen_size = QApplication.desktop().screenGeometry()
-        screen_width = screen_size.width()
-
-        # Faculty availability grid
-        faculty_widget = QWidget()
-        faculty_layout = QVBoxLayout(faculty_widget)
-
-        # Search and filter controls in a more touch-friendly layout
-        filter_layout = QHBoxLayout()
-        filter_layout.setSpacing(10)
-
-        # Search input with icon and better styling
-        search_frame = QFrame()
-        search_frame.setStyleSheet("""
-            QFrame {
-                background-color: white;
-                border: 1px solid #ddd;
-                border-radius: 5px;
-                padding: 2px;
-            }
-        """)
-        search_layout = QHBoxLayout(search_frame)
-        search_layout.setContentsMargins(5, 0, 5, 0)
-        search_layout.setSpacing(5)
-
-        search_icon = QLabel()
-        try:
-            # search_icon_pixmap = QPixmap("resources/icons/search.png") # Old way
-            search_icon_obj = IconProvider.get_icon(Icons.SEARCH if hasattr(Icons, 'SEARCH') else "search")
-            if search_icon_obj and not search_icon_obj.isNull():
-                search_icon.setPixmap(search_icon_obj.pixmap(QSize(16, 16))) # Use pixmap() from QIcon
-            else:
-                search_icon.setText("🔍") # Fallback text
-        except Exception as e:
-            logger.error(f"Error loading search icon: {e}")
-            search_icon.setText("🔍") # Fallback text
-
-        search_layout.addWidget(search_icon)
-
-        self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("Search by name or department")
-        self.search_input.setStyleSheet("""
-            QLineEdit {
-                border: none;
-                padding: 5px;
-                font-size: 12pt;
-            }
-        """)
-        self.search_input.textChanged.connect(self.filter_faculty)
-        search_layout.addWidget(self.search_input)
-
-        filter_layout.addWidget(search_frame, 3)  # Give search more space
-
-        # Filter dropdown with better styling
-        filter_frame = QFrame()
-        filter_frame.setStyleSheet("""
-            QFrame {
-                background-color: white;
-                border: 1px solid #ddd;
-                border-radius: 5px;
-                padding: 2px;
-            }
-        """)
-        filter_inner_layout = QHBoxLayout(filter_frame)
-        filter_inner_layout.setContentsMargins(5, 0, 5, 0)
-        filter_inner_layout.setSpacing(5)
-
-        filter_label = QLabel("Filter:")
-        filter_label.setStyleSheet("font-size: 12pt;")
-        filter_inner_layout.addWidget(filter_label)
+        # Search and Filter
+        search_filter_layout = QHBoxLayout()
+        self.search_bar = QLineEdit()
+        self.search_bar.setPlaceholderText("Search faculty by name or department...")
+        self.search_bar.textChanged.connect(self.filter_faculty_cards)
+        search_filter_layout.addWidget(self.search_bar)
 
         self.filter_combo = QComboBox()
-        self.filter_combo.addItem("All", None)
-        self.filter_combo.addItem("Available Only", True)
-        self.filter_combo.addItem("Unavailable Only", False)
-        self.filter_combo.setStyleSheet("""
-            QComboBox {
-                border: none;
-                padding: 5px;
-                font-size: 12pt;
-            }
-            QComboBox::drop-down {
-                width: 20px;
-            }
-        """)
-        self.filter_combo.currentIndexChanged.connect(self.filter_faculty)
-        filter_inner_layout.addWidget(self.filter_combo)
+        self.filter_combo.addItem("All")
+        self.filter_combo.addItem("Available")
+        self.filter_combo.addItem("Busy")
+        self.filter_combo.addItem("Unavailable")
+        self.filter_combo.currentTextChanged.connect(self.filter_faculty_cards)
+        search_filter_layout.addWidget(self.filter_combo)
+        main_layout.addLayout(search_filter_layout)
 
-        filter_layout.addWidget(filter_frame, 2)  # Give filter less space
+        # Faculty Cards Area
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.scroll_area.setStyleSheet("background-color: #f0f0f0; border-radius: 5px;")
 
-        faculty_layout.addLayout(filter_layout)
+        self.faculty_cards_widget = QWidget()
+        self.faculty_grid_layout = QGridLayout(self.faculty_cards_widget)
+        # Spacing between cards
+        self.faculty_grid_layout.setSpacing(20)
+        # Align cards to top-left
+        self.faculty_grid_layout.setAlignment(Qt.AlignTop | Qt.AlignLeft)
 
-        # Faculty grid in a scroll area with improved spacing and alignment
-        self.faculty_grid = QGridLayout()
-        self.faculty_grid.setSpacing(15)  # Reduced spacing between cards for better use of space
-        self.faculty_grid.setAlignment(Qt.AlignTop | Qt.AlignHCenter)  # Align to top and center horizontally
-        self.faculty_grid.setContentsMargins(10, 10, 10, 10)  # Reduced margins around the grid
+        self.scroll_area.setWidget(self.faculty_cards_widget)
+        main_layout.addWidget(self.scroll_area)
 
-        # Create a scroll area for the faculty grid
-        faculty_scroll = QScrollArea()
-        faculty_scroll.setWidgetResizable(True)
-        faculty_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        faculty_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        faculty_scroll.setStyleSheet("""
-            QScrollArea {
-                background-color: transparent;
-                border: none;
-            }
-            QScrollBar:vertical {
-                width: 12px;
-                background: #f0f0f0;
-                border-radius: 6px;
-            }
-            QScrollBar::handle:vertical {
-                background: #c0c0c0;
-                min-height: 20px;
-                border-radius: 6px;
-            }
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-                height: 0px;
-            }
-        """)
+        # Manual RFID Entry (Moved to bottom for better layout)
+        manual_entry_layout = QHBoxLayout()
+        self.manual_rfid_input = QLineEdit()
+        self.manual_rfid_input.setPlaceholderText("Enter Student RFID/ID Manually")
+        self.manual_rfid_button = QPushButton("Submit ID")
+        self.manual_rfid_button.setIcon(QIcon(get_icon_path("input.png")))
+        self.manual_rfid_button.setStyleSheet(
+            "QPushButton { background-color: #0d3b66; color: white; padding: 10px; border-radius: 5px; }"
+            "QPushButton:hover { background-color: #1a5f99; }"
+        )
+        self.manual_rfid_button.clicked.connect(self._handle_manual_rfid_input)
+        manual_entry_layout.addWidget(self.manual_rfid_input)
+        manual_entry_layout.addWidget(self.manual_rfid_button)
+        main_layout.addLayout(manual_entry_layout)
 
-        # Create a container widget for the faculty grid
-        faculty_scroll_content = QWidget()
-        faculty_scroll_content.setLayout(self.faculty_grid)
-        faculty_scroll_content.setStyleSheet("background-color: transparent;")
 
-        # Set the scroll area widget
-        faculty_scroll.setWidget(faculty_scroll_content)
-
-        # Ensure scroll area starts at the top
-        faculty_scroll.verticalScrollBar().setValue(0)
-
-        # Store the scroll area for later reference
-        self.faculty_scroll = faculty_scroll
-
-        faculty_layout.addWidget(faculty_scroll)
+        # Logout Button
+        self.logout_button = QPushButton("Logout")
+        self.logout_button.setIcon(QIcon(get_icon_path("logout.png")))
+        self.logout_button.setStyleSheet(
+            "QPushButton { background-color: #e63946; color: white; padding: 10px; border-radius: 5px; font-size: 16px; }"
+            "QPushButton:hover { background-color: #c9303f; }"
+        )
 
         # Consultation panel with request form and history
         self.consultation_panel = ConsultationPanel(self.student)
@@ -497,10 +394,13 @@ class DashboardWindow(BaseWindow):
         self.consultation_panel.consultation_cancelled.connect(self.handle_consultation_cancel)
 
         # Add widgets to splitter
-        content_splitter.addWidget(faculty_widget)
+        content_splitter = QSplitter(Qt.Horizontal)
+        content_splitter.addWidget(self.scroll_area)
         content_splitter.addWidget(self.consultation_panel)
 
         # Set splitter sizes proportionally to screen width
+        screen_size = QApplication.desktop().screenGeometry()
+        screen_width = screen_size.width()
         content_splitter.setSizes([int(screen_width * 0.6), int(screen_width * 0.4)])
 
         # Save splitter state when it changes
@@ -537,25 +437,25 @@ class DashboardWindow(BaseWindow):
         try:
             # Clear existing faculty cards from the grid and delete them
             for card_widget in self._faculty_cards_widgets:
-                self.faculty_grid.removeWidget(card_widget)
+                self.faculty_grid_layout.removeWidget(card_widget)
                 card_widget.deleteLater()
             self._faculty_cards_widgets.clear()
 
             # Remove feedback labels if they are present
             # Check if widgets are part of the layout before removing
-            if self.loading_label.parent() is self.faculty_grid.parentWidget(): # Or check layout directly
-                 self.faculty_grid.removeWidget(self.loading_label)
+            if self.loading_label.parent() is self.faculty_grid_layout.parentWidget(): # Or check layout directly
+                 self.faculty_grid_layout.removeWidget(self.loading_label)
             self.loading_label.setVisible(False)
 
-            if self.no_results_label.parent() is self.faculty_grid.parentWidget():
-                 self.faculty_grid.removeWidget(self.no_results_label)
+            if self.no_results_label.parent() is self.faculty_grid_layout.parentWidget():
+                 self.faculty_grid_layout.removeWidget(self.no_results_label)
             self.no_results_label.setVisible(False)
 
             # Calculate optimal number of columns based on screen width
             screen_width = QApplication.desktop().screenGeometry().width()
             card_width = 240
             spacing = 15
-            grid_container_width = self.faculty_grid.parentWidget().width()
+            grid_container_width = self.faculty_grid_layout.parentWidget().width()
             if grid_container_width <= 0:
                 grid_container_width = int(screen_width * 0.6)
             grid_container_width -= 30
@@ -566,7 +466,7 @@ class DashboardWindow(BaseWindow):
             if not faculties:
                 # If no faculty found, show the no_results_label
                 if self.no_results_label.parentWidget() is None:
-                    self.faculty_grid.addWidget(self.no_results_label, 0, 0, 1, max_cols)
+                    self.faculty_grid_layout.addWidget(self.no_results_label, 0, 0, 1, max_cols)
                 self.no_results_label.setVisible(True)
             else:
                 # Add faculty cards to grid
@@ -580,7 +480,7 @@ class DashboardWindow(BaseWindow):
                     card = FacultyCard(faculty)
                     card.consultation_requested.connect(self.show_consultation_form)
                     container_layout.addWidget(card)
-                    self.faculty_grid.addWidget(container, row, col)
+                    self.faculty_grid_layout.addWidget(container, row, col)
                     self._faculty_cards_widgets.append(container) # Store the container
                     col += 1
                     if col >= max_cols:
@@ -613,7 +513,7 @@ class DashboardWindow(BaseWindow):
         """
         try:
             # Get search text and filter value
-            search_text = self.search_input.text().strip()
+            search_text = self.search_bar.text().strip()
             filter_available = self.filter_combo.currentData()
 
             # Get filtered faculty list
@@ -648,7 +548,7 @@ class DashboardWindow(BaseWindow):
                 current_scroll_position = self.faculty_scroll.verticalScrollBar().value()
 
             # Get current filter settings
-            search_text = self.search_input.text().strip()
+            search_text = self.search_bar.text().strip()
             filter_available = self.filter_combo.currentData()
 
             # Get updated faculty list with current filters

@@ -155,7 +155,13 @@ def db_operation_with_retry(max_retries=3, retry_delay=0.5):
                     else:
                         result = func(args[0], db_session, *(args[1:]), **kwargs)
                     
-                    db_session.flush() # Flush to ensure IDs are populated before commit for refresh
+                    # Diagnostic: Inspect session before flush
+                    if hasattr(db_session, 'new'):
+                        logger.debug(f"SESSION STATE BEFORE FLUSH: session.new contains: {list(db_session.new)}")
+                    if hasattr(db_session, 'dirty'):
+                        logger.debug(f"SESSION STATE BEFORE FLUSH: session.dirty contains: {list(db_session.dirty)}")
+
+                    db_session.flush() 
                     logger.debug(f"ID of result after flush: {getattr(result, 'id', 'N/A') if hasattr(result, '__mapper__') else 'Not a model'}")
                     db_session.commit()
                     logger.debug(f"ID of result after commit: {getattr(result, 'id', 'N/A') if hasattr(result, '__mapper__') else 'Not a model'}")

@@ -154,6 +154,16 @@ def db_operation_with_retry(max_retries=3, retry_delay=0.5):
                         result = func(args[0], db_session, *(args[1:]), **kwargs)
                     
                     db_session.commit()
+
+                    # If the result is a SQLAlchemy model instance, refresh it before the session is closed
+                    # This helps ensure its attributes are loaded and accessible even after detaching.
+                    if result is not None and hasattr(result, '__mapper__'):
+                        logger.debug(f"Refreshing SQLAlchemy instance of type {type(result)} before returning from db_operation.")
+                        db_session.refresh(result)
+                        # For more complex scenarios with relationships, you might need to explore options
+                        # like eager loading (e.g., joinedload, selectinload) in the query itself,
+                        # or accessing specific relationships here to trigger their load.
+
                     return result
                 except Exception as e:
                     db_session.rollback()

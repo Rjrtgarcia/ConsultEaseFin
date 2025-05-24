@@ -1036,81 +1036,89 @@ class StudentDialog(QDialog):
 class RFIDScanDialog(QDialog):
     def __init__(self, rfid_service=None, parent=None):
         super().__init__(parent)
-        self.rfid_uid = ""
         self.rfid_service = rfid_service or get_rfid_service()
-
-        self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
-        self.setWindowModality(Qt.ApplicationModal)
-
-        self.scan_received = False
+        self.config = get_config()
+        self.scanned_rfid_uid = None
+        self.animation_timer = QTimer(self)
+        self.animation_chars = ["|", "/", "-", "\\\\"] # Use escaped backslash
+        self.animation_index = 0
 
         self.init_ui()
 
-        self.callback_fn = self.handle_rfid_scan
+        if self.rfid_service:
+            logger.debug("RFIDScanDialog: Connecting to RFID service.")
+            # Connect to a signal that indicates an RFID card has been scanned
+            # This signal should be emitted by the RFIDService or RFIDController
+            # For example: self.rfid_service.card_scanned_signal.connect(self.handle_rfid_scan)
+            # Ensure the signal is appropriate for dialog context (e.g., not student-specific)
+            self.rfid_service.raw_card_scanned_signal.connect(self.handle_rfid_scan)
+        else:
+            logger.warning("RFIDScanDialog: RFIDService not available.")
+            self.status_label.setText("RFID Service not available.")
 
-        self.rfid_service.register_callback(self.callback_fn)
+        self.animation_timer.timeout.connect(self.update_animation)
+        self.animation_timer.start(200) # Animation speed
 
-        self.scanning_timer = QTimer(self)
-        self.scanning_timer.timeout.connect(self.update_animation)
-        self.scanning_timer.start(500)
-
-        if os.environ.get('RFID_SIMULATION_MODE', 'true').lower() == 'true':
-            self.simulate_button = QPushButton("Simulate Scan")
-            self.simulate_button.clicked.connect(self.simulate_scan)
-            self.layout().addWidget(self.simulate_button, alignment=Qt.AlignCenter)
+        # Timer to reset status label after a few seconds of inactivity or error
+        self.status_reset_timer = QTimer(self)
+        self.status_reset_timer.setSingleShot(True)
+        self.status_reset_timer.timeout.connect(self.reset_status_label)
 
     def init_ui(self):
-        self.setWindowTitle("RFID Scan")
-        self.setMinimumSize(350, 300) # Set a minimum size instead
+        self.setWindowTitle("Scan RFID Card")
+        self.setMinimumSize(320, 280) # Increased minimum size slightly
 
-        layout = QVBoxLayout()
-        layout.setSpacing(10) # Add some spacing between widgets
+        main_layout = QVBoxLayout() # main_layout for the dialog
+        main_layout.setSpacing(20) # Increased main layout spacing
+        main_layout.setContentsMargins(20, 20, 20, 20)
 
-        instruction_label = QLabel("Please scan the 13.56 MHz RFID card...")
-        instruction_label.setAlignment(Qt.AlignCenter)
-        instruction_label.setStyleSheet("font-size: 14pt;")
-        layout.addWidget(instruction_label)
-
-        self.animation_label = QLabel("🔄")
-        self.animation_label.setAlignment(Qt.AlignCenter)
-        self.animation_label.setStyleSheet("font-size: 48pt; color: #4a86e8;")
-        layout.addWidget(self.animation_label)
-
-        self.status_label = QLabel("Scanning...")
+        self.status_label = QLabel("Please scan an RFID card...")
         self.status_label.setAlignment(Qt.AlignCenter)
-        self.status_label.setStyleSheet("font-size: 12pt; color: #4a86e8;")
-        layout.addWidget(self.status_label)
+        self.status_label.setWordWrap(True)
+        main_layout.addWidget(self.status_label)
 
-        manual_section = QGroupBox("Manual RFID Input")
-        manual_layout = QVBoxLayout()
+        self.animation_label = QLabel()
+        self.animation_label.setAlignment(Qt.AlignCenter)
+        font = self.animation_label.font()
+        font.setPointSize(14)
+        self.animation_label.setFont(font)
+        main_layout.addWidget(self.animation_label)
 
-        manual_instructions = QLabel("If scanning doesn't work, enter the RFID manually:")
-        manual_layout.addWidget(manual_instructions)
+        # Manual UID entry
+        manual_entry_group = QGroupBox("Manual Entry / Simulation")
+        manual_entry_group.setContentsMargins(10,10,10,10) # Add margins to groupbox
+        manual_form_layout = QFormLayout(manual_entry_group) # Use QFormLayout for better label-field alignment
+        manual_form_layout.setSpacing(10) # Spacing within the form
 
-        self.manual_input = QLineEdit()
-        self.manual_input.setPlaceholderText("Enter RFID UID manually")
-        self.manual_input.returnPressed.connect(self.handle_manual_input)
-        manual_layout.addWidget(self.manual_input)
+        self.manual_uid_input = QLineEdit()
+        self.manual_uid_input.setPlaceholderText("Enter RFID UID manually")
+        manual_form_layout.addRow("RFID UID:", self.manual_uid_input)
 
-        manual_submit = QPushButton("Submit Manual RFID")
-        manual_submit.clicked.connect(self.handle_manual_input)
-        manual_layout.addWidget(manual_submit)
+        manual_entry_button = QPushButton("Submit UID")
+        manual_entry_button.clicked.connect(self.handle_manual_input)
+        manual_form_layout.addRow(manual_entry_button)
 
-        manual_section.setLayout(manual_layout)
-        layout.addWidget(manual_section)
+        if self.config.get_setting("development_mode", False):
+            self.simulate_scan_button = QPushButton("Simulate Scan (Dev)")
+            self.simulate_scan_button.clicked.connect(self.simulate_scan)
+            manual_form_layout.addRow(self.simulate_scan_button)
 
-        cancel_button = QPushButton("Cancel")
-        cancel_button.clicked.connect(self.reject)
-        layout.addWidget(cancel_button, alignment=Qt.AlignCenter)
+        main_layout.addWidget(manual_entry_group)
+        main_layout.addStretch(1) # Add stretch to push buttons to bottom
 
-        self.setLayout(layout)
-        self.adjustSize() # Adjust size to fit content
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+        main_layout.addWidget(button_box)
+
+        self.setLayout(main_layout) # Set the main layout for the dialog
+        self.adjustSize() # Adjust size after all widgets are added
 
     def handle_manual_input(self):
-        uid = self.manual_input.text().strip().upper()
+        uid = self.manual_uid_input.text().strip().upper()
         if uid:
             logger.info(f"Manual RFID input: {uid}")
-            self.manual_input.clear()
+            self.manual_uid_input.clear()
             self.handle_rfid_scan(None, uid)
         else:
             self.status_label.setText("Please enter a valid RFID UID")
@@ -1118,12 +1126,12 @@ class RFIDScanDialog(QDialog):
             QTimer.singleShot(2000, lambda: self.reset_status_label())
 
     def reset_status_label(self):
-        if not self.scan_received:
+        if not self.scanned_rfid_uid:
             self.status_label.setText("Scanning...")
             self.status_label.setStyleSheet("font-size: 12pt; color: #4a86e8;")
 
     def update_animation(self):
-        if self.scan_received:
+        if self.scanned_rfid_uid:
             return
 
         animations = ["🔄", "🔁", "🔃", "🔂"]
@@ -1134,17 +1142,16 @@ class RFIDScanDialog(QDialog):
     def handle_rfid_scan(self, student=None, rfid_uid=None):
         logger.info(f"RFIDScanDialog received scan: {rfid_uid}")
 
-        if not rfid_uid or self.scan_received:
+        if not rfid_uid or self.scanned_rfid_uid:
             logger.info(f"Ignoring scan - no UID or already received: {rfid_uid}")
             return
 
-        self.scan_received = True
-        self.rfid_uid = rfid_uid
+        self.scanned_rfid_uid = rfid_uid
 
-        self.scanning_timer.stop()
+        self.animation_timer.stop()
         self.animation_label.setText("✅")
         self.animation_label.setStyleSheet("font-size: 48pt; color: #4caf50;")
-        self.status_label.setText(f"Card detected: {self.rfid_uid}")
+        self.status_label.setText(f"Card detected: {self.scanned_rfid_uid}")
         self.status_label.setStyleSheet("font-size: 12pt; color: #4caf50;")
 
         if student:
@@ -1188,7 +1195,7 @@ class RFIDScanDialog(QDialog):
             if hasattr(self, 'simulate_button'):
                 self.simulate_button.setEnabled(False)
 
-            if not self.scan_received:
+            if not self.scanned_rfid_uid:
                 logger.info("Simulating RFID scan from RFIDScanDialog")
 
                 import random
@@ -1205,7 +1212,7 @@ class RFIDScanDialog(QDialog):
                 self.simulate_button.setEnabled(True)
 
     def get_rfid_uid(self):
-        return self.rfid_uid
+        return self.scanned_rfid_uid
 
 class SystemMaintenanceTab(QWidget):
     actual_admin_username_changed_signal = pyqtSignal(str)

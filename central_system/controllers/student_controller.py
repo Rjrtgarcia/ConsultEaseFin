@@ -65,10 +65,6 @@ class StudentController:
             logger.error(f"Error flushing student {new_student.name} (ID: {new_student.id}) within add_student: {e}", exc_info=True)
             raise # Re-raise to let decorator handle rollback etc.
         
-        rfid_service = get_rfid_service()
-        rfid_service.refresh_student_data() 
-        logger.info("RFID service student cache refreshed after adding student.")
-        
         return new_student
 
     @db_operation_with_retry()
@@ -109,10 +105,6 @@ class StudentController:
         student.rfid_uid = rfid_uid
         # db.commit() and db.refresh() handled by decorator
         logger.info(f"DB: Successfully updated student '{student.name}' (ID: {student.id}).")
-
-        rfid_service = get_rfid_service()
-        rfid_service.refresh_student_data()
-        logger.info("RFID service student cache refreshed after updating student.")
         
         return student
 
@@ -142,10 +134,6 @@ class StudentController:
         db.delete(student)
         # db.commit() handled by decorator
         logger.info(f"DB: Successfully deleted student '{student_name_for_log}' (ID: {student_id}).")
-        
-        rfid_service = get_rfid_service()
-        rfid_service.refresh_student_data()
-        logger.info("RFID service student cache refreshed after deleting student.")
         
         return True
 

@@ -2,8 +2,10 @@ import logging
 import datetime
 import time # Added for sleep in create_consultation
 from ..services import get_mqtt_service
-from ..models import Consultation, ConsultationStatus, Student, Faculty, get_db, close_db # Import Student, Faculty, close_db
-from ..models.base import db_operation_with_retry # Import decorator
+from ..models.consultation import Consultation, ConsultationStatus # Direct model imports
+from ..models.student import Student # Direct model imports
+from ..models.faculty import Faculty # Direct model imports
+from ..models.base import get_db, close_db, db_operation_with_retry # Corrected imports
 from ..utils.mqtt_topics import MQTTTopics
 
 # Set up logging

@@ -2,9 +2,10 @@ import logging
 import datetime
 from sqlalchemy import or_
 from ..services import get_mqtt_service
-from ..models import Faculty, get_db, close_db
+from ..models.base import get_db, close_db
+from ..models.faculty import Faculty
 from ..models.base import db_operation_with_retry
-from ..utils.mqtt_topics import MQTTTopics
+from ..utils.mqtt_topics import MQTTTopics, get_faculty_status_topic
 
 # Set up logging
 # logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s') # REMOVED

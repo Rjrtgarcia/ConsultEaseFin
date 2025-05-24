@@ -1,7 +1,7 @@
 import logging
 from sqlalchemy.exc import IntegrityError
-from ..models import Student, get_db, close_db
-from ..models.base import db_operation_with_retry
+from ..models.student import Student
+from ..models.base import get_db, close_db, db_operation_with_retry
 from ..services import get_rfid_service
 
 logger = logging.getLogger(__name__)

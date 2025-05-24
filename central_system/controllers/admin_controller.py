@@ -1,6 +1,6 @@
 import logging
-from ..models import Admin, get_db, close_db
-from ..models.base import db_operation_with_retry
+from ..models.admin import Admin
+from ..models.base import get_db, close_db, db_operation_with_retry
 
 # Set up logging
 # logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')

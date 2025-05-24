@@ -592,41 +592,28 @@ class ConsultEaseApp:
         """
         Handle faculty data updated event.
         """
-        # Refresh faculty grid if dashboard is active
+        logger.info("Faculty data updated, refreshing dashboard if visible.")
         if self.dashboard_window and self.dashboard_window.isVisible():
-            faculties = self.faculty_controller.get_all_faculty()
-            self.dashboard_window.populate_faculty_grid(faculties)
+            self.dashboard_window.refresh_faculty_status()
 
     def handle_student_updated(self):
         """
-        Handle student data updated event.
+        Handle student data updates from admin dashboard.
+        Refreshes RFID service cache and relevant UI components.
         """
-        logger.info("Student data updated, refreshing RFID service and controller")
-
-        # Refresh RFID service and controller's student data
+        logger.info("Student data updated, attempting to refresh RFID service cache.")
         try:
-            # First, refresh the RFID service directly
-            from central_system.services import get_rfid_service
+            from .services import get_rfid_service # Import here to avoid circular dependency at top level
             rfid_service = get_rfid_service()
             rfid_service.refresh_student_data()
-
-            # Then refresh the RFID controller
-            students = self.rfid_controller.refresh_student_data()
-
-            # Log all students for debugging
-            for student in students:
-                logger.info(f"Student: ID={student.id}, Name={student.name}, RFID={student.rfid_uid}")
-
-            # If login window is active, make sure it's ready for scanning
-            if self.login_window and self.login_window.isVisible():
-                logger.info("Login window is active, ensuring RFID scanning is active")
-                self.login_window.start_rfid_scanning()
-
-            logger.info("Student data refresh complete")
+            logger.info("RFID service cache refreshed successfully via main app handler.")
         except Exception as e:
-            logger.error(f"Error refreshing student data: {str(e)}")
-            import traceback
-            logger.error(f"Traceback: {traceback.format_exc()}")
+            logger.error(f"Error refreshing RFID service cache from main app: {str(e)}", exc_info=True)
+
+        # Potentially refresh other UI elements if needed
+        # For example, if a student list is displayed on the main dashboard (not currently the case)
+        # if self.dashboard_window and self.dashboard_window.isVisible():
+        #     self.dashboard_window.refresh_student_related_ui()
 
     def handle_window_change(self, window_name, data=None):
         """

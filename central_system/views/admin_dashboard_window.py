@@ -36,10 +36,9 @@ class AdminDashboardWindow(BaseWindow):
     admin_username_changed_signal = pyqtSignal(str) # Define the signal
 
     def __init__(self, admin=None, parent=None):
-        super().__init__(parent)
-        self.admin = admin # Should now always be an Admin model object or None
-        self.config = get_config()
-        self.init_ui()
+        self.admin = admin # Initialize self.admin first
+        super().__init__(parent) # Now call super, which will call self.init_ui()
+        self.config = get_config() # It's fine to get it again or ensure it's set if needed here.
 
         # Connect signals
         if hasattr(self.system_tab, 'actual_admin_username_changed_signal'):

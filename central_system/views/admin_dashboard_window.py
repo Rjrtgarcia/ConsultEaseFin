@@ -1008,7 +1008,7 @@ class StudentDialog(QDialog):
 
         self.scan_dialog = RFIDScanDialog(self.rfid_service, parent=self)
         if self.scan_dialog.exec_() == QDialog.Accepted:
-            rfid_uid_from_scan = self.scan_dialog.rfid_uid
+            rfid_uid_from_scan = self.scan_dialog.get_rfid_uid()
             if rfid_uid_from_scan:
                 self.rfid_edit.setText(rfid_uid_from_scan)
                 self.rfid_uid_val = rfid_uid_from_scan # Update instance attribute
@@ -1051,7 +1051,7 @@ class RFIDScanDialog(QDialog):
             # This signal should be emitted by the RFIDService or RFIDController
             # For example: self.rfid_service.card_scanned_signal.connect(self.handle_rfid_scan)
             # Ensure the signal is appropriate for dialog context (e.g., not student-specific)
-            self.rfid_service.raw_card_scanned_signal.connect(self.handle_rfid_scan)
+            self.rfid_service.card_read_signal.connect(self.handle_rfid_scan)
         else:
             logger.warning("RFIDScanDialog: RFIDService not available.")
             self.status_label.setText("RFID Service not available.")

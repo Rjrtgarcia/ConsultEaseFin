@@ -153,6 +153,7 @@ def db_operation_with_retry(max_retries=3, retry_delay=0.5):
                     else:
                         result = func(args[0], db_session, *(args[1:]), **kwargs)
                     
+                    db_session.flush() # Flush to ensure IDs are populated before commit for refresh
                     db_session.commit()
 
                     # If the result is a SQLAlchemy model instance, refresh it before the session is closed

@@ -214,8 +214,7 @@ class ConsultEaseApp:
         self.fullscreen = self.config.get('ui.fullscreen', False)
 
         # Initialize KeyboardManager
-        keyboard_cmd = self.config.get("system.keyboard_command", "squeekboard")
-        self.keyboard_manager = KeyboardManager(keyboard_command=keyboard_cmd)
+        self.keyboard_manager = KeyboardManager()
         self.app.keyboard_manager = self.keyboard_manager # Make it accessible globally if needed
 
         # Install focus event filter for auto keyboard display

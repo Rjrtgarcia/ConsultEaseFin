@@ -47,7 +47,7 @@ class StudentController:
         Raises:
             ValueError: If RFID UID already exists.
         """
-        logger.info(f"Attempting to add student (FULLY RESTORED): Name='{name}', Department='{department}', RFID='{rfid_uid}'")
+        logger.info(f"Attempting to add student (FULLY RESTORED + EARLY FLUSH): Name='{name}', Department='{department}', RFID='{rfid_uid}'")
         # Case-insensitive check for existing RFID UID
         existing_student = db.query(Student).filter(Student.rfid_uid.ilike(rfid_uid)).first()
         if existing_student:
@@ -56,7 +56,14 @@ class StudentController:
 
         new_student = Student(name=name, department=department, rfid_uid=rfid_uid)
         db.add(new_student)
-        logger.info(f"DB (FULLY RESTORED): Added student '{new_student.name}' with ID '{new_student.id}' to session.")
+        logger.info(f"DB: Added student '{new_student.name}' (ID before early flush: {new_student.id}) to session {db}.")
+        
+        try:
+            db.flush() # Attempt to flush here
+            logger.info(f"DB: Flushed student '{new_student.name}' (ID after early flush: {new_student.id}) in session {db}.")
+        except Exception as e:
+            logger.error(f"Error flushing student {new_student.name} (ID: {new_student.id}) within add_student: {e}", exc_info=True)
+            raise # Re-raise to let decorator handle rollback etc.
         
         rfid_service = get_rfid_service()
         rfid_service.refresh_student_data() 

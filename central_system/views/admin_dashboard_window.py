@@ -40,9 +40,11 @@ class AdminDashboardWindow(BaseWindow):
         super().__init__(parent) # Now call super, which will call self.init_ui()
         self.config = get_config() # It's fine to get it again or ensure it's set if needed here.
 
-        # Connect signals
-        if hasattr(self.system_tab, 'actual_admin_username_changed_signal'):
+        # Connect signals AFTER self.system_tab is created by init_ui (called via super)
+        if hasattr(self, 'system_tab') and hasattr(self.system_tab, 'actual_admin_username_changed_signal'):
              self.system_tab.actual_admin_username_changed_signal.connect(self.handle_admin_username_changed_on_dashboard)
+        else:
+            logger.warning("Could not connect system_tab.actual_admin_username_changed_signal in AdminDashboardWindow.__init__.")
 
     def init_ui(self):
         """

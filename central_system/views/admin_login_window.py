@@ -24,7 +24,6 @@ class AdminLoginWindow(BaseWindow):
         super().__init__(parent)
         self.admin_controller = AdminController.instance()
         self.keyboard_manager = get_keyboard_manager()
-        self.init_ui()
 
     def init_ui(self):
         """

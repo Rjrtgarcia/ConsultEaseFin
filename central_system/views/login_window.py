@@ -18,16 +18,16 @@ class LoginWindow(BaseWindow):
     student_authenticated = pyqtSignal(object)
 
     def __init__(self, parent=None):
-        self.config = get_config() # Moved BEFORE super().__init__
+        self.config = get_config()
         super().__init__(parent)
         self.rfid_controller = RFIDController.instance() # Use singleton
         self.student_controller = StudentController.instance() # Assuming it's needed
+        self.rfid_service = get_rfid_service()
+        self.keyboard_manager = get_keyboard_manager()
 
         # Set up logging
         self.logger = logging.getLogger(__name__)
         self.logger.info("Initializing LoginWindow")
-
-        self.init_ui()
 
         # Initialize state variables
         # self.rfid_reading = False # No longer managed here

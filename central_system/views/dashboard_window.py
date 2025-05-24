@@ -2,7 +2,7 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                                QPushButton, QGridLayout, QScrollArea, QFrame,
                                QLineEdit, QTextEdit, QComboBox, QMessageBox,
                                QSplitter, QApplication, QSizePolicy)
-from PyQt5.QtCore import Qt, pyqtSignal, QTimer, QSize
+from PyQt5.QtCore import Qt, pyqtSignal, QTimer, QSize, QSettings
 from PyQt5.QtGui import QIcon, QColor, QPixmap
 
 import os
@@ -16,6 +16,7 @@ from ..models.student import Student
 from ..models.consultation import Consultation
 from ..config import get_config
 from ..services import get_rfid_service, get_mqtt_service
+from ..utils.notification_manager import NotificationManager
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -294,8 +295,8 @@ class DashboardWindow(BaseWindow):
         # Store faculty cards to manage them directly
         self._faculty_cards_widgets = []
 
-        # Initialize UI components
-        self.init_ui()
+        # Initialize UI components - REMOVED as super().__init__ calls init_ui polymorphicly
+        # self.init_ui()
 
         # Set up auto-refresh timer for faculty status with further reduced frequency
         self.refresh_timer = QTimer(self)
@@ -311,6 +312,9 @@ class DashboardWindow(BaseWindow):
             logger.info(f"Dashboard initialized with student: ID={student.id}, Name={student.name}, RFID={student.rfid_uid}")
         else:
             logger.warning("Dashboard initialized without student information")
+        
+        # Initial population of faculty grid
+        self.refresh_faculty_status()
 
     def init_ui(self):
         """

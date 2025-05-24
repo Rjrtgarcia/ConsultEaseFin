@@ -178,6 +178,7 @@ class Icons:
     RFID = "rfid"
     REPORTS = "reports"
     DATABASE = "database"
+    APP_ICON = "app_icon"
 
 def setup_default_icons():
     """

@@ -13,6 +13,11 @@ from PyQt5.QtGui import QColor
 
 import logging
 
+# Added imports
+from ..controllers import ConsultationController, FacultyController
+from ..config import get_config
+from ..utils.theme import ConsultEaseTheme
+
 # Set up logging
 logger = logging.getLogger(__name__)
 
@@ -441,9 +446,11 @@ class ConsultationHistoryPanel(QFrame):
     def __init__(self, student=None, parent=None):
         super().__init__(parent)
         self.student = student
-        self.consultations = []
-        from ..controllers import ConsultationController # Import here
-        self.consultation_controller = ConsultationController.instance() # Instantiate once
+        self.consultation_controller = ConsultationController.instance()
+        self.consultations_data = []
+        self.table_update_timer = QTimer(self)
+        self.table_update_timer.setSingleShot(True)
+        self.table_update_timer.timeout.connect(self.update_consultation_table)
         self.init_ui()
 
     def init_ui(self):
@@ -940,6 +947,9 @@ class ConsultationPanel(QTabWidget):
     def __init__(self, student=None, parent=None):
         super().__init__(parent)
         self.student = student
+        self.consultation_controller = ConsultationController.instance()
+        self.faculty_controller = FacultyController.instance()
+        self.config = get_config()
         self.init_ui()
 
         # Set up auto-refresh timer for history panel

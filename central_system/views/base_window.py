@@ -31,7 +31,9 @@ class BaseWindow(QMainWindow):
         self.setGeometry(100, 100, 1024, 768) # Default size
 
         # Set application icon (use helper from icons module)
-        app_icon = IconProvider.get_icon(Icons.APP_ICON if hasattr(Icons, 'APP_ICON') else "app", QSize(64, 64))
+        # If Icons.APP_ICON is not defined, use a generic name like "app_icon"
+        app_icon_name = Icons.APP_ICON if hasattr(Icons, 'APP_ICON') else "app_icon"
+        app_icon = IconProvider.get_icon(app_icon_name, QSize(64, 64))
         if app_icon and not app_icon.isNull():
             self.setWindowIcon(app_icon)
         else:

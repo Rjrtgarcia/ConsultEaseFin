@@ -27,7 +27,9 @@ log_max_size = config.get('logging.max_size', 10*1024*1024) # Default 10MB
 log_backup_count = config.get('logging.backup_count', 5)
 
 # Ensure logs directory exists
-os.makedirs(os.path.dirname(log_file), exist_ok=True)
+log_dir = os.path.dirname(log_file)
+if log_dir: # Only call makedirs if log_dir is not an empty string
+    os.makedirs(log_dir, exist_ok=True)
 
 # Create handlers
 stream_handler = logging.StreamHandler(sys.stdout)

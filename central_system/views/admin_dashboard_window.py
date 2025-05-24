@@ -769,13 +769,14 @@ class StudentManagementTab(QWidget):
     def add_student(self):
         dialog = StudentDialog(self.student_controller, self.rfid_service, parent=self)
         if dialog.exec_() == QDialog.Accepted:
-            name = dialog.name_edit.text().strip()
-            department = dialog.department_edit.text().strip()
-            rfid_uid = dialog.rfid_edit.text().strip()
+            name = dialog.name_val # Use validated value
+            department = dialog.department_val # Use validated value
+            rfid_uid = dialog.rfid_uid_val # Use validated value
 
-            if not (name and department and rfid_uid):
-                QMessageBox.warning(self, "Input Error", "Name, Department, and RFID UID are required.")
-                return
+            # The dialog.accept() already performed this check
+            # if not (name and department and rfid_uid):
+            #     QMessageBox.warning(self, "Input Error", "Name, Department, and RFID UID are required.")
+            #     return
             
             logger.info(f"Attempting to add student via controller: {name}, Dept: {department}, RFID: {rfid_uid}")
             try:
@@ -823,17 +824,18 @@ class StudentManagementTab(QWidget):
         dialog.name_edit.setText(current_student.name)
         dialog.department_edit.setText(current_student.department)
         dialog.rfid_edit.setText(current_student.rfid_uid)
-        dialog.rfid_uid = current_student.rfid_uid
+        # dialog.rfid_uid = current_student.rfid_uid # This was setting an old attribute, rfid_uid_val is now used internally by dialog
 
         if dialog.exec_() == QDialog.Accepted:
             try:
-                name = dialog.name_edit.text().strip()
-                department = dialog.department_edit.text().strip()
-                rfid_uid = dialog.rfid_edit.text().strip()
+                name = dialog.name_val # Use validated value
+                department = dialog.department_val # Use validated value
+                rfid_uid = dialog.rfid_uid_val # Use validated value
 
-                if not (name and department and rfid_uid):
-                    QMessageBox.warning(self, "Input Error", "Name, Department, and RFID UID are required.")
-                    return
+                # This check is already done by dialog.accept()
+                # if not (name and department and rfid_uid):
+                #     QMessageBox.warning(self, "Input Error", "Name, Department, and RFID UID are required.")
+                #     return
 
                 logger.info(f"Attempting to update student via controller: ID={student_id}, Name={name}, Dept={department}, RFID={rfid_uid}")
                 updated_student = self.student_controller.update_student(
@@ -917,7 +919,12 @@ class StudentDialog(QDialog):
         self.rfid_service = rfid_service
         self.student_id = student_id
         self.original_rfid_uid = current_rfid # Store original RFID for edit mode if needed for complex validation
-        self.rfid_uid = current_rfid # This will be updated by scan_rfid or manual input
+        
+        # Attributes to store validated data
+        self.name_val = ""
+        self.department_val = ""
+        self.rfid_uid_val = current_rfid if current_rfid else "" # Initialize with current_rfid
+
         self.scan_dialog_instance = None
         self.init_ui()
 
@@ -953,11 +960,6 @@ class StudentDialog(QDialog):
 
         layout.addLayout(form_layout)
 
-        # Progress Indicator (optional, can be shown during blocking operations)
-        self.progress_indicator = ProgressIndicator(self)
-        self.progress_indicator.setVisible(False)
-        layout.addWidget(self.progress_indicator)
-
         button_box = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         button_box.accepted.connect(self.accept)
         button_box.rejected.connect(self.reject)
@@ -972,14 +974,13 @@ class StudentDialog(QDialog):
         if not self.student_id:
             return
         try:
-            # Ensure get_student_by_id does not require a db session as argument
-            # or is called within a session managed by the controller if needed for lazy loading
             student = self.student_controller.get_student_by_id(self.student_id)
             if student:
                 self.name_edit.setText(student.name)
                 self.department_edit.setText(student.department)
                 self.rfid_edit.setText(student.rfid_uid)
                 self.original_rfid_uid = student.rfid_uid
+                self.rfid_uid_val = student.rfid_uid # Update rfid_uid_val as well
             else:
                 QMessageBox.warning(self, "Error", "Student not found.")
                 self.reject() # or disable save
@@ -989,62 +990,33 @@ class StudentDialog(QDialog):
             self.reject()
 
     def scan_rfid(self):
-        # Ensure rfid_service is passed and available
         if not hasattr(self, 'rfid_service') or not self.rfid_service:
             QMessageBox.critical(self, "Error", "RFID Service not available.")
             return
 
-        # Pass self.rfid_service to RFIDScanDialog
         self.scan_dialog = RFIDScanDialog(self.rfid_service, parent=self)
         if self.scan_dialog.exec_() == QDialog.Accepted:
-            rfid_uid = self.scan_dialog.rfid_uid
-            if rfid_uid:
-                self.rfid_edit.setText(rfid_uid)
-        self.scan_dialog.deleteLater() # Ensure dialog is cleaned up
+            rfid_uid_from_scan = self.scan_dialog.rfid_uid
+            if rfid_uid_from_scan:
+                self.rfid_edit.setText(rfid_uid_from_scan)
+                self.rfid_uid_val = rfid_uid_from_scan # Update instance attribute
+        self.scan_dialog.deleteLater() 
         self.scan_dialog = None
 
     def accept(self):
-        name = sanitize_string(self.name_edit.text())
-        department = sanitize_string(self.department_edit.text())
-        rfid_uid = sanitize_string(self.rfid_edit.text())
+        self.name_val = sanitize_string(self.name_edit.text())
+        self.department_val = sanitize_string(self.department_edit.text())
+        self.rfid_uid_val = sanitize_string(self.rfid_edit.text()) # Update from rfid_edit field
 
-        if not name or not department or not rfid_uid:
+        if not self.name_val or not self.department_val or not self.rfid_uid_val:
             QMessageBox.warning(self, "Input Error", "All fields (Name, Department, RFID UID) are required.")
-            return
+            return # Important: do not call super().accept()
 
-        self.progress_indicator.start_animation()
-        self.progress_indicator.setVisible(True)
-        QApplication.processEvents() # Ensure UI updates
+        # Further validation can be added here if needed, specific to the dialog's role.
+        # For example, checking RFID format, name length, etc.
+        # If any validation fails, show a QMessageBox and 'return' without calling super().accept().
 
-        try:
-            if self.student_id: # Update existing student
-                # The controller's update_student method should handle checking if the new RFID UID
-                # conflicts with another student, not the one being edited.
-                self.student_controller.update_student(
-                    student_id=self.student_id,
-                    name=name,
-                    department=department,
-                    rfid_uid=rfid_uid
-                )
-                QMessageBox.information(self, "Success", "Student updated successfully.")
-            else: # Add new student
-                self.student_controller.add_student(
-                    name=name,
-                    department=department,
-                    rfid_uid=rfid_uid
-                )
-                QMessageBox.information(self, "Success", "Student added successfully.")
-            
-            super().accept() # Call QDialog.accept() to close dialog and signal success
-        except ValueError as ve:
-            logger.warning(f"Validation error while saving student: {ve}")
-            QMessageBox.warning(self, "Validation Error", str(ve))
-        except Exception as e:
-            logger.error(f"Error saving student: {e}", exc_info=True)
-            QMessageBox.critical(self, "Error", f"An unexpected error occurred: {e}")
-        finally:
-            self.progress_indicator.stop_animation()
-            self.progress_indicator.setVisible(False)
+        super().accept() # Call QDialog.accept() to close dialog and signal success to the caller
 
     def reject(self):
         super().reject()

@@ -379,20 +379,20 @@ class DashboardWindow(BaseWindow):
         self.scroll_area.setWidget(self.faculty_cards_widget)
         main_layout.addWidget(self.scroll_area)
 
-        # Manual RFID Entry (Moved to bottom for better layout)
-        manual_entry_layout = QHBoxLayout()
-        self.manual_rfid_input = QLineEdit()
-        self.manual_rfid_input.setPlaceholderText("Enter Student RFID/ID Manually")
-        self.manual_rfid_button = QPushButton("Submit ID")
-        self.manual_rfid_button.setIcon(IconProvider.get_icon("input"))
-        self.manual_rfid_button.setStyleSheet(
-            "QPushButton { background-color: #0d3b66; color: white; padding: 10px; border-radius: 5px; }"
-            "QPushButton:hover { background-color: #1a5f99; }"
-        )
-        self.manual_rfid_button.clicked.connect(self._handle_manual_rfid_input)
-        manual_entry_layout.addWidget(self.manual_rfid_input)
-        manual_entry_layout.addWidget(self.manual_rfid_button)
-        main_layout.addLayout(manual_entry_layout)
+        # Manual RFID Entry (Moved to bottom for better layout) - Temporarily commented out
+        # manual_entry_layout = QHBoxLayout()
+        # self.manual_rfid_input = QLineEdit()
+        # self.manual_rfid_input.setPlaceholderText("Enter Student RFID/ID Manually")
+        # self.manual_rfid_button = QPushButton("Submit ID")
+        # self.manual_rfid_button.setIcon(IconProvider.get_icon("input"))
+        # self.manual_rfid_button.setStyleSheet(
+        #     "QPushButton { background-color: #0d3b66; color: white; padding: 10px; border-radius: 5px; }"
+        #     "QPushButton:hover { background-color: #1a5f99; }"
+        # )
+        # self.manual_rfid_button.clicked.connect(self._handle_manual_rfid_input) # This line caused the AttributeError
+        # manual_entry_layout.addWidget(self.manual_rfid_input)
+        # manual_entry_layout.addWidget(self.manual_rfid_button)
+        # main_layout.addLayout(manual_entry_layout)
 
         # Logout Button
         self.logout_button = QPushButton("Logout")

@@ -9,7 +9,7 @@ class Student(Base):
     """
     __tablename__ = "students"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     name = Column(String, nullable=False)
     department = Column(String, nullable=False)
     rfid_uid = Column(String, unique=True, index=True)

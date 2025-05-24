@@ -14,7 +14,7 @@ class Faculty(Base):
     """
     __tablename__ = "faculty"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     name = Column(String, nullable=False)
     department = Column(String, nullable=False)
     email = Column(String, unique=True, index=True)

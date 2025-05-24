@@ -25,7 +25,7 @@ class Admin(Base):
     """
     __tablename__ = "admins"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     username = Column(String, unique=True, index=True, nullable=False)
     password_hash = Column(String, nullable=False)
     salt = Column(String, nullable=False) # Kept for SHA256 fallback, bcrypt includes its own

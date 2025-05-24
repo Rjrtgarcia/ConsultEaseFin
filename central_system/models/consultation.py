@@ -20,7 +20,7 @@ class Consultation(Base):
     """
     __tablename__ = "consultations"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     student_id = Column(Integer, ForeignKey("students.id"), nullable=False)
     faculty_id = Column(Integer, ForeignKey("faculty.id"), nullable=False)
     request_message = Column(String, nullable=False)

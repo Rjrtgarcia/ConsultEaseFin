@@ -15,11 +15,15 @@ class ConsultEaseTheme:
 
     # Color palette
     PRIMARY_COLOR = "#0d3b66"       # Dark blue
+    PRIMARY_COLOR_HOVER = "#1a5f99" # Slightly lighter dark blue for hover
     SECONDARY_COLOR = "#3498db"     # Light blue
     ACCENT_COLOR = "#f4d35e"        # Gold
     SUCCESS_COLOR = "#2ecc71"       # Green
+    SUCCESS_COLOR_HOVER = "#27ae60" # Darker Green for hover
     WARNING_COLOR = "#f39c12"       # Orange
+    WARNING_COLOR_HOVER = "#e67e22" # Darker Orange for hover
     ERROR_COLOR = "#e74c3c"         # Red
+    ERROR_COLOR_HOVER = "#c0392b"   # Darker Red for hover
     INFO_COLOR = "#3498db"          # Blue
 
     # Status colors with improved contrast
@@ -30,13 +34,19 @@ class ConsultEaseTheme:
 
     # Background colors
     BG_PRIMARY = "#ffffff"          # White
+    BG_PRIMARY_MUTED = "#e9ecef"    # Very light gray, for tab backgrounds
     BG_SECONDARY = "#f5f5f5"        # Light gray
+    BG_SECONDARY_LIGHT = "#f8f9fa"  # Even lighter gray / off-white for specific panels
     BG_DARK = "#2c3e50"             # Dark blue-gray
 
     # Text colors
     TEXT_PRIMARY = "#2c3e50"        # Dark blue-gray
     TEXT_SECONDARY = "#7f8c8d"      # Medium gray
     TEXT_LIGHT = "#ecf0f1"          # Off-white
+
+    # Border Colors
+    BORDER_COLOR = "#dee2e6"        # Standard border color, light gray
+    BORDER_COLOR_LIGHT = "#e0e0e0"  # Lighter border for subtle lines
 
     # Font sizes (in pt)
     FONT_SIZE_SMALL = 10

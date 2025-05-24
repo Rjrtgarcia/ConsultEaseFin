@@ -9,7 +9,7 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                             QTableWidgetItem, QHeaderView, QDialog, QFormLayout,
                             QSizePolicy, QProgressBar, QApplication)
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer, QPoint
-from PyQt5.QtGui import QColor
+from PyQt5.QtGui import QColor, QIcon
 
 import logging
 
@@ -17,6 +17,7 @@ import logging
 from ..controllers import ConsultationController, FacultyController
 from ..config import get_config
 from ..utils.theme import ConsultEaseTheme
+from ..utils.icons import IconProvider, Icons
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -37,248 +38,196 @@ class ConsultationRequestForm(QFrame):
         """
         Initialize the consultation request form UI.
         """
-        # Import theme system
-        from ..utils.theme import ConsultEaseTheme
+        # Using ConsultEaseTheme for consistent styling
+        theme = ConsultEaseTheme
 
         self.setFrameShape(QFrame.StyledPanel)
         self.setObjectName("consultation_request_form")
-
-        # Apply theme-based stylesheet with further improved readability
-        self.setStyleSheet('''
-            QFrame#consultation_request_form {
-                background-color: #f8f9fa;
-                border: 1px solid #dee2e6;
-                border-radius: 10px;
+        self.setStyleSheet(f"""
+            QFrame#consultation_request_form {{
+                background-color: {theme.BG_SECONDARY_LIGHT};
+                border: 1px solid {theme.BORDER_COLOR};
+                border-radius: {theme.BORDER_RADIUS_LARGE}px;
                 padding: 20px;
-            }
-            QLabel {
-                font-size: 16pt;
-                color: #212529;
-                font-weight: 500;
-                margin-bottom: 5px;
-            }
-            QLineEdit, QTextEdit, QComboBox {
-                border: 2px solid #4dabf7;
-                border-radius: 5px;
-                padding: 15px;
-                background-color: white;
-                font-size: 16pt;
-                color: #212529;
-                margin: 5px 0;
-            }
-            QLineEdit:focus, QTextEdit:focus, QComboBox:focus {
-                border: 2px solid #228be6;
-                background-color: #f1f3f5;
-            }
-            QPushButton {
-                border-radius: 5px;
-                padding: 15px 25px;
-                font-size: 16pt;
-                font-weight: bold;
+            }}
+            QLabel {{
+                font-size: {theme.FONT_SIZE_MEDIUM}pt;
+                color: {theme.TEXT_PRIMARY};
+                font-weight: bold; /* Make labels bold */
+                margin-bottom: 3px;
+            }}
+            QLineEdit, QTextEdit, QComboBox {{
+                border: 1px solid {theme.BORDER_COLOR};
+                border-radius: {theme.BORDER_RADIUS_NORMAL}px;
+                padding: 10px;
+                background-color: {theme.BG_PRIMARY};
+                font-size: {theme.FONT_SIZE_NORMAL}pt;
+                color: {theme.TEXT_PRIMARY};
+                margin-bottom: 10px; /* Add some margin below inputs */
+                min-height: {theme.TOUCH_MIN_HEIGHT}px; /* Ensure touch height */
+            }}
+            QLineEdit:focus, QTextEdit:focus, QComboBox:focus {{
+                border: 2px solid {theme.PRIMARY_COLOR};
+                background-color: {theme.BG_PRIMARY};
+            }}
+            QComboBox::drop-down {{
+                subcontrol-origin: padding;
+                subcontrol-position: top right;
+                width: 25px;
+                border-left: 1px solid {theme.BORDER_COLOR};
+            }}
+            QComboBox::down-arrow {{
+                image: url({IconProvider.get_icon(Icons.ARROW_DOWN, QSize(16,16)).name().replace("\\\\", "/")}); /* Use icon for arrow */
+                width: 16px;
+                height: 16px;
+            }}
+            QComboBox QAbstractItemView {{ /* Style for the dropdown list */
+                border: 1px solid {theme.PRIMARY_COLOR};
+                background-color: {theme.BG_PRIMARY};
+                color: {theme.TEXT_PRIMARY};
+                selection-background-color: {theme.ACCENT_COLOR};
+                selection-color: {theme.TEXT_LIGHT};
+                font-size: {theme.FONT_SIZE_NORMAL}pt;
+                padding: 5px;
+            }}
+            QPushButton#submit_button {{
+                background-color: {theme.SUCCESS_COLOR};
                 color: white;
-                margin: 10px 0;
-            }
-            QPushButton:hover {
-                opacity: 0.9;
-            }
-        ''')
+                font-weight: bold;
+                padding: 12px 20px;
+                border-radius: {theme.BORDER_RADIUS_NORMAL}px;
+                font-size: {theme.FONT_SIZE_MEDIUM}pt;
+            }}
+            QPushButton#submit_button:hover {{
+                background-color: {theme.SUCCESS_COLOR_HOVER};
+            }}
+            QPushButton#cancel_button {{
+                background-color: {theme.ERROR_COLOR};
+                color: white;
+                font-weight: bold;
+                padding: 12px 20px;
+                border-radius: {theme.BORDER_RADIUS_NORMAL}px;
+                font-size: {theme.FONT_SIZE_MEDIUM}pt;
+            }}
+            QPushButton#cancel_button:hover {{
+                background-color: {theme.ERROR_COLOR_HOVER};
+            }}
+        """)
 
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(20, 20, 20, 20)
-        main_layout.setSpacing(15)
+        main_layout.setContentsMargins(15, 15, 15, 15) # Reduced margins for a tighter look
+        main_layout.setSpacing(12) # Slightly reduced spacing
 
         # Form title
         title_label = QLabel("Request Consultation")
-        title_label.setStyleSheet("font-size: 20pt; font-weight: bold; color: #2c3e50;")
+        title_label.setStyleSheet(f"font-size: {theme.FONT_SIZE_LARGE}pt; font-weight: bold; color: {theme.PRIMARY_COLOR}; margin-bottom: 10px;")
         main_layout.addWidget(title_label)
 
         # Faculty selection
-        faculty_layout = QHBoxLayout()
         faculty_label = QLabel("Faculty:")
-        faculty_label.setFixedWidth(120)
-        faculty_label.setStyleSheet("font-size: 14pt; font-weight: bold; color: #2c3e50;")
+        # faculty_label.setFixedWidth(120) # Remove fixed width for better flow
         self.faculty_combo = QComboBox()
-        self.faculty_combo.setMinimumWidth(300)
-        self.faculty_combo.setStyleSheet("""
-            QComboBox {
-                border: 2px solid #3498db;
-                border-radius: 5px;
-                padding: 10px;
-                background-color: white;
-                font-size: 12pt;
-            }
-            QComboBox:focus {
-                border: 2px solid #2980b9;
-            }
-            QComboBox::drop-down {
-                subcontrol-origin: padding;
-                subcontrol-position: top right;
-                width: 30px;
-                border-left: 1px solid #3498db;
-            }
-            QComboBox QAbstractItemView {
-                border: 2px solid #3498db;
-                selection-background-color: #3498db;
-                selection-color: white;
-                background-color: white;
-                font-size: 12pt;
-            }
-        """)
-        faculty_layout.addWidget(faculty_label)
-        faculty_layout.addWidget(self.faculty_combo)
-        main_layout.addLayout(faculty_layout)
+        self.faculty_combo.setMinimumWidth(250) # Ensure enough width
+        # self.faculty_combo.setToolTip("Select the faculty member for consultation.") # Add tooltip
+        main_layout.addWidget(faculty_label)
+        main_layout.addWidget(self.faculty_combo)
 
         # Course code input
-        course_layout = QHBoxLayout()
-        course_label = QLabel("Course Code:")
-        course_label.setFixedWidth(120)
-        course_label.setStyleSheet("font-size: 14pt; font-weight: bold; color: #2c3e50;")
+        course_label = QLabel("Course Code (Optional):")
         self.course_input = QLineEdit()
-        self.course_input.setPlaceholderText("e.g., CS101 (optional)")
-        self.course_input.setStyleSheet("""
-            QLineEdit {
-                border: 2px solid #3498db;
-                border-radius: 5px;
-                padding: 10px;
-                background-color: white;
-                font-size: 12pt;
-            }
-            QLineEdit:focus {
-                border: 2px solid #2980b9;
-            }
-        """)
-        course_layout.addWidget(course_label)
-        course_layout.addWidget(self.course_input)
-        main_layout.addLayout(course_layout)
+        self.course_input.setPlaceholderText("e.g., CS101")
+        # self.course_input.setToolTip("Enter the relevant course code, if any.")
+        main_layout.addWidget(course_label)
+        main_layout.addWidget(self.course_input)
 
         # Message input
-        message_layout = QVBoxLayout()
         message_label = QLabel("Consultation Details:")
-        message_label.setStyleSheet("font-size: 14pt; font-weight: bold; color: #2c3e50;")
         self.message_input = QTextEdit()
         self.message_input.setPlaceholderText("Describe what you'd like to discuss...")
-        self.message_input.setStyleSheet("""
-            QTextEdit {
-                border: 2px solid #3498db;
-                border-radius: 5px;
-                padding: 10px;
-                background-color: white;
-                font-size: 12pt;
-            }
-            QTextEdit:focus {
-                border: 2px solid #2980b9;
-            }
-        """)
-        self.message_input.setMinimumHeight(150)
-        message_layout.addWidget(message_label)
-        message_layout.addWidget(self.message_input)
-        main_layout.addLayout(message_layout)
+        self.message_input.setMinimumHeight(120) # Adjusted height
+        # self.message_input.setToolTip("Provide details about your consultation request.")
+        main_layout.addWidget(message_label)
+        main_layout.addWidget(self.message_input)
 
-        # Character count with visual indicator
-        char_count_frame = QFrame()
-        char_count_layout = QVBoxLayout(char_count_frame)
-        char_count_layout.setContentsMargins(0, 0, 0, 0)
-        char_count_layout.setSpacing(2)
-
-        # Label and progress bar in a horizontal layout
-        count_indicator_layout = QHBoxLayout()
-        count_indicator_layout.setContentsMargins(0, 0, 0, 0)
-
-        self.char_count_label = QLabel("0/500 characters")
-        self.char_count_label.setAlignment(Qt.AlignLeft)
-        self.char_count_label.setStyleSheet("color: #2c3e50; font-size: 11pt; font-weight: bold;")
-
-        # Add a small info label about the limit
-        char_limit_info = QLabel("(500 character limit)")
-        char_limit_info.setStyleSheet("color: #2c3e50; font-size: 10pt; font-weight: bold;")
-        char_limit_info.setAlignment(Qt.AlignRight)
-
-        count_indicator_layout.addWidget(self.char_count_label)
-        count_indicator_layout.addStretch()
-        count_indicator_layout.addWidget(char_limit_info)
-
-        char_count_layout.addLayout(count_indicator_layout)
-
-        # Add progress bar for visual feedback
+        # Character count with visual indicator (Simplified)
+        char_count_layout = QHBoxLayout()
+        self.char_count_label = QLabel("0/500")
+        self.char_count_label.setAlignment(Qt.AlignRight)
+        self.char_count_label.setStyleSheet(f"color: {theme.TEXT_SECONDARY}; font-size: {theme.FONT_SIZE_SMALL}pt;")
+        
         self.char_count_progress = QProgressBar()
         self.char_count_progress.setRange(0, 500)
         self.char_count_progress.setValue(0)
         self.char_count_progress.setTextVisible(False)
-        self.char_count_progress.setFixedHeight(10)
-        self.char_count_progress.setStyleSheet("""
-            QProgressBar {
-                background-color: #f0f0f0;
-                border: 1px solid #cccccc;
-                border-radius: 5px;
-            }
-            QProgressBar::chunk {
-                background-color: #3498db;
-                border-radius: 5px;
-            }
+        self.char_count_progress.setFixedHeight(8) # Slimmer progress bar
+        self.char_count_progress.setStyleSheet(f"""
+            QProgressBar {{
+                background-color: {theme.BORDER_COLOR_LIGHT};
+                border: none;
+                border-radius: 4px;
+            }}
+            QProgressBar::chunk {{
+                background-color: {theme.PRIMARY_COLOR};
+                border-radius: 4px;
+            }}
         """)
-
-        char_count_layout.addWidget(self.char_count_progress)
-        main_layout.addWidget(char_count_frame)
-
-        # Connect text changed signal to update character count
+        char_count_layout.addWidget(self.char_count_progress) # Progress bar first
+        char_count_layout.addWidget(self.char_count_label) # Label next to it
+        main_layout.addLayout(char_count_layout)
+        
         self.message_input.textChanged.connect(self.update_char_count)
 
         # Buttons
         button_layout = QHBoxLayout()
+        button_layout.setSpacing(10)
 
-        cancel_button = QPushButton("Cancel")
-        cancel_button.setStyleSheet('''
-            QPushButton {
-                background-color: #e74c3c;
-                min-width: 120px;
-            }
-        ''')
-        cancel_button.clicked.connect(self.cancel_request)
+        self.cancel_button = QPushButton("Cancel")
+        self.cancel_button.setObjectName("cancel_button")
+        self.cancel_button.clicked.connect(self.cancel_request)
+        # self.cancel_button.setIcon(IconProvider.get_icon(Icons.CANCEL, QSize(18,18)))
 
-        submit_button = QPushButton("Submit Request")
-        submit_button.setStyleSheet('''
-            QPushButton {
-                background-color: #2ecc71;
-                min-width: 120px;
-            }
-        ''')
-        submit_button.clicked.connect(self.submit_request)
+        self.submit_button = QPushButton("Submit Request")
+        self.submit_button.setObjectName("submit_button")
+        self.submit_button.clicked.connect(self.submit_request)
+        # self.submit_button.setIcon(IconProvider.get_icon(Icons.SEND, QSize(18,18))) # Assuming Icons.SEND exists
 
-        button_layout.addWidget(cancel_button)
-        button_layout.addStretch()
-        button_layout.addWidget(submit_button)
+        button_layout.addStretch() # Push buttons to the right
+        button_layout.addWidget(self.cancel_button)
+        button_layout.addWidget(self.submit_button)
 
         main_layout.addLayout(button_layout)
+        main_layout.addStretch(1) # Add stretch at the end to push form elements up
 
     def update_char_count(self):
         """
         Update the character count label and progress bar.
         """
+        theme = ConsultEaseTheme
         count = len(self.message_input.toPlainText())
-        color = "#2c3e50"  # Default dark blue
-        progress_color = "#3498db"  # Default blue
+        self.char_count_label.setText(f"{count}/500")
 
-        if count > 400:
-            color = "#f39c12"  # Warning yellow
-            progress_color = "#f39c12"
+        progress_color = theme.PRIMARY_COLOR
+        text_color = theme.TEXT_SECONDARY
+
         if count > 500:
-            color = "#e74c3c"  # Error red
-            progress_color = "#e74c3c"
-
-        self.char_count_label.setText(f"{count}/500 characters")
-        self.char_count_label.setStyleSheet(f"color: {color}; font-size: 11pt; font-weight: bold;")
-
-        # Update progress bar
-        self.char_count_progress.setValue(count)
+            progress_color = theme.ERROR_COLOR
+            text_color = theme.ERROR_COLOR
+            self.char_count_label.setText(f"<font color='{theme.ERROR_COLOR}'>{count}/500</font>")
+        elif count > 450: # Warning state
+            progress_color = theme.WARNING_COLOR
+            text_color = theme.WARNING_COLOR
+        
+        self.char_count_label.setStyleSheet(f"color: {text_color}; font-size: {theme.FONT_SIZE_SMALL}pt;")
+        self.char_count_progress.setValue(min(count, 500)) # Cap progress at max
         self.char_count_progress.setStyleSheet(f"""
             QProgressBar {{
-                background-color: #f0f0f0;
-                border: 1px solid #cccccc;
-                border-radius: 5px;
+                background-color: {theme.BORDER_COLOR_LIGHT};
+                border: none;
+                border-radius: 4px;
             }}
             QProgressBar::chunk {{
                 background-color: {progress_color};
-                border-radius: 5px;
+                border-radius: 4px;
             }}
         """)
 
@@ -952,113 +901,75 @@ class ConsultationPanel(QTabWidget):
         self.config = get_config()
         self.init_ui()
 
-        # Set up auto-refresh timer for history panel
         self.refresh_timer = QTimer(self)
         self.refresh_timer.timeout.connect(self.auto_refresh_history)
-        self.refresh_timer.start(60000)  # Refresh every minute
+        # Increased refresh interval for history, less frequent updates
+        self.refresh_timer.start(config.get('ui.history_refresh_interval_ms', 120000)) # Default 2 mins
 
-        # Connect tab change signal
         self.currentChanged.connect(self.on_tab_changed)
 
     def init_ui(self):
         """
         Initialize the consultation panel UI with improved styling and responsiveness.
         """
-        # Import theme system
-        from ..utils.theme import ConsultEaseTheme
+        theme = ConsultEaseTheme
+        self.setObjectName("consultation_panel_main") # For specific styling if needed
 
-        # Set object name for theme-based styling
-        self.setObjectName("consultation_panel")
-
-        # Create an enhanced stylesheet for the consultation panel
-        enhanced_stylesheet = """
-            QTabWidget#consultation_panel {
-                background-color: #f8f9fa;
-                border: none;
-            }
-
-            QTabWidget::pane {
-                border: 1px solid #dee2e6;
-                border-radius: 8px;
-                background-color: #f8f9fa;
-                padding: 5px;
-            }
-
-            QTabBar::tab {
-                background-color: #e9ecef;
-                color: #495057;
-                border: 1px solid #dee2e6;
-                border-bottom: none;
-                border-top-left-radius: 8px;
-                border-top-right-radius: 8px;
-                padding: 12px 20px;
-                margin-right: 4px;
-                font-size: 15pt;
+        # Tab Bar styling for a more modern look
+        self.setStyleSheet(f"""
+            QTabWidget#consultation_panel_main::pane {{
+                border: 1px solid {theme.BORDER_COLOR};
+                border-top: none; /* Pane border only on sides/bottom */
+                background-color: {theme.BG_SECONDARY_LIGHT};
+                border-bottom-left-radius: {theme.BORDER_RADIUS_LARGE}px;
+                border-bottom-right-radius: {theme.BORDER_RADIUS_LARGE}px;
+                padding: 10px; 
+            }}
+            QTabBar::tab {{
+                background-color: {theme.BG_PRIMARY_MUTED};
+                color: {theme.TEXT_SECONDARY};
+                border: 1px solid {theme.BORDER_COLOR};
+                border-bottom: none; /* No bottom border for inactive tabs */
+                border-top-left-radius: {theme.BORDER_RADIUS_NORMAL}px;
+                border-top-right-radius: {theme.BORDER_RADIUS_NORMAL}px;
+                padding: 10px 25px; /* Increased padding */
+                margin-right: 2px;
+                font-size: {theme.FONT_SIZE_MEDIUM}pt;
                 font-weight: bold;
-                min-width: 200px;
-            }
-
-            QTabBar::tab:selected {
-                background-color: #228be6;
-                color: white;
-                border: 1px solid #1971c2;
-                border-bottom: none;
-            }
-
-            QTabBar::tab:hover:!selected {
-                background-color: #dee2e6;
-            }
-
-            QTabWidget::tab-bar {
-                alignment: center;
-            }
-        """
-
-        # Apply the enhanced stylesheet
-        self.setStyleSheet(enhanced_stylesheet)
-
-        # Request form tab with improved icon and text
+                min-width: 180px; /* Ensure tabs have enough width */
+            }}
+            QTabBar::tab:selected {{
+                background-color: {theme.BG_SECONDARY_LIGHT}; /* Match pane background */
+                color: {theme.PRIMARY_COLOR};
+                border-bottom: 2px solid {theme.BG_SECONDARY_LIGHT}; /* Creates illusion of tab merging with pane */
+                margin-bottom: -1px; /* Overlap with pane top border */
+            }}
+            QTabBar::tab:hover:!selected {{
+                background-color: {theme.BG_PRIMARY_HOVER};
+                color: {theme.PRIMARY_COLOR};
+            }}
+            QTabWidget::tab-bar {{
+                alignment: left; /* Align tabs to the left */
+                left: 5px; /* Small offset from edge */
+            }}
+        """)
+        
         self.request_form = ConsultationRequestForm()
         self.request_form.request_submitted.connect(self.handle_consultation_request)
-        self.addTab(self.request_form, "Request Consultation")
+        self.addTab(self.request_form, "New Request") # Shorter tab title
+        # Set tab icon (ensure Icons.EDIT or a suitable icon exists)
+        self.setTabIcon(0, IconProvider.get_icon(Icons.EDIT, QSize(20,20)))
 
-        # Set tab icon if available
-        try:
-            from PyQt5.QtGui import QIcon
-            self.setTabIcon(0, QIcon("central_system/resources/icons/request.png"))
-        except:
-            # If icon not available, just use text
-            pass
-
-        # History tab with improved icon and text
         self.history_panel = ConsultationHistoryPanel(self.student)
         self.history_panel.consultation_cancelled.connect(self.handle_consultation_cancel)
-        self.addTab(self.history_panel, "Consultation History")
+        self.addTab(self.history_panel, "History") # Shorter tab title
+        # Set tab icon (ensure Icons.HISTORY or a suitable icon exists)
+        self.setTabIcon(1, IconProvider.get_icon(Icons.HISTORY if hasattr(Icons, 'HISTORY') else Icons.LIST, QSize(20,20)))
 
-        # Set tab icon if available
-        try:
-            from PyQt5.QtGui import QIcon
-            self.setTabIcon(1, QIcon("central_system/resources/icons/history.png"))
-        except:
-            # If icon not available, just use text
-            pass
-
-        # Calculate responsive minimum size based on screen dimensions
-        screen_width = QApplication.desktop().screenGeometry().width()
-        screen_height = QApplication.desktop().screenGeometry().height()
-
-        # Calculate responsive minimum size (smaller on small screens, larger on big screens)
-        min_width = min(900, max(500, int(screen_width * 0.5)))
-        min_height = min(700, max(400, int(screen_height * 0.6)))
-
-        self.setMinimumSize(min_width, min_height)
-
-        # Set size policy for better responsiveness
+        # min_width = min(900, max(500, int(QApplication.desktop().screenGeometry().width() * 0.4)))
+        # min_height = min(700, max(400, int(QApplication.desktop().screenGeometry().height() * 0.6)))
+        # self.setMinimumSize(min_width, min_height) # Handled by splitter sizes mostly
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-
-        # Add smooth transition animation for tab changes
-        self.setTabPosition(QTabWidget.North)
-        self.tabBar().setDrawBase(False)
 
     def set_student(self, student):
         """

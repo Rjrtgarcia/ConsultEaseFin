@@ -6,8 +6,9 @@ from PyQt5.QtGui import QIcon
 import os
 import logging
 from .base_window import BaseWindow
-from .admin_controller import AdminController
-from .keyboard_manager import get_keyboard_manager
+from ..controllers import AdminController
+from ..utils.keyboard_manager import get_keyboard_manager
+from ..config import get_config
 
 logger = logging.getLogger(__name__)
 

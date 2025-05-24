@@ -218,6 +218,7 @@ class RFIDService(QObject):
         self.read_thread.daemon = True
         self.read_thread.start()
         logger.info("RFID Service started")
+        self.refresh_student_data() # Refresh cache on start
 
     def stop(self):
         """
@@ -506,6 +507,60 @@ class RFIDService(QObject):
         finally:
             if 'db' in locals() and db is not None: # Check if db was successfully initialized
                 close_db(db_session=db) # Pass the specific session to close
+
+    def get_student_by_rfid(self, rfid_uid):
+        """
+        Get a student by RFID UID, checking cache first, then database.
+        Updates cache if found in DB but not cache.
+        Args:
+            rfid_uid (str): The RFID UID to search for.
+        Returns:
+            Student: The student object if found, else None.
+        """
+        if not rfid_uid:
+            return None
+
+        # Try cache first (case-insensitive)
+        with self.cache_lock:
+            student = self.student_rfid_cache.get(rfid_uid)
+            if not student:
+                for cached_uid, cached_student in self.student_rfid_cache.items():
+                    if cached_uid.lower() == rfid_uid.lower():
+                        student = cached_student
+                        logger.info(f"Found student {student.name} by RFID {rfid_uid} (case-insensitive) in cache.")
+                        return student # Return here as it's from cache
+        if student: # If exact match found initially
+            logger.info(f"Found student {student.name} by RFID {rfid_uid} (exact) in cache.")
+            return student
+
+        # If not in cache, try database
+        logger.info(f"Student with RFID {rfid_uid} not in cache, querying database.")
+        db_session = None
+        try:
+            from ..models import Student, get_db, close_db
+            db_session = get_db()
+            # Perform a case-insensitive query if your DB supports it, or handle in Python
+            # For PostgreSQL, use ILIKE or lower()
+            # For SQLite (default), string comparisons are often case-insensitive by default for ASCII
+            # but explicit lower is safer for wider compatibility or specific collations.
+            student_from_db = db_session.query(Student).filter(Student.rfid_uid.ilike(rfid_uid)).first() 
+            # If your DB is case-sensitive by default for rfid_uid and you need exact match after all:
+            # student_from_db = db_session.query(Student).filter(Student.rfid_uid == rfid_uid).first()
+
+            if student_from_db:
+                logger.info(f"Found student {student_from_db.name} by RFID {rfid_uid} in database. Updating cache.")
+                with self.cache_lock:
+                    self.student_rfid_cache[student_from_db.rfid_uid] = student_from_db # Use actual UID from DB for cache key
+                return student_from_db
+            else:
+                logger.warning(f"Student with RFID {rfid_uid} not found in database either.")
+                return None
+        except Exception as e:
+            logger.error(f"Error querying database for RFID {rfid_uid}: {str(e)}", exc_info=True)
+            return None
+        finally:
+            if db_session:
+                close_db(db_session)
 
     def simulate_card_read(self, rfid_uid=None):
         """

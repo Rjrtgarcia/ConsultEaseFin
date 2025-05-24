@@ -130,12 +130,12 @@ class RFIDController:
         # find the student, and then call the registered on_rfid_read callback (this class's method)
         return self.rfid_service.simulate_card_read(rfid_uid)
 
-    def process_manual_uid(self, rfid_uid):
+    def process_rfid_uid(self, rfid_uid):
         """
-        Process an RFID UID entered manually.
+        Process an RFID UID entered manually or from other direct sources.
         Looks up the student and triggers the on_rfid_read callback flow.
         Args:
-            rfid_uid (str): The RFID UID entered manually.
+            rfid_uid (str): The RFID UID entered manually or from other sources.
         """
         if not rfid_uid or not rfid_uid.strip():
             logger.warning("Manual RFID entry: UID is empty.")

@@ -60,7 +60,8 @@ if DB_TYPE.lower() == 'sqlite':
     # SQLite doesn't support the same level of connection pooling
     engine = create_engine(
         DATABASE_URL,
-        connect_args={"check_same_thread": False}  # Allow SQLite to be used across threads
+        connect_args={"check_same_thread": False},  # Allow SQLite to be used across threads
+        echo=True  # <<< ADD THIS FOR SQL DEBUGGING
     )
     logger.info("Created SQLite engine with thread safety enabled")
 else:
@@ -72,7 +73,8 @@ else:
         max_overflow=max_overflow,
         pool_timeout=pool_timeout,
         pool_recycle=pool_recycle,
-        pool_pre_ping=True  # Check connection validity before using it
+        pool_pre_ping=True,  # Check connection validity before using it
+        echo=True  # <<< ADD THIS FOR SQL DEBUGGING (if using PostgreSQL too)
     )
     logger.info(f"Created PostgreSQL engine with connection pooling (size={pool_size}, max_overflow={max_overflow})")
 

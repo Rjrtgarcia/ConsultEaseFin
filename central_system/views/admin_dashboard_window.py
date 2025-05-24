@@ -358,162 +358,166 @@ class FacultyManagementTab(QWidget):
 
         if dialog.exec_() == QDialog.Accepted:
             try:
-                # Sanitize inputs
-                name = sanitize_string(dialog.name_input.text(), max_length=100)
-                department = sanitize_string(dialog.department_input.text(), max_length=100)
-                email = sanitize_email(dialog.email_input.text())
-                ble_id = sanitize_string(dialog.ble_id_input.text(), max_length=50)
-                image_path = dialog.image_path
+                # Retrieve validated and sanitized values from the dialog
+                name = dialog.name_val
+                department = dialog.department_val
+                email = dialog.email_val
+                ble_id = dialog.ble_id_val
+                image_path_from_dialog = dialog.image_path_val # Raw path from file dialog
+                
+                processed_image_path = None # Initialize to None
 
-                # Validate inputs
-                if not name:
-                    raise ValueError("Faculty name cannot be empty")
-
-                if not department:
-                    raise ValueError("Department cannot be empty")
-
-                if not email:
-                    raise ValueError("Email is required and must be valid")
-
-                # Validate name and email using Faculty model validation
-                if not Faculty.validate_name(name):
-                    raise ValueError("Invalid faculty name format")
-
-                if not Faculty.validate_email(email):
-                    raise ValueError("Invalid email format")
-
-                if ble_id and not Faculty.validate_ble_id(ble_id):
-                    raise ValueError("Invalid BLE ID format")
-
-                # Process image if provided
-                if image_path:
-                    # Get the filename only
+                # Process image if a path was provided in the dialog
+                if image_path_from_dialog:
                     import os
                     import shutil
 
-                    # Create images directory if it doesn't exist
-                    base_dir = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-                    images_dir = os.path.join(base_dir, 'images', 'faculty')
+                    # Use config for image directory
+                    img_conf_dir = self.faculty_controller.config.get('system.faculty_image_dir', 'images/faculty')
+                    base_dir = os.path.abspath(self.faculty_controller.config.get('system.base_app_dir', os.path.dirname(os.path.dirname(os.path.dirname(__file__)))))
+                    images_dir = os.path.join(base_dir, img_conf_dir)
+                    
                     if not os.path.exists(images_dir):
                         os.makedirs(images_dir)
 
-                    # Sanitize and generate a unique filename
                     safe_email_prefix = sanitize_filename(email.split('@')[0])
-                    safe_basename = sanitize_filename(os.path.basename(image_path))
+                    safe_basename = sanitize_filename(os.path.basename(image_path_from_dialog))
                     filename = f"{safe_email_prefix}_{safe_basename}"
-
-                    # Ensure the destination path is safe
+                    
                     dest_path = sanitize_path(os.path.join(images_dir, filename), base_dir)
-
-                    # Copy the image file
-                    shutil.copy2(image_path, dest_path)
-
-                    # Store the relative path
-                    image_path = filename
-                else:
-                    image_path = None
-
+                    
+                    shutil.copy2(image_path_from_dialog, dest_path)
+                    processed_image_path = os.path.relpath(dest_path, base_dir).replace("\\", "/") # Store relative path, normalized
+                
                 # Add faculty using controller
-                faculty = self.faculty_controller.add_faculty(name, department, email, ble_id, image_path)
+                faculty = self.faculty_controller.add_faculty(name, department, email, ble_id, processed_image_path)
 
                 if faculty:
                     QMessageBox.information(self, "Add Faculty", f"Faculty '{name}' added successfully.")
                     self.refresh_data()
                     self.faculty_updated.emit()
-                else:
-                    QMessageBox.warning(self, "Add Faculty", "Failed to add faculty. This email or BLE ID may already be in use.")
+                # else: # Controller will raise ValueError for known issues like duplicates
+                    # QMessageBox.warning(self, "Add Faculty", "Failed to add faculty. This email or BLE ID may already be in use, or another error occurred.")
 
             except ValueError as e:
-                logger.error(f"Validation error adding faculty: {str(e)}")
-                QMessageBox.warning(self, "Input Error", str(e))
+                logger.error(f"Error adding faculty (likely from controller): {str(e)}")
+                QMessageBox.warning(self, "Add Faculty Error", str(e)) # Display specific error from controller
             except Exception as e:
-                logger.error(f"Error adding faculty: {str(e)}")
-                QMessageBox.warning(self, "Add Faculty", f"Error adding faculty: {str(e)}")
+                logger.error(f"Unexpected error adding faculty: {str(e)}", exc_info=True)
+                QMessageBox.warning(self, "Add Faculty Error", f"An unexpected error occurred: {str(e)}")
 
     def edit_faculty(self):
         """
         Show dialog to edit the selected faculty member.
         """
-        # Get selected row
         selected_rows = self.faculty_table.selectionModel().selectedRows()
         if not selected_rows:
             QMessageBox.warning(self, "Edit Faculty", "Please select a faculty member to edit.")
             return
 
-        # Get faculty ID from the first column
         row_index = selected_rows[0].row()
-        faculty_id = int(self.faculty_table.item(row_index, 0).text())
+        faculty_id_text = self.faculty_table.item(row_index, 0).text()
+        try:
+            faculty_id = int(faculty_id_text)
+        except ValueError:
+            logger.error(f"Invalid faculty ID in table: {faculty_id_text}")
+            QMessageBox.critical(self, "Error", "Invalid faculty ID selected.")
+            return
 
-        # Get faculty from controller
         faculty = self.faculty_controller.get_faculty_by_id(faculty_id)
         if not faculty:
             QMessageBox.warning(self, "Edit Faculty", f"Faculty with ID {faculty_id} not found.")
             return
 
-        # Create and populate dialog with this tab as parent
         dialog = FacultyDialog(faculty_id=faculty_id, parent=self)
-        dialog.name_input.setText(faculty.name)
-        dialog.department_input.setText(faculty.department)
-        dialog.email_input.setText(faculty.email)
-        dialog.ble_id_input.setText(faculty.ble_id)
-
-        # Set image path if available
-        if faculty.image_path:
-            dialog.image_path_input.setText(faculty.image_path)
-
-        # Ensure dialog appears on top
         dialog.show()
         dialog.raise_()
         dialog.activateWindow()
 
         if dialog.exec_() == QDialog.Accepted:
             try:
-                name = dialog.name_input.text().strip()
-                department = dialog.department_input.text().strip()
-                email = dialog.email_input.text().strip()
-                ble_id = dialog.ble_id_input.text().strip()
-                image_path = dialog.image_path
+                name = dialog.name_val
+                department = dialog.department_val
+                email = dialog.email_val
+                ble_id = dialog.ble_id_val
+                image_path_from_dialog = dialog.image_path_val # Raw path from file dialog, or existing if not changed
 
-                # Process image if provided and different from current
-                if image_path and (not faculty.image_path or image_path != faculty.get_image_path()):
-                    # Get the filename only
+                processed_image_path = faculty.image_path # Default to existing image path
+
+                # Process image only if a new image path is provided and different from current one
+                # The dialog.image_path_val will be the path from QLineEdit.
+                # If user selected a new file, it's an absolute path to that new file.
+                # If user didn't touch browse, it might be the old relative path (if dialog populated it that way)
+                # or empty if it was empty.
+                # We need to be careful here: faculty.image_path is relative. image_path_from_dialog can be absolute or relative.
+
+                # Scenario 1: User selected a new image file via "Browse..."
+                # image_path_from_dialog will be an absolute path to the new file.
+                # os.path.isabs(image_path_from_dialog) would be true.
+                # In this case, we must process it.
+
+                # Scenario 2: User did not change the image.
+                # image_path_from_dialog (from dialog.image_path_input.text()) should reflect the currently displayed path.
+                # FacultyDialog.load_faculty_data sets self.image_path_input.setText(faculty.image_path if faculty.image_path else "")
+                # So, if unchanged, image_path_from_dialog will be the old relative path or empty.
+
+                needs_processing = False
+                if image_path_from_dialog:
+                    if os.path.isabs(image_path_from_dialog):
+                        # New absolute path chosen by user, check if it's different from a reconstructed old absolute path
+                        # This comparison is tricky if faculty.image_path is just a filename and image_path_from_dialog is a full path.
+                        # Simpler: if it's an absolute path, user selected it, so process it.
+                        needs_processing = True
+                    elif image_path_from_dialog != faculty.image_path:
+                        # Path in dialog input is different from stored relative path AND it's not an abs path (e.g. user typed something)
+                        # This case is a bit ambiguous. For now, assume if it's not abs, and differs, it needs re-eval / processing
+                        # However, typically user would use Browse. If they manually type a relative path, it's complex.
+                        # Safest is to process if it's an absolute path (meaning new file selected)
+                        pass # For now, only process new absolute paths firmly
+                
+                if image_path_from_dialog and os.path.isabs(image_path_from_dialog):
+                    to_process_selected_path = image_path_from_dialog # This is the new absolute path to copy
+
                     import os
                     import shutil
+                    img_conf_dir = self.faculty_controller.config.get('system.faculty_image_dir', 'images/faculty')
+                    base_dir = os.path.abspath(self.faculty_controller.config.get('system.base_app_dir', os.path.dirname(os.path.dirname(os.path.dirname(__file__)))))
+                    images_dir = os.path.join(base_dir, img_conf_dir)
 
-                    # Create images directory if it doesn't exist
-                    base_dir = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-                    images_dir = os.path.join(base_dir, 'images', 'faculty')
                     if not os.path.exists(images_dir):
                         os.makedirs(images_dir)
 
-                    # Generate a unique filename
-                    filename = f"{email.split('@')[0]}_{os.path.basename(image_path)}"
-                    dest_path = os.path.join(images_dir, filename)
+                    safe_email_prefix = sanitize_filename(email.split('@')[0]) # Use new email for filename
+                    safe_basename = sanitize_filename(os.path.basename(to_process_selected_path))
+                    filename = f"{safe_email_prefix}_{safe_basename}"
+                    dest_path = sanitize_path(os.path.join(images_dir, filename), base_dir)
+                    
+                    shutil.copy2(to_process_selected_path, dest_path)
+                    processed_image_path = os.path.relpath(dest_path, base_dir).replace("\\", "/")
+                elif not image_path_from_dialog and faculty.image_path:
+                    # User cleared the image path in dialog, intent to remove image
+                    processed_image_path = None
+                # If image_path_from_dialog is same as faculty.image_path (relative) or empty and faculty.image_path was empty, 
+                # then processed_image_path remains faculty.image_path (no change or still no image)
+                
 
-                    # Copy the image file
-                    shutil.copy2(image_path, dest_path)
-
-                    # Store the relative path
-                    image_path = filename
-                elif faculty.image_path:
-                    # Keep the existing image path
-                    image_path = faculty.image_path
-
-                # Update faculty using controller
                 updated_faculty = self.faculty_controller.update_faculty(
-                    faculty_id, name, department, email, ble_id, image_path
+                    faculty_id, name, department, email, ble_id, processed_image_path
                 )
 
                 if updated_faculty:
                     QMessageBox.information(self, "Edit Faculty", f"Faculty '{name}' updated successfully.")
                     self.refresh_data()
                     self.faculty_updated.emit()
-                else:
-                    QMessageBox.warning(self, "Edit Faculty", "Failed to update faculty. This email or BLE ID may already be in use.")
+                # else:
+                    # QMessageBox.warning(self, "Edit Faculty", "Failed to update faculty. This email or BLE ID may already be in use, or another error occurred.")
 
+            except ValueError as e:
+                logger.error(f"Error updating faculty (likely from controller): {str(e)}")
+                QMessageBox.warning(self, "Edit Faculty Error", str(e))
             except Exception as e:
-                logger.error(f"Error updating faculty: {str(e)}")
-                QMessageBox.warning(self, "Edit Faculty", f"Error updating faculty: {str(e)}")
+                logger.error(f"Unexpected error updating faculty: {str(e)}", exc_info=True)
+                QMessageBox.warning(self, "Edit Faculty Error", f"An unexpected error occurred: {str(e)}")
 
     def delete_faculty(self):
         """
@@ -565,6 +569,14 @@ class FacultyDialog(QDialog):
         self.faculty_controller = FacultyController.instance() # Get controller instance
         self.original_ble_id = None # To track changes in BLE ID for validation
         self.original_email = None # To track changes in email for validation
+        
+        # Initialize attributes for storing validated data
+        self.name_val = ""
+        self.department_val = ""
+        self.email_val = ""
+        self.ble_id_val = ""
+        self.image_path_val = "" # Will store the raw path from image_path_input
+        
         self.init_ui()
         if self.faculty_id:
             self.load_faculty_data()
@@ -616,56 +628,38 @@ class FacultyDialog(QDialog):
     def accept(self):
         """
         Handle dialog acceptance (OK button click).
-        Validates input and calls the appropriate controller method.
+        Validates input and stores it in instance attributes for the parent tab to use.
+        Does NOT call the controller directly.
         """
-        name = sanitize_string(self.name_input.text())
-        department = sanitize_string(self.department_input.text())
-        email = sanitize_email(self.email_input.text())
-        ble_id = sanitize_string(self.ble_id_input.text()) # Sanitized, can be empty
-        image_path = sanitize_path(self.image_path_input.text()) # Sanitized, can be empty
+        # Store sanitized values in instance attributes
+        self.name_val = sanitize_string(self.name_input.text())
+        self.department_val = sanitize_string(self.department_input.text())
+        self.email_val = sanitize_email(self.email_input.text())
+        self.ble_id_val = sanitize_string(self.ble_id_input.text()) # Sanitized, can be empty
+        # Store the raw path from the QLineEdit, parent tab will handle processing
+        self.image_path_val = self.image_path_input.text() # No sanitization here, it's a path
 
-        if not name or not department or not email:
+        if not self.name_val or not self.department_val or not self.email_val:
             QMessageBox.warning(self, "Input Error", "Name, department, and email are required.")
-            return
+            return # Do not call super().accept()
 
-        # More specific email validation (optional, basic one done by sanitize_email)
-        if "@" not in email or "." not in email.split("@")[-1]:
+        # More specific email validation
+        if "@" not in self.email_val or "." not in self.email_val.split("@")[-1]:
             QMessageBox.warning(self, "Input Error", "Please enter a valid email address.")
-            return
-
+            return # Do not call super().accept()
+        
+        # Further validation for BLE ID and Name using Faculty model methods
+        # These can raise ValueError if validation fails.
         try:
-            if self.faculty_id:
-                # Update existing faculty
-                self.faculty_controller.update_faculty(
-                    faculty_id=self.faculty_id,
-                    name=name,
-                    department=department,
-                    email=email,
-                    ble_id=ble_id if ble_id else None, 
-                    image_path=image_path if image_path else None
-                )
-                QMessageBox.information(self, "Success", "Faculty updated successfully.")
-            else:
-                # Add new faculty
-                self.faculty_controller.add_faculty(
-                    name=name,
-                    department=department,
-                    email=email,
-                    ble_id=ble_id if ble_id else None, 
-                    image_path=image_path if image_path else None
-                )
-                QMessageBox.information(self, "Success", "Faculty added successfully.")
-            
-            super().accept() # Call accept only if controller operations were successful
-
+            Faculty.validate_name(self.name_val) # Will raise ValueError if invalid
+            if self.ble_id_val: # Only validate if not empty
+                 Faculty.validate_ble_id(self.ble_id_val) # Will raise ValueError if invalid
         except ValueError as ve:
-            logger.warning(f"Validation error during faculty save: {str(ve)}")
-            QMessageBox.warning(self, "Error", str(ve))
-            # Do not call super().accept() here, so the dialog stays open
-        except Exception as e:
-            logger.error(f"Error saving faculty: {e}", exc_info=True)
-            QMessageBox.critical(self, "Error", f"An unexpected error occurred: {e}")
-            # Do not call super().accept() here, so the dialog stays open
+            QMessageBox.warning(self, "Input Validation Error", str(ve))
+            return # Do not call super().accept()
+
+        # If all validations pass, then call QDialog's accept.
+        super().accept()
 
     def reject(self):
         super().reject()

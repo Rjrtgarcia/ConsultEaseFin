@@ -47,22 +47,20 @@ class StudentController:
         Raises:
             ValueError: If RFID UID already exists.
         """
-        logger.info(f"Attempting to add student: Name='{name}', Department='{department}', RFID='{rfid_uid}'")
-        # Case-insensitive check for existing RFID UID
-        existing_student = db.query(Student).filter(Student.rfid_uid.ilike(rfid_uid)).first()
-        if existing_student:
-            logger.warning(f"Failed to add student. RFID UID '{rfid_uid}' already exists for student '{existing_student.name}'.")
-            raise ValueError(f"RFID UID '{rfid_uid}' already exists.")
+        logger.info(f"Attempting to add student (SIMPLIFIED): Name='{name}', Department='{department}', RFID='{rfid_uid}'")
+        # # Case-insensitive check for existing RFID UID
+        # existing_student = db.query(Student).filter(Student.rfid_uid.ilike(rfid_uid)).first()
+        # if existing_student:
+        #     logger.warning(f"Failed to add student. RFID UID '{rfid_uid}' already exists for student '{existing_student.name}'.")
+        #     raise ValueError(f"RFID UID '{rfid_uid}' already exists.")
 
         new_student = Student(name=name, department=department, rfid_uid=rfid_uid)
         db.add(new_student)
-        # db.commit() and db.refresh() handled by decorator
-        logger.info(f"DB: Successfully added student '{new_student.name}' with ID '{new_student.id}' and RFID '{new_student.rfid_uid}'.")
+        logger.info(f"DB (SIMPLIFIED): Added student '{new_student.name}' with ID '{new_student.id}' to session.")
         
-        # It's crucial to refresh the RFID service cache after adding/updating/deleting students
-        rfid_service = get_rfid_service()
-        rfid_service.refresh_student_data()
-        logger.info("RFID service student cache refreshed after adding student.")
+        # # rfid_service = get_rfid_service()
+        # # rfid_service.refresh_student_data() 
+        # # logger.info("RFID service student cache refreshed after adding student.")
         
         return new_student
 

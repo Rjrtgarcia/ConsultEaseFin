@@ -48,7 +48,8 @@ class StudentController:
             ValueError: If RFID UID already exists.
         """
         logger.info(f"Attempting to add student: Name='{name}', Department='{department}', RFID='{rfid_uid}'")
-        existing_student = db.query(Student).filter(Student.rfid_uid == rfid_uid).first()
+        # Case-insensitive check for existing RFID UID
+        existing_student = db.query(Student).filter(Student.rfid_uid.ilike(rfid_uid)).first()
         if existing_student:
             logger.warning(f"Failed to add student. RFID UID '{rfid_uid}' already exists for student '{existing_student.name}'.")
             raise ValueError(f"RFID UID '{rfid_uid}' already exists.")
@@ -91,9 +92,9 @@ class StudentController:
             logger.warning(f"Failed to update student. Student with ID '{student_id}' not found.")
             raise ValueError(f"Student with ID '{student_id}' not found.")
 
-        # Check if the new RFID UID is already used by *another* student
-        if student.rfid_uid != rfid_uid:
-            existing_rfid_student = db.query(Student).filter(Student.rfid_uid == rfid_uid, Student.id != student_id).first()
+        # Check if the new RFID UID is already used by *another* student (case-insensitive)
+        if student.rfid_uid.lower() != rfid_uid.lower(): # Compare lowercased versions for change detection
+            existing_rfid_student = db.query(Student).filter(Student.rfid_uid.ilike(rfid_uid), Student.id != student_id).first()
             if existing_rfid_student:
                 logger.warning(f"Failed to update student ID '{student_id}'. New RFID UID '{rfid_uid}' already exists for student '{existing_rfid_student.name}'.")
                 raise ValueError(f"RFID UID '{rfid_uid}' is already registered to another student.")

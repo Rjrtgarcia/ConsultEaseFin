@@ -154,18 +154,42 @@ def db_operation_with_retry(max_retries=3, retry_delay=0.5):
                         result = func(args[0], db_session, *(args[1:]), **kwargs)
                     
                     db_session.flush() # Flush to ensure IDs are populated before commit for refresh
+                    logger.debug(f"ID of result after flush: {getattr(result, 'id', 'N/A') if hasattr(result, '__mapper__') else 'Not a model'}")
                     db_session.commit()
+                    logger.debug(f"ID of result after commit: {getattr(result, 'id', 'N/A') if hasattr(result, '__mapper__') else 'Not a model'}")
 
-                    # If the result is a SQLAlchemy model instance, refresh it before the session is closed
-                    # This helps ensure its attributes are loaded and accessible even after detaching.
+                    # If the result is a SQLAlchemy model instance, ensure it's refreshed and attached
                     if result is not None and hasattr(result, '__mapper__'):
-                        logger.debug(f"Refreshing SQLAlchemy instance of type {type(result)} before returning from db_operation.")
-                        db_session.refresh(result)
-                        # For more complex scenarios with relationships, you might need to explore options
-                        # like eager loading (e.g., joinedload, selectinload) in the query itself,
-                        # or accessing specific relationships here to trigger their load.
-
-                    return result
+                        if not getattr(result, 'id', None):
+                            # This is a critical failure if an ID was expected (e.g., for a new auto-incremented PK)
+                            err_msg = f"CRITICAL: Instance {type(result)} (value: {str(result)}) has no ID after commit. This indicates a problem with primary key generation or its retrieval by SQLAlchemy. The object cannot be reliably refreshed or identified."
+                            logger.error(err_msg)
+                            # Raising an error here because returning an object without an ID when one is expected
+                            # will likely lead to further errors downstream.
+                            raise RuntimeError(err_msg)
+                        else:
+                            # ID is present. The object should be in the session and persistent.
+                            # Attempt to refresh to get the most up-to-date state from the database.
+                            try:
+                                logger.debug(f"Object {type(result)} with ID {result.id} is present. Attempting to refresh.")
+                                db_session.refresh(result)
+                                logger.debug(f"Successfully refreshed {type(result)} with ID {result.id}.")
+                                return result
+                            except Exception as e_refresh:
+                                logger.warning(f"Failed to refresh {type(result)} with ID {result.id} after commit (Error: {e_refresh}). Attempting to merge as a fallback.")
+                                try:
+                                    # Ensure the object is associated with the current session and load its current state.
+                                    # merge() returns a new instance or the same if already in session.
+                                    merged_result = db_session.merge(result, load=True)
+                                    logger.info(f"Successfully merged {type(merged_result)} with ID {merged_result.id} after refresh failure.")
+                                    return merged_result
+                                except Exception as e_merge:
+                                    logger.error(f"Failed to merge {type(result)} with ID {result.id} after refresh failure (Error: {e_merge}). Returning the instance as it was post-commit, but it may be stale or detached.")
+                                    # Fallback: return the original 'result'. It has an ID, but refresh/merge failed.
+                                    # This is risky as the state might not be fully consistent with the DB.
+                                    return result
+                    
+                    return result # Return original result if not a model instance or if no specific handling applied
                 except Exception as e:
                     db_session.rollback()
                     last_error = e

@@ -508,7 +508,7 @@ class RFIDService(QObject):
             # Consider if db session needs rollback here if an error occurs mid-transaction, though it's a read op.
         finally:
             if 'db' in locals() and db is not None: # Check if db was successfully initialized
-                close_db(db_session=db) # Pass the specific session to close
+                close_db() # Corrected: No arguments
 
     def get_student_by_rfid(self, rfid_uid):
         """
@@ -561,7 +561,7 @@ class RFIDService(QObject):
             return None
         finally:
             if db_session:
-                close_db(db_session)
+                close_db() # Corrected: No arguments
 
     def simulate_card_read(self, rfid_uid=None):
         """

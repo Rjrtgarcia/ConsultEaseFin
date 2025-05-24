@@ -8,6 +8,7 @@ import logging
 from .base_window import BaseWindow
 from central_system.utils.theme import ConsultEaseTheme
 from ..controllers import RFIDController, StudentController # Import the controllers
+from ..config import get_config # Added import for get_config
 
 class LoginWindow(BaseWindow):
     """

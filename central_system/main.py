@@ -3,7 +3,7 @@ import os
 import logging
 import subprocess
 from PyQt5.QtWidgets import QApplication, QLineEdit, QTextEdit, QSplashScreen, QDesktopWidget
-from PyQt5.QtCore import Qt, QTimer, QEvent
+from PyQt5.QtCore import Qt, QTimer, QEvent, QObject
 from PyQt5.QtGui import QPixmap, QFont
 import signal
 from logging.handlers import RotatingFileHandler
@@ -78,7 +78,7 @@ from central_system.utils import (
 from central_system.utils.theme import ConsultEaseTheme
 
 # Event filter for auto-showing keyboard
-class FocusEventFilter(QEvent.QObject):
+class FocusEventFilter(QObject):
     def __init__(self, keyboard_manager, parent=None):
         super().__init__(parent)
         self.keyboard_manager = keyboard_manager

@@ -47,10 +47,10 @@ class FacultyCard(QFrame):
         self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Minimum)
 
         # Add drop shadow effect for card-like appearance
-        self.setGraphicsEffect(self._create_shadow_effect())
+        # self.setGraphicsEffect(self._create_shadow_effect()) # box-shadow is not standard Qt CSS, using QGraphicsDropShadowEffect if needed
 
-        # Set styling based on faculty status
-        self.update_style()
+        # Set styling based on faculty status - will be updated later
+        # self.update_style() # Call this after all elements are initialized
 
         # Main layout with improved margins for card-like appearance
         main_layout = QVBoxLayout(self)
@@ -129,7 +129,7 @@ class FacultyCard(QFrame):
 
         self.status_icon_label = QLabel("●")
         self.status_text_label = QLabel() # Initialize status_text_label here
-        self._update_status_widgets() # Helper method
+        # self._update_status_widgets() # MOVED: Call this after request_button is defined
 
         status_layout.addWidget(self.status_icon_label)
         status_layout.addWidget(self.status_text_label)
@@ -138,7 +138,7 @@ class FacultyCard(QFrame):
 
         # Request consultation button - more compact with improved styling
         self.request_button = QPushButton("Request Consultation")
-        self.request_button.setEnabled(self.faculty.status)
+        # self.request_button.setEnabled(self.faculty.status) # Set by _update_status_widgets
         self.request_button.setStyleSheet("""
             QPushButton {
                 font-size: 10pt;
@@ -158,6 +158,10 @@ class FacultyCard(QFrame):
         """)
         self.request_button.clicked.connect(self.request_consultation)
         main_layout.addWidget(self.request_button)
+
+        # Now call dependent update methods
+        self.update_style()
+        self._update_status_widgets()
 
     def _create_shadow_effect(self):
         """
@@ -183,7 +187,7 @@ class FacultyCard(QFrame):
                     border: 1px solid #4caf50;
                     border-radius: 8px;
                     margin: 5px;  /* Added margin for better visual separation */
-                    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);  /* Subtle shadow */
+                    /* box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); */ /* Removed non-standard Qt CSS */
                 }
             ''')
         else:
@@ -193,7 +197,7 @@ class FacultyCard(QFrame):
                     border: 1px solid #f44336;
                     border-radius: 8px;
                     margin: 5px;  /* Added margin for better visual separation */
-                    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);  /* Subtle shadow */
+                    /* box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); */ /* Removed non-standard Qt CSS */
                 }
             ''')
 

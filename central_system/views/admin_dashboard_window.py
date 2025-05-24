@@ -184,12 +184,12 @@ class AdminDashboardWindow(BaseWindow):
 
     def handle_student_updated(self):
         """
-        Handle student updated signal.
+        Handle student updated signal FROM THE TAB.
+        The tab has already refreshed itself by adding/updating the specific row.
+        This signal is primarily for other parts of the application if they need to react.
         """
-        # Refresh student tab data
-        self.student_tab.refresh_data()
-        # Forward signal
-        self.student_updated.emit()
+        logger.info("AdminDashboardWindow.handle_student_updated: StudentManagementTab reported an update. Forwarding signal.")
+        self.student_updated.emit() # This emits AdminDashboardWindow's own student_updated signal
 
     def handle_admin_username_changed_on_dashboard(self, new_username):
         logger.info(f"AdminDashboard: Handling admin username change to: {new_username}")

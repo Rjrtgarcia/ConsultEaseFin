@@ -497,7 +497,7 @@ class ConsultEaseApp:
             # Display error message on the current relevant window (e.g., LoginWindow)
             if self.login_window and self.login_window.isVisible():
                 display_error = error_message if error_message else f"Invalid RFID card ('{rfid_uid}')."
-                self.login_window.show_error_message(display_error)
+                self.login_window.show_status_message(display_error, is_error=True)
             elif self.dashboard_window and self.dashboard_window.isVisible():
                 # If already on dashboard (e.g. admin scanned an unknown card), show a temporary notification
                 display_error = error_message if error_message else f"Unknown RFID card ('{rfid_uid}')."

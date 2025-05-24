@@ -6,6 +6,10 @@ import sys
 import subprocess
 from PyQt5.QtCore import QObject, pyqtSignal
 
+# Import database utilities and Student model
+from ..models.base import get_db, close_db
+from ..models import Student # Assuming Student model is in __init__.py or directly accessible
+
 # Set up logging
 # logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s') # REMOVED - Rely on central config
 logger = logging.getLogger(__name__)

@@ -4,7 +4,6 @@ import logging
 import threading
 import time
 import os
-import configparser
 import pathlib
 import random
 from datetime import datetime

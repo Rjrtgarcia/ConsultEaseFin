@@ -19,7 +19,8 @@ from ..utils.input_sanitizer import (
 )
 from ..models.base import db_operation_with_retry
 from ..config import get_config
-from ..utils.icons import get_icon_path, IconProvider, Icons
+from ..utils.icons import IconProvider, Icons
+import datetime
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -943,7 +944,7 @@ class StudentDialog(QDialog):
         self.rfid_edit = QLineEdit()
         self.rfid_edit.setPlaceholderText("Click 'Scan RFID' or enter manually")
         self.rfid_scan_button = QPushButton("Scan RFID")
-        self.rfid_scan_button.setIcon(self.theme.get_icon(QStyle.SP_MediaPlay)) # Placeholder icon
+        self.rfid_scan_button.setIcon(IconProvider.get_button_icon(Icons.RFID))
         self.rfid_scan_button.clicked.connect(self.scan_rfid)
 
         rfid_layout = QHBoxLayout()

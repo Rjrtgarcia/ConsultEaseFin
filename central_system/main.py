@@ -70,13 +70,12 @@ from central_system.utils import (
     apply_stylesheet,
     WindowTransitionManager,
     get_keyboard_manager,
-    install_keyboard_manager
+    install_keyboard_manager,
+    KeyboardManager,
+    initialize_icons
 )
 # Import theme system
 from central_system.utils.theme import ConsultEaseTheme
-# Import icons module separately to avoid early QPixmap creation
-from central_system.utils import icons
-from central_system.utils.keyboard_manager import KeyboardManager
 
 # Event filter for auto-showing keyboard
 class FocusEventFilter(QEvent.QObject):
@@ -117,7 +116,7 @@ class ConsultEaseApp:
         self.app.setApplicationName("ConsultEase")
 
         # Set up icons and modern UI (after QApplication is created)
-        icons.initialize()
+        initialize_icons()
         logger.info("Initialized icons")
 
         # Apply centralized theme stylesheet

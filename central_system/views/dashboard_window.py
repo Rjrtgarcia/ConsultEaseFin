@@ -351,7 +351,7 @@ class DashboardWindow(BaseWindow):
         search_filter_layout = QHBoxLayout()
         self.search_bar = QLineEdit()
         self.search_bar.setPlaceholderText("Search faculty by name or department...")
-        self.search_bar.textChanged.connect(self.filter_faculty_cards)
+        self.search_bar.textChanged.connect(self.filter_faculty)
         search_filter_layout.addWidget(self.search_bar)
 
         self.filter_combo = QComboBox()
@@ -359,7 +359,7 @@ class DashboardWindow(BaseWindow):
         self.filter_combo.addItem("Available")
         self.filter_combo.addItem("Busy")
         self.filter_combo.addItem("Unavailable")
-        self.filter_combo.currentTextChanged.connect(self.filter_faculty_cards)
+        self.filter_combo.currentTextChanged.connect(self.filter_faculty)
         search_filter_layout.addWidget(self.filter_combo)
         main_layout.addLayout(search_filter_layout)
 
@@ -384,7 +384,7 @@ class DashboardWindow(BaseWindow):
         self.manual_rfid_input = QLineEdit()
         self.manual_rfid_input.setPlaceholderText("Enter Student RFID/ID Manually")
         self.manual_rfid_button = QPushButton("Submit ID")
-        self.manual_rfid_button.setIcon(QIcon(get_icon_path("input.png")))
+        self.manual_rfid_button.setIcon(IconProvider.get_icon("input"))
         self.manual_rfid_button.setStyleSheet(
             "QPushButton { background-color: #0d3b66; color: white; padding: 10px; border-radius: 5px; }"
             "QPushButton:hover { background-color: #1a5f99; }"
@@ -396,7 +396,7 @@ class DashboardWindow(BaseWindow):
 
         # Logout Button
         self.logout_button = QPushButton("Logout")
-        self.logout_button.setIcon(QIcon(get_icon_path("logout.png")))
+        self.logout_button.setIcon(IconProvider.get_button_icon(Icons.LOGOUT))
         self.logout_button.setStyleSheet(
             "QPushButton { background-color: #e63946; color: white; padding: 10px; border-radius: 5px; font-size: 16px; }"
             "QPushButton:hover { background-color: #c9303f; }"

@@ -9,6 +9,8 @@ from .base_window import BaseWindow
 from central_system.utils.theme import ConsultEaseTheme
 from ..controllers import RFIDController, StudentController # Import the controllers
 from ..config import get_config # Added import for get_config
+from ..services import get_rfid_service # Added import
+from ..utils.keyboard_manager import get_keyboard_manager # Added import
 
 class LoginWindow(BaseWindow):
     """

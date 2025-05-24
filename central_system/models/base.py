@@ -239,17 +239,32 @@ def init_db():
         # Check if admin table is empty
         admin_count = db.query(Admin).count()
         if admin_count == 0:
-            # Create default admin with bcrypt hashed password
-            password_hash, salt = Admin.hash_password("Admin123!")
-            default_admin = Admin(
-                username="admin",
-                password_hash=password_hash,
-                salt=salt,
-                email="admin@consultease.com",
-                is_active=True
-            )
-            db.add(default_admin)
-            logger.info("Created default admin user: admin / Admin123!")
+            # Create default admin if no admins exist
+            logger.info("No admin users found, creating default admin.")
+            # Use Admin model's hash_password to create the default admin
+            # Ensure the default password meets strength requirements
+            default_password = "DefaultAdminP@ss1" # Changed default password
+            try:
+                hashed_password, salt = Admin.hash_password(default_password)
+                admin = Admin(
+                    username="admin",
+                    password_hash=hashed_password,
+                    salt=salt, # Though bcrypt includes salt, schema might still have it
+                    is_active=True,
+                    failed_login_attempts=0 # Initialize lockout fields
+                )
+                db.add(admin)
+                db.commit()
+                logger.info(f"Default admin 'admin' created with a new secure password. PLEASE CHANGE IT.")
+            except ValueError as e:
+                logger.error(f"Error creating default admin user due to password policy: {e}")
+                # If default password fails validation, this is a critical setup error.
+                # Consider raising an exception or specific handling.
+            except Exception as e:
+                logger.error(f"Unexpected error creating default admin user: {e}")
+                db.rollback() # Rollback on other errors
+        else:
+            logger.info(f"Found {admin_count} admin user(s). Default admin creation skipped.")
 
         # Check if faculty table is empty
         faculty_count = db.query(Faculty).count()

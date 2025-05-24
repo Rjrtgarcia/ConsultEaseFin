@@ -754,33 +754,38 @@ class StudentManagementTab(QWidget):
 
     def refresh_data(self):
         try:
-            self.student_table.setRowCount(0)
+            self.student_table.setRowCount(0)  # Clear the table first
             students = self.student_controller.get_all_students()
             if students:
                 for student in students:
-                    row_position = self.student_table.rowCount()
-                    self.student_table.insertRow(row_position)
-                    self.student_table.setItem(row_position, 0, QTableWidgetItem(str(student.id)))
-                    self.student_table.setItem(row_position, 1, QTableWidgetItem(student.name))
-                    self.student_table.setItem(row_position, 2, QTableWidgetItem(student.department))
-                    self.student_table.setItem(row_position, 3, QTableWidgetItem(student.rfid_uid))
+                    # Call the new helper to add each student to the table
+                    self._add_student_to_table_row(student, self.student_table.rowCount())
             else:
-                logger.info("No students found by controller during refresh.")
+                logger.info("No students found by controller during refresh_data.")
         except Exception as e:
-            logger.error(f"Error refreshing student data via controller: {str(e)}")
+            logger.error(f"Error refreshing student data via controller in refresh_data: {str(e)}", exc_info=True)
             QMessageBox.warning(self, "Data Error", f"Failed to refresh student data: {str(e)}")
+
+    def _add_student_to_table_row(self, student: Student, row_position: int):
+        """Helper to add a student object to a specific row in the table."""
+        if not student:
+            logger.warning("_add_student_to_table_row called with None student")
+            return
+        try:
+            self.student_table.insertRow(row_position)
+            self.student_table.setItem(row_position, 0, QTableWidgetItem(str(student.id)))
+            self.student_table.setItem(row_position, 1, QTableWidgetItem(student.name))
+            self.student_table.setItem(row_position, 2, QTableWidgetItem(student.department))
+            self.student_table.setItem(row_position, 3, QTableWidgetItem(student.rfid_uid))
+        except Exception as e:
+            logger.error(f"Error in _add_student_to_table_row for student {student.name if student else 'None'}: {e}", exc_info=True)
 
     def add_student(self):
         dialog = StudentDialog(self.student_controller, self.rfid_service, parent=self)
         if dialog.exec_() == QDialog.Accepted:
-            name = dialog.name_val # Use validated value
-            department = dialog.department_val # Use validated value
-            rfid_uid = dialog.rfid_uid_val # Use validated value
-
-            # The dialog.accept() already performed this check
-            # if not (name and department and rfid_uid):
-            #     QMessageBox.warning(self, "Input Error", "Name, Department, and RFID UID are required.")
-            #     return
+            name = dialog.name_val
+            department = dialog.department_val
+            rfid_uid = dialog.rfid_uid_val
             
             logger.info(f"Attempting to add student via controller: {name}, Dept: {department}, RFID: {rfid_uid}")
             try:
@@ -788,17 +793,13 @@ class StudentManagementTab(QWidget):
                 
                 if new_student:
                     QMessageBox.information(self, "Add Student", f"Student '{new_student.name}' added successfully.")
-                    self.refresh_data()
+                    # Add the new student directly to the table at the end
+                    self._add_student_to_table_row(new_student, self.student_table.rowCount())
                     self.student_updated.emit()
-                    logger.info(f"Student '{new_student.name}' added and UI updated.")
-                # No else needed, as controller raises ValueError for known issues (e.g., RFID exists)
-                # or db_operation_with_retry handles other DB exceptions.
+                    logger.info(f"Student '{new_student.name}' added and UI updated (via _add_student_to_table_row).")
             except ValueError as ve: 
                 logger.error(f"Failed to add student: {str(ve)}")
                 QMessageBox.warning(self, "Add Student Error", str(ve))
-            except Exception as e: 
-                logger.error(f"Unexpected error adding student via controller: {str(e)}", exc_info=True)
-                QMessageBox.critical(self, "Add Student Error", "An unexpected error occurred.")
 
     def edit_student(self):
         """

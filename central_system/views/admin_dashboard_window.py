@@ -1061,9 +1061,10 @@ class RFIDScanDialog(QDialog):
 
     def init_ui(self):
         self.setWindowTitle("RFID Scan")
-        self.setFixedSize(350, 350)
+        self.setMinimumSize(350, 300) # Set a minimum size instead
 
         layout = QVBoxLayout()
+        layout.setSpacing(10) # Add some spacing between widgets
 
         instruction_label = QLabel("Please scan the 13.56 MHz RFID card...")
         instruction_label.setAlignment(Qt.AlignCenter)
@@ -1103,6 +1104,7 @@ class RFIDScanDialog(QDialog):
         layout.addWidget(cancel_button, alignment=Qt.AlignCenter)
 
         self.setLayout(layout)
+        self.adjustSize() # Adjust size to fit content
 
     def handle_manual_input(self):
         uid = self.manual_input.text().strip().upper()

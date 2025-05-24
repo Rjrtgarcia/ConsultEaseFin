@@ -142,14 +142,21 @@ def db_operation_with_retry(max_retries=3, retry_delay=0.5):
             last_error = None
 
             while retries < max_retries:
-                db = get_db()
+                db_session = get_db()
                 try:
-                    # Call the original function with the db session and all arguments
-                    result = func(db, *args, **kwargs)
-                    db.commit()
+                    # args[0] is 'self' of the instance whose method is decorated
+                    # Pass self, then the db_session, then other *args and **kwargs
+                    if not args:
+                        # This case should ideally not happen for instance methods
+                        # but as a fallback, or for static/classmethods decorated (though less common for this decorator)
+                        result = func(db_session, **kwargs)
+                    else:
+                        result = func(args[0], db_session, *(args[1:]), **kwargs)
+                    
+                    db_session.commit()
                     return result
                 except Exception as e:
-                    db.rollback()
+                    db_session.rollback()
                     last_error = e
                     retries += 1
 

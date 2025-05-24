@@ -1119,7 +1119,7 @@ class RFIDScanDialog(QDialog):
         if uid:
             logger.info(f"Manual RFID input: {uid}")
             self.manual_uid_input.clear()
-            self.handle_rfid_scan(None, uid)
+            self.handle_rfid_scan(uid)
         else:
             self.status_label.setText("Please enter a valid RFID UID")
             self.status_label.setStyleSheet("font-size: 12pt; color: #f44336;")
@@ -1139,11 +1139,11 @@ class RFIDScanDialog(QDialog):
         next_index = (current_index + 1) % len(animations)
         self.animation_label.setText(animations[next_index])
 
-    def handle_rfid_scan(self, student=None, rfid_uid=None):
+    def handle_rfid_scan(self, rfid_uid):
         logger.info(f"RFIDScanDialog received scan: {rfid_uid}")
 
         if not rfid_uid or self.scanned_rfid_uid:
-            logger.info(f"Ignoring scan - no UID or already received: {rfid_uid}")
+            logger.info(f"Ignoring scan - UID '{rfid_uid}' is invalid or already processed ('{self.scanned_rfid_uid}').")
             return
 
         self.scanned_rfid_uid = rfid_uid
@@ -1154,14 +1154,12 @@ class RFIDScanDialog(QDialog):
         self.status_label.setText(f"Card detected: {self.scanned_rfid_uid}")
         self.status_label.setStyleSheet("font-size: 12pt; color: #4caf50;")
 
-        if student:
-            QMessageBox.warning(
-                self,
-                "RFID Already Registered",
-                f"This RFID card is already registered to student:\n{student.name}"
-            )
+        # The 'student' object is not available from card_read_signal.
+        # If a check for existing registration is needed here, it would require a controller call.
+        # This dialog is primarily for capturing a UID.
+        # The calling context (e.g., StudentDialog) can handle checks after UID is returned.
 
-        QTimer.singleShot(1500, self.accept)
+        QTimer.singleShot(1500, self.accept) # Accept the dialog after a short delay
 
     def closeEvent(self, event):
         if hasattr(self, 'callback_fn') and self.callback_fn:

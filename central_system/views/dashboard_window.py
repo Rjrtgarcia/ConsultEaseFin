@@ -12,6 +12,10 @@ from .base_window import BaseWindow
 from .consultation_panel import ConsultationPanel
 from ..controllers import FacultyController, ConsultationController
 from ..utils.icons import IconProvider, Icons
+from ..models.student import Student
+from ..models.consultation import Consultation
+from ..config import get_config
+from ..services import get_rfid_service, get_mqtt_service
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -316,21 +320,32 @@ class DashboardWindow(BaseWindow):
 
         # Header (Logo and Title)
         header_layout = QHBoxLayout()
-        logo_label = QLabel()
-        pixmap = QPixmap(get_icon_path("logo.png"))
-        logo_label.setPixmap(pixmap.scaled(100, 100, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-        header_layout.addWidget(logo_label)
+        self.logo_label = QLabel()
+        # Correct way to get icon path or use a fallback
+        icon_candidate = IconProvider.get_icon("logo") # Try to get 'logo.png', 'logo.svg', etc.
+        icon_path = icon_candidate.name() # .name() can give a path for QPixmap
+
+        if icon_path and os.path.exists(icon_path): # Check if path is valid and file exists
+            pixmap = QPixmap(icon_path)
+            if not pixmap.isNull():
+                self.logo_label.setPixmap(pixmap.scaled(64, 64, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            else:
+                logger.warning("Failed to load logo from path: {icon_path}, using fallback.")
+                self._set_fallback_logo()
+        else:
+            logger.warning(f"Logo icon 'logo' not found by IconProvider or path '{icon_path}' is invalid. Using fallback.")
+            self._set_fallback_logo()
+            
+        header_layout.addWidget(self.logo_label)
 
         title_label = QLabel("ConsultEase - Faculty Dashboard")
         title_label.setAlignment(Qt.AlignCenter)
         title_label.setStyleSheet("font-size: 28px; font-weight: bold; color: #0d3b66;")
         header_layout.addWidget(title_label, 1) # Add stretch factor to push logo to left
 
-        # Add a spacer to balance the logo, or ensure the title takes up more space and centers itself
-        # header_layout.addSpacerItem(QSpacerItem(100, 10, QSizePolicy.Fixed, QSizePolicy.Minimum))
-        
-        main_layout.addLayout(header_layout)
+        header_layout.addStretch()
 
+        main_layout.addLayout(header_layout)
 
         # Search and Filter
         search_filter_layout = QHBoxLayout()
@@ -378,7 +393,6 @@ class DashboardWindow(BaseWindow):
         manual_entry_layout.addWidget(self.manual_rfid_input)
         manual_entry_layout.addWidget(self.manual_rfid_button)
         main_layout.addLayout(manual_entry_layout)
-
 
         # Logout Button
         self.logout_button = QPushButton("Logout")
@@ -866,3 +880,12 @@ class DashboardWindow(BaseWindow):
         except Exception as e:
             logger.error(f"Error simulating consultation request: {str(e)}")
             self.show_notification("Error simulating consultation request", "error")
+
+    def _set_fallback_logo(self):
+        # Helper to set a fallback if the logo isn't found
+        fallback_pixmap = QPixmap(64, 64)
+        fallback_pixmap.fill(Qt.transparent) # Or some other placeholder
+        self.logo_label.setPixmap(fallback_pixmap)
+
+    def _setup_rfid_listener(self):
+        logger.debug(f"DashboardWindow for {self.student.name}: Setting up RFID listener.")

@@ -488,8 +488,6 @@ class RFIDService(QObject):
         logger.info("Attempting to refresh RFID service student data cache")
         new_cache = {}
         try:
-            from ..models import Student, get_db, close_db # Ensure close_db is imported here
-
             # Get a new session to ensure fresh data from DB
             db = get_db(force_new=True) # Force new session for refresh
             db.expire_all() # Ensure subsequent queries hit the DB for this session
@@ -541,7 +539,6 @@ class RFIDService(QObject):
         logger.info(f"Student with RFID {rfid_uid} not in cache, querying database.")
         db_session = None
         try:
-            from ..models import Student, get_db, close_db
             db_session = get_db()
             # Perform a case-insensitive query if your DB supports it, or handle in Python
             # For PostgreSQL, use ILIKE or lower()

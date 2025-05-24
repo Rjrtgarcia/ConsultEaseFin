@@ -10,13 +10,16 @@ import os
 import logging
 from .base_window import BaseWindow
 from ..controllers import FacultyController, ConsultationController, AdminController, StudentController
-from ..models import Student, get_db, Faculty, close_db
+from ..models.faculty import Faculty
+from ..models.student import Student
+from ..models.base import get_db, close_db
 from ..services import get_rfid_service
 from ..utils.input_sanitizer import (
     sanitize_string, sanitize_email, sanitize_filename, sanitize_path, sanitize_boolean
 )
 from ..models.base import db_operation_with_retry
 from ..config import get_config
+from ..utils.icons import get_icon_path, IconProvider, Icons
 
 # Set up logging
 logger = logging.getLogger(__name__)

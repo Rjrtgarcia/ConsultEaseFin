@@ -7,7 +7,7 @@ import logging
 
 from .base_window import BaseWindow
 from central_system.utils.theme import ConsultEaseTheme
-from ..controllers import RFIDController # Import the controller
+from ..controllers import RFIDController, StudentController # Import the controllers
 
 class LoginWindow(BaseWindow):
     """
@@ -17,8 +17,10 @@ class LoginWindow(BaseWindow):
     student_authenticated = pyqtSignal(object)
 
     def __init__(self, parent=None):
+        self.config = get_config() # Moved BEFORE super().__init__
         super().__init__(parent)
         self.rfid_controller = RFIDController.instance() # Use singleton
+        self.student_controller = StudentController.instance() # Assuming it's needed
 
         # Set up logging
         self.logger = logging.getLogger(__name__)

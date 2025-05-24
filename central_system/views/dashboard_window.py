@@ -272,8 +272,9 @@ class DashboardWindow(BaseWindow):
     consultation_requested = pyqtSignal(object, str, str)
 
     def __init__(self, student=None, parent=None):
-        super().__init__(parent)
-        self.student = student
+        self.student = student # Set self.student BEFORE calling super().__init__
+        super().__init__(parent) # Now BaseWindow.__init__ can call init_ui, which can access self.student
+        # self.student = student # No longer needed here
 
         # Get controller instances (now singletons)
         self.faculty_controller = FacultyController.instance()

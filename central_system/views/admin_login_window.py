@@ -6,6 +6,8 @@ from PyQt5.QtGui import QIcon
 import os
 import logging
 from .base_window import BaseWindow
+from .admin_controller import AdminController
+from .keyboard_manager import get_keyboard_manager
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +19,10 @@ class AdminLoginWindow(BaseWindow):
     admin_authenticated = pyqtSignal(object)
 
     def __init__(self, parent=None):
+        self.config = get_config()
         super().__init__(parent)
+        self.admin_controller = AdminController.instance()
+        self.keyboard_manager = get_keyboard_manager()
         self.init_ui()
 
     def init_ui(self):

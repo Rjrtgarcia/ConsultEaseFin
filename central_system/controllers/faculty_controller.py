@@ -5,7 +5,7 @@ from ..services import get_mqtt_service
 from ..models.base import get_db, close_db
 from ..models.faculty import Faculty
 from ..models.base import db_operation_with_retry
-from ..utils.mqtt_topics import MQTTTopics, get_faculty_status_topic
+from ..utils.mqtt_topics import MQTTTopics
 
 # Set up logging
 # logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s') # REMOVED
@@ -43,7 +43,7 @@ class FacultyController:
 
         # Subscribe to faculty status updates using standardized topic
         self.mqtt_service.register_topic_handler(
-            "consultease/faculty/+/status",  # Specific topic for faculty status
+            MQTTTopics.FACULTY_STATUS.format(faculty_id="+"),  # Use MQTTTopics class method
             self.handle_faculty_status_update
         )
 

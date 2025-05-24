@@ -733,6 +733,16 @@ class StudentManagementTab(QWidget):
         self.student_table = QTableWidget()
         self.student_table.setColumnCount(4)
         self.student_table.setHorizontalHeaderLabels(["ID", "Name", "Department", "RFID UID"])
+        # Configure column resizing
+        header = self.student_table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)  # ID
+        header.setSectionResizeMode(1, QHeaderView.Stretch)          # Name
+        header.setSectionResizeMode(2, QHeaderView.ResizeToContents) # Department
+        header.setSectionResizeMode(3, QHeaderView.Stretch)          # RFID UID
+        self.student_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.student_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.student_table.setSelectionMode(QTableWidget.SingleSelection)
+
         main_layout.addWidget(self.student_table)
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
@@ -964,6 +974,8 @@ class StudentDialog(QDialog):
         button_box.accepted.connect(self.accept)
         button_box.rejected.connect(self.reject)
         layout.addWidget(button_box)
+
+        self.setLayout(layout)
 
         self.scan_dialog = None # Initialize scan_dialog attribute
 

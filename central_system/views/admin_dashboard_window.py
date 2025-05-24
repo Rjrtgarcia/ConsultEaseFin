@@ -1098,7 +1098,7 @@ class RFIDScanDialog(QDialog):
         manual_entry_button.clicked.connect(self.handle_manual_input)
         manual_form_layout.addRow(manual_entry_button)
 
-        if self.config.get_setting("development_mode", False):
+        if self.config.get("development_mode", False):
             self.simulate_scan_button = QPushButton("Simulate Scan (Dev)")
             self.simulate_scan_button.clicked.connect(self.simulate_scan)
             manual_form_layout.addRow(self.simulate_scan_button)

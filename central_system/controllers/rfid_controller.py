@@ -66,6 +66,22 @@ class RFIDController:
         self.callbacks.append(callback)
         logger.info(f"Registered RFID controller callback: {callback.__name__}")
 
+    def unregister_callback(self, callback):
+        """
+        Unregister a previously registered callback.
+
+        Args:
+            callback (callable): Function to unregister
+        """
+        try:
+            if callback in self.callbacks:
+                self.callbacks.remove(callback)
+                logger.info(f"Unregistered RFID controller callback: {getattr(callback, '__name__', 'unknown')}")
+            else:
+                logger.warning(f"Attempted to unregister a callback that was not found: {getattr(callback, '__name__', 'unknown')}")
+        except Exception as e:
+            logger.error(f"Error unregistering RFID controller callback {getattr(callback, '__name__', 'unknown')}: {str(e)}")
+
     def _notify_callbacks(self, student, rfid_uid, error_message=None):
         """
         Notify all callbacks with the student and RFID information.

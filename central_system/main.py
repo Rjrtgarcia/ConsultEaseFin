@@ -90,7 +90,7 @@ class FocusEventFilter(QObject):
                 # Check if the widget wants keyboard on focus (optional, for more control)
                 # For now, always show for QLineEdit and QTextEdit
                 self.logger.debug(f"FocusIn event on {obj.__class__.__name__} ({obj.objectName()}). Showing keyboard.")
-                self.keyboard_manager.show()
+                self.keyboard_manager.show_keyboard()
         # elif event.type() == QEvent.FocusOut:
         #     if isinstance(obj, (QLineEdit, QTextEdit)):
         #         # Potentially hide keyboard if no other input field has focus.

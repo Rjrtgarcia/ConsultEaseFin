@@ -51,7 +51,7 @@ class ConsultationRequestForm(QFrame):
                 padding: 20px;
             }}
             QLabel {{
-                font-size: {theme.FONT_SIZE_MEDIUM}pt;
+                font-size: {theme.FONT_SIZE_NORMAL}pt;
                 color: {theme.TEXT_PRIMARY};
                 font-weight: bold; /* Make labels bold */
                 margin-bottom: 3px;
@@ -100,7 +100,7 @@ class ConsultationRequestForm(QFrame):
                 font-weight: bold;
                 padding: 12px 20px;
                 border-radius: {theme.BORDER_RADIUS_NORMAL}px;
-                font-size: {theme.FONT_SIZE_MEDIUM}pt;
+                font-size: {theme.FONT_SIZE_NORMAL}pt;
             }}
             QPushButton#submit_button:hover {{
                 background-color: {theme.SUCCESS_COLOR_HOVER};
@@ -111,7 +111,7 @@ class ConsultationRequestForm(QFrame):
                 font-weight: bold;
                 padding: 12px 20px;
                 border-radius: {theme.BORDER_RADIUS_NORMAL}px;
-                font-size: {theme.FONT_SIZE_MEDIUM}pt;
+                font-size: {theme.FONT_SIZE_NORMAL}pt;
             }}
             QPushButton#cancel_button:hover {{
                 background-color: {theme.ERROR_COLOR_HOVER};
@@ -938,7 +938,7 @@ class ConsultationPanel(QTabWidget):
                 border-top-right-radius: {theme.BORDER_RADIUS_NORMAL}px;
                 padding: 10px 25px; /* Increased padding */
                 margin-right: 2px;
-                font-size: {theme.FONT_SIZE_MEDIUM}pt;
+                font-size: {theme.FONT_SIZE_NORMAL}pt;
                 font-weight: bold;
                 min-width: 180px; /* Ensure tabs have enough width */
             }}

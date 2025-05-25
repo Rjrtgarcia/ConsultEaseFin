@@ -647,11 +647,27 @@ class DashboardWindow(BaseWindow):
 
         # Also populate the dropdown with all available faculty
         try:
-            available_faculty = self.faculty_controller.get_all_faculty(filter_available=True)
+            logger.info(f"Showing consultation form for faculty: {faculty.name}")
+            
+            # Load available faculty for the dropdown
+            available_faculty = self.faculty_controller.get_available_faculty() # Or get all faculty if selection should be wider
+            if not available_faculty:
+                logger.warning("No faculty available for consultation form dropdown.")
+                # Keep a list of all faculty as a fallback, even if unavailable, they can be selected
+                # but the form itself should prevent submission if they are not truly available.
+                all_faculty = self.faculty_controller.get_all_faculty()
+                if not all_faculty: # Should not happen if DB has faculty
+                    NotificationManager.show_message(self, "Error", "No faculty found in the system.", NotificationManager.ERROR)
+                    return
+                available_faculty = all_faculty # Use all as fallback, form will handle availability check.
 
-            # Set the faculty and faculty options in the consultation panel
-            self.consultation_panel.set_faculty_for_request(faculty, available_faculty)
-            self.consultation_panel.switch_to_request_tab() # Switch to the request form tab
+            # Pass the specific faculty and the list of available faculty to the panel
+            self.consultation_panel.set_faculty_options(available_faculty)
+            self.consultation_panel.set_faculty(faculty)
+            self.consultation_panel.animate_tab_change(0) # Switch to the request form tab
+            
+            # Ensure the consultation panel is visible and focused
+            self.consultation_panel.setVisible(True)
         except Exception as e:
             logger.error(f"Error loading available faculty for consultation form: {str(e)}")
             self.show_notification("Error preparing consultation form.", "error")

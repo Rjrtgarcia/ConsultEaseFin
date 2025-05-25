@@ -672,14 +672,14 @@ class DashboardWindow(BaseWindow):
             logger.error(f"Error loading available faculty for consultation form: {str(e)}")
             self.show_notification("Error preparing consultation form.", "error")
 
-    def handle_consultation_request_feedback(self, faculty, message, course_code):
+    def handle_consultation_request_feedback(self, consultation, message, course_code):
         """
         Handle consultation request submission.
         This method is now primarily for showing user feedback after the ConsultationPanel 
         has handled the actual creation logic.
 
         Args:
-            faculty (object): Faculty object
+            consultation (Consultation): The created Consultation object
             message (str): Consultation request message
             course_code (str): Optional course code
         """
@@ -692,7 +692,7 @@ class DashboardWindow(BaseWindow):
             QMessageBox.information(
                 self,
                 "Consultation Request",
-                f"Your consultation request with {faculty.name} has been submitted."
+                f"Your consultation request with {consultation.faculty.name} has been submitted."
             )
 
             # Ensure the consultation panel (which contains the history) is refreshed

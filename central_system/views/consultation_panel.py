@@ -72,7 +72,7 @@ class ConsultationRequestForm(QFrame):
             }}
 
             # Prepare icon path for f-string
-            arrow_down_icon_path = IconProvider.get_icon(Icons.ARROW_DOWN, QSize(16,16)).name().replace("\\\\", "/")
+            # arrow_down_icon_path = IconProvider.get_icon(Icons.ARROW_DOWN, QSize(16,16)).name().replace("\\\\", "/") # Removed as ARROW_DOWN is not valid and icon is not used
 
             QComboBox::drop-down {{
                 subcontrol-origin: padding;
@@ -81,7 +81,7 @@ class ConsultationRequestForm(QFrame):
                 border-left: 1px solid {theme.BORDER_COLOR};
             }}
             QComboBox::down-arrow {{
-                image: url({arrow_down_icon_path}); /* Use icon for arrow */
+                /* image: url({arrow_down_icon_path}); */ /* Use icon for arrow */
                 width: 16px;
                 height: 16px;
             }}

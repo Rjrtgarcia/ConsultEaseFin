@@ -374,7 +374,7 @@ class DashboardWindow(BaseWindow):
         self.filter_combo.setFixedHeight(self.theme.TOUCH_MIN_HEIGHT + 5)
 
         # Prepare icon path for f-string
-        arrow_down_icon_path = IconProvider.get_icon(Icons.ARROW_DOWN, QSize(16,16)).name().replace("\\", "/")
+        # arrow_down_icon_path = IconProvider.get_icon(Icons.ARROW_DOWN, QSize(16,16)).name().replace("\\", "/") # Removed as ARROW_DOWN is not a valid Icon
 
         self.filter_combo.setStyleSheet(f"""
             QComboBox {{
@@ -392,7 +392,7 @@ class DashboardWindow(BaseWindow):
                 border-left: 1px solid {self.theme.BORDER_COLOR};
             }}
             QComboBox::down-arrow {{
-                image: url({arrow_down_icon_path});
+                /* image: url({arrow_down_icon_path}); */ # Removed icon path
                 width: 16px;
                 height: 16px;
             }}

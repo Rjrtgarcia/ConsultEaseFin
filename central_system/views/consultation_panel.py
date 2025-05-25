@@ -70,6 +70,10 @@ class ConsultationRequestForm(QFrame):
                 border: 2px solid {theme.PRIMARY_COLOR};
                 background-color: {theme.BG_PRIMARY};
             }}
+
+            # Prepare icon path for f-string
+            arrow_down_icon_path = IconProvider.get_icon(Icons.ARROW_DOWN, QSize(16,16)).name().replace("\\\\", "/")
+
             QComboBox::drop-down {{
                 subcontrol-origin: padding;
                 subcontrol-position: top right;
@@ -77,7 +81,7 @@ class ConsultationRequestForm(QFrame):
                 border-left: 1px solid {theme.BORDER_COLOR};
             }}
             QComboBox::down-arrow {{
-                image: url({IconProvider.get_icon(Icons.ARROW_DOWN, QSize(16,16)).name().replace("\\\\", "/")}); /* Use icon for arrow */
+                image: url({arrow_down_icon_path}); /* Use icon for arrow */
                 width: 16px;
                 height: 16px;
             }}

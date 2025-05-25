@@ -372,6 +372,10 @@ class DashboardWindow(BaseWindow):
         self.filter_combo.setItemData(1, "available")
         self.filter_combo.setItemData(2, "unavailable")
         self.filter_combo.setFixedHeight(self.theme.TOUCH_MIN_HEIGHT + 5)
+
+        # Prepare icon path for f-string
+        arrow_down_icon_path = IconProvider.get_icon(Icons.ARROW_DOWN, QSize(16,16)).name().replace("\\", "/")
+
         self.filter_combo.setStyleSheet(f"""
             QComboBox {{
                 border: 1px solid {self.theme.BORDER_COLOR};
@@ -388,7 +392,7 @@ class DashboardWindow(BaseWindow):
                 border-left: 1px solid {self.theme.BORDER_COLOR};
             }}
             QComboBox::down-arrow {{
-                image: url({IconProvider.get_icon(Icons.ARROW_DOWN, QSize(16,16)).name().replace("\\\\", "/")});
+                image: url({arrow_down_icon_path});
                 width: 16px;
                 height: 16px;
             }}

@@ -81,7 +81,7 @@ class ConsultationRequestForm(QFrame):
                 border-left: 1px solid {theme.BORDER_COLOR};
             }}
             QComboBox::down-arrow {{
-                /* image: url({arrow_down_icon_path}); */ /* Use icon for arrow */
+                /* image: url(...); */ /* Default system arrow will be used */
                 width: 16px;
                 height: 16px;
             }}

@@ -650,7 +650,7 @@ class DashboardWindow(BaseWindow):
             logger.info(f"Showing consultation form for faculty: {faculty.name}")
             
             # Load available faculty for the dropdown
-            available_faculty = self.faculty_controller.get_available_faculty() # Or get all faculty if selection should be wider
+            available_faculty = self.faculty_controller.get_all_faculty(filter_available=True) # Or get all faculty if selection should be wider
             if not available_faculty:
                 logger.warning("No faculty available for consultation form dropdown.")
                 # Keep a list of all faculty as a fallback, even if unavailable, they can be selected

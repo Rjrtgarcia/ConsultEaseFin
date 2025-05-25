@@ -291,8 +291,16 @@ class LoadingDialog(QDialog):
                 logger.error(f"Error in operation: {str(e)}")
                 error[0] = e
             finally:
-                # Close dialog when done
-                loading_dialog.accept()
+                # Close dialog only if it's still visible
+                if loading_dialog and loading_dialog.isVisible():
+                    if error[0]:
+                        loading_dialog.reject()
+                    else:
+                        loading_dialog.accept()
+                elif loading_dialog: # Exists but not visible
+                    logger.debug("LoadingDialog was already closed or hidden.")
+                else:
+                    logger.warning("LoadingDialog object was deleted before operation completion.")
         
         # Use timer to start operation after dialog is shown
         QTimer.singleShot(100, run_operation)

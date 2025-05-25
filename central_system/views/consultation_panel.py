@@ -968,7 +968,7 @@ class ConsultationPanel(QTabWidget):
         self.history_panel.consultation_cancelled.connect(self.handle_consultation_cancel)
         self.addTab(self.history_panel, "History") # Shorter tab title
         # Set tab icon (ensure Icons.HISTORY or a suitable icon exists)
-        self.setTabIcon(1, IconProvider.get_icon(Icons.HISTORY if hasattr(Icons, 'HISTORY') else Icons.LIST, QSize(20,20)))
+        self.setTabIcon(1, IconProvider.get_icon(Icons.REPORTS, QSize(20,20)))
 
         # min_width = min(900, max(500, int(QApplication.desktop().screenGeometry().width() * 0.4)))
         # min_height = min(700, max(400, int(QApplication.desktop().screenGeometry().height() * 0.6)))

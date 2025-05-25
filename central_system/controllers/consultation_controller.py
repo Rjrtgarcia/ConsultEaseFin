@@ -7,6 +7,7 @@ from ..models.student import Student # Direct model imports
 from ..models.faculty import Faculty # Direct model imports
 from ..models.base import get_db, close_db, db_operation_with_retry # Corrected imports
 from ..utils.mqtt_topics import MQTTTopics
+from sqlalchemy.orm import joinedload # Add this import
 
 # Set up logging
 # logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s') # REMOVED
@@ -257,17 +258,25 @@ class ConsultationController:
     def get_consultations(self, student_id=None, faculty_id=None, status=None):
         """
         Get consultations, optionally filtered.
+        Eagerly loads related student and faculty data.
         """
         db = get_db()
         try:
-            query = db.query(Consultation)
-            if student_id is not None: query = query.filter(Consultation.student_id == student_id)
-            if faculty_id is not None: query = query.filter(Consultation.faculty_id == faculty_id)
-            if status is not None: query = query.filter(Consultation.status == status)
+            query = db.query(Consultation).options(
+                joinedload(Consultation.student),
+                joinedload(Consultation.faculty)
+            )
+            if student_id:
+                query = query.filter(Consultation.student_id == student_id)
+            if faculty_id:
+                query = query.filter(Consultation.faculty_id == faculty_id)
+            if status:
+                query = query.filter(Consultation.status == status)
+            
             consultations = query.order_by(Consultation.requested_at.desc()).all()
             return consultations
         except Exception as e:
-            logger.error(f"Error getting consultations: {str(e)}")
+            logger.error(f"Error getting consultations: {str(e)}", exc_info=True)
             return []
         finally:
             close_db()

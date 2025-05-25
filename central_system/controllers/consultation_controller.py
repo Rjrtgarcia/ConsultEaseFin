@@ -147,8 +147,16 @@ class ConsultationController:
                     # _ensure_mqtt_connected already logs the failure to connect
                     logger.error(f"MQTT: Not connected. Consultation {consultation.id} saved in DB but not published.")
                 
-                self._notify_callbacks(consultation) # Notify UI/other internal parts
-                return consultation
+                # Re-fetch the consultation to ensure all relationships are loaded for signal emission
+                loaded_consultation = self.get_consultation_by_id(consultation.id)
+                if loaded_consultation:
+                    self._notify_callbacks(loaded_consultation)
+                    return loaded_consultation
+                else:
+                    logger.error(f"Failed to re-load consultation {consultation.id} after creation. Callbacks not notified with full data.")
+                    # Fallback to returning the original instance, which might lack relationships
+                    self._notify_callbacks(consultation)
+                    return consultation
             else:
                 logger.error(f"DB: Failed to create consultation or retrieve ID after commit.")
                 return None
@@ -284,10 +292,14 @@ class ConsultationController:
     def get_consultation_by_id(self, consultation_id):
         """
         Get a consultation by ID.
+        Eagerly loads related student and faculty data.
         """
         db = get_db()
         try:
-            consultation = db.query(Consultation).filter(Consultation.id == consultation_id).first()
+            consultation = db.query(Consultation).options(
+                joinedload(Consultation.student),
+                joinedload(Consultation.faculty)
+            ).filter(Consultation.id == consultation_id).first()
             return consultation
         except Exception as e:
             logger.error(f"Error getting consultation by ID: {str(e)}")

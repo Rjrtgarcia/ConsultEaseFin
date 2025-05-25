@@ -20,6 +20,7 @@ from ..utils.input_sanitizer import (
 from ..models.base import db_operation_with_retry
 from ..config import get_config
 from ..utils.icons import IconProvider, Icons
+from ..utils.theme import ConsultEaseTheme
 import datetime
 
 # Set up logging
@@ -74,18 +75,18 @@ class AdminDashboardWindow(BaseWindow):
         # Logout button - smaller size
         logout_button = QPushButton("Logout")
         logout_button.setFixedSize(80, 30)
-        logout_button.setStyleSheet("""
-            QPushButton {
-                background-color: #e74c3c;
+        logout_button.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {ConsultEaseTheme.ERROR_COLOR};
                 color: white;
                 border-radius: 4px;
                 font-size: 10pt;
                 font-weight: bold;
                 padding: 2px 8px;
-            }
-            QPushButton:hover {
-                background-color: #c0392b;
-            }
+            }}
+            QPushButton:hover {{
+                background-color: {ConsultEaseTheme.ERROR_COLOR_HOVER};
+            }}
         """)
         logout_button.clicked.connect(self.logout)
         header_layout.addWidget(logout_button)
@@ -234,7 +235,7 @@ class FacultyManagementTab(QWidget):
         button_layout = QHBoxLayout()
 
         self.add_button = QPushButton("Add Faculty")
-        self.add_button.setStyleSheet("background-color: #4CAF50; color: white;")
+        self.add_button.setStyleSheet(f"background-color: {ConsultEaseTheme.SUCCESS_COLOR}; color: white;")
         self.add_button.clicked.connect(self.add_faculty)
         button_layout.addWidget(self.add_button)
 
@@ -243,7 +244,7 @@ class FacultyManagementTab(QWidget):
         button_layout.addWidget(self.edit_button)
 
         self.delete_button = QPushButton("Delete Faculty")
-        self.delete_button.setStyleSheet("background-color: #F44336; color: white;")
+        self.delete_button.setStyleSheet(f"background-color: {ConsultEaseTheme.ERROR_COLOR}; color: white;")
         self.delete_button.clicked.connect(self.delete_faculty)
         button_layout.addWidget(self.delete_button)
 

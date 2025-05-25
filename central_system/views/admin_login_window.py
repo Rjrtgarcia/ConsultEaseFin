@@ -9,6 +9,7 @@ from .base_window import BaseWindow
 from ..controllers import AdminController
 from ..utils.keyboard_manager import get_keyboard_manager
 from ..config import get_config
+from ..utils.theme import ConsultEaseTheme
 
 logger = logging.getLogger(__name__)
 
@@ -40,13 +41,13 @@ class AdminLoginWindow(BaseWindow):
 
         # Dark header background
         header_frame = QFrame()
-        header_frame.setStyleSheet("background-color: #232323; color: white;")
+        header_frame.setStyleSheet(f"background-color: {ConsultEaseTheme.BG_DARK}; color: {ConsultEaseTheme.TEXT_LIGHT};")
         header_layout = QVBoxLayout(header_frame)
         header_layout.setContentsMargins(20, 20, 20, 20)
 
         # Title
         title_label = QLabel('Admin Login')
-        title_label.setStyleSheet('font-size: 36pt; font-weight: bold; color: white;')
+        title_label.setStyleSheet(f'font-size: 36pt; font-weight: bold; color: {ConsultEaseTheme.TEXT_LIGHT};')
         title_label.setAlignment(Qt.AlignCenter)
         header_layout.addWidget(title_label)
 
@@ -55,7 +56,7 @@ class AdminLoginWindow(BaseWindow):
 
         # Content area - white background
         content_frame = QFrame()
-        content_frame.setStyleSheet("background-color: #f5f5f5;")
+        content_frame.setStyleSheet(f"background-color: {ConsultEaseTheme.BG_SECONDARY};")
         content_frame_layout = QVBoxLayout(content_frame)
         content_frame_layout.setContentsMargins(50, 50, 50, 50)
 
@@ -71,16 +72,16 @@ class AdminLoginWindow(BaseWindow):
         self.username_input = QLineEdit()
         self.username_input.setPlaceholderText('Enter username')
         self.username_input.setMinimumHeight(50)  # Make touch-friendly
-        self.username_input.setStyleSheet('''
-            QLineEdit {
-                border: 2px solid #ccc;
+        self.username_input.setStyleSheet(f'''
+            QLineEdit {{
+                border: 2px solid {ConsultEaseTheme.BORDER_COLOR};
                 border-radius: 5px;
                 padding: 5px 10px;
                 font-size: 14pt;
-            }
-            QLineEdit:focus {
-                border: 2px solid #4a86e8;
-            }
+            }}
+            QLineEdit:focus {{
+                border: 2px solid {ConsultEaseTheme.PRIMARY_COLOR};
+            }}
         ''')
         form_layout.addRow(username_label, self.username_input)
 
@@ -91,16 +92,16 @@ class AdminLoginWindow(BaseWindow):
         self.password_input.setPlaceholderText('Enter password')
         self.password_input.setEchoMode(QLineEdit.Password)
         self.password_input.setMinimumHeight(50)  # Make touch-friendly
-        self.password_input.setStyleSheet('''
-            QLineEdit {
-                border: 2px solid #ccc;
+        self.password_input.setStyleSheet(f'''
+            QLineEdit {{
+                border: 2px solid {ConsultEaseTheme.BORDER_COLOR};
                 border-radius: 5px;
                 padding: 5px 10px;
                 font-size: 14pt;
-            }
-            QLineEdit:focus {
-                border: 2px solid #4a86e8;
-            }
+            }}
+            QLineEdit:focus {{
+                border: 2px solid {ConsultEaseTheme.PRIMARY_COLOR};
+            }}
         ''')
         form_layout.addRow(password_label, self.password_input)
 
@@ -109,7 +110,7 @@ class AdminLoginWindow(BaseWindow):
 
         # Add error message label (hidden by default)
         self.error_label = QLabel('')
-        self.error_label.setStyleSheet('color: #f44336; font-weight: bold; font-size: 14pt;')
+        self.error_label.setStyleSheet(f'color: {ConsultEaseTheme.ERROR_COLOR}; font-weight: bold; font-size: 14pt;')
         self.error_label.setAlignment(Qt.AlignCenter)
         self.error_label.setVisible(False)
         content_frame_layout.addWidget(self.error_label)
@@ -122,45 +123,45 @@ class AdminLoginWindow(BaseWindow):
 
         # Footer with buttons
         footer_frame = QFrame()
-        footer_frame.setStyleSheet("background-color: #232323;")
+        footer_frame.setStyleSheet(f"background-color: {ConsultEaseTheme.BG_DARK};")
         footer_frame.setMinimumHeight(80)
         footer_layout = QHBoxLayout(footer_frame)
         footer_layout.setContentsMargins(50, 10, 50, 10)
 
         # Back button
         self.back_button = QPushButton('Back')
-        self.back_button.setStyleSheet('''
-            QPushButton {
-                background-color: #808080;
-                color: white;
+        self.back_button.setStyleSheet(f'''
+            QPushButton {{
+                background-color: {ConsultEaseTheme.TEXT_SECONDARY};
+                color: {ConsultEaseTheme.TEXT_LIGHT};
                 border: none;
                 border-radius: 5px;
                 padding: 10px 20px;
                 font-size: 14pt;
                 min-width: 120px;
-            }
-            QPushButton:hover {
-                background-color: #909090;
-            }
+            }}
+            QPushButton:hover {{
+                background-color: {ConsultEaseTheme.BORDER_COLOR};
+            }}
         ''')
         self.back_button.clicked.connect(self.back_to_login)
 
         # Login button
         self.login_button = QPushButton('Login')
-        self.login_button.setStyleSheet('''
-            QPushButton {
-                background-color: #4CAF50;
-                color: white;
+        self.login_button.setStyleSheet(f'''
+            QPushButton {{
+                background-color: {ConsultEaseTheme.SUCCESS_COLOR};
+                color: {ConsultEaseTheme.TEXT_LIGHT};
                 border: none;
                 border-radius: 5px;
                 padding: 10px 20px;
                 font-size: 14pt;
                 font-weight: bold;
                 min-width: 120px;
-            }
-            QPushButton:hover {
-                background-color: #45a049;
-            }
+            }}
+            QPushButton:hover {{
+                background-color: {ConsultEaseTheme.SUCCESS_COLOR_HOVER};
+            }}
         ''')
         self.login_button.clicked.connect(self.login)
 

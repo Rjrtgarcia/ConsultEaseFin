@@ -76,7 +76,7 @@ class LoginWindow(BaseWindow):
 
         # Content area - white background
         content_frame = QFrame()
-        content_frame.setStyleSheet("background-color: #f5f5f5;")
+        content_frame.setStyleSheet(f"background-color: {ConsultEaseTheme.BG_SECONDARY};")
         content_frame_layout = QVBoxLayout(content_frame)
         content_frame_layout.setContentsMargins(50, 50, 50, 50)
 
@@ -86,7 +86,7 @@ class LoginWindow(BaseWindow):
             QFrame {{
                 background-color: {ConsultEaseTheme.BG_SECONDARY};
                 border-radius: {ConsultEaseTheme.BORDER_RADIUS_LARGE}px;
-                border: 2px solid #ccc;
+                border: 2px solid {ConsultEaseTheme.BORDER_COLOR};
             }}
         ''')
         scanning_layout = QVBoxLayout(self.scanning_frame)
@@ -112,7 +112,7 @@ class LoginWindow(BaseWindow):
         self.rfid_input.setPlaceholderText("Enter RFID manually")
         self.rfid_input.setStyleSheet(f"""
             QLineEdit {{
-                border: 1px solid #ccc;
+                border: 1px solid {ConsultEaseTheme.BORDER_COLOR};
                 border-radius: {ConsultEaseTheme.BORDER_RADIUS_NORMAL}px;
                 padding: {ConsultEaseTheme.PADDING_NORMAL}px;
                 font-size: {ConsultEaseTheme.FONT_SIZE_NORMAL}pt;
@@ -138,7 +138,7 @@ class LoginWindow(BaseWindow):
                 min-height: {ConsultEaseTheme.TOUCH_MIN_HEIGHT}px;
             }}
             QPushButton:hover {{
-                background-color: #1a4b7c;
+                background-color: {ConsultEaseTheme.PRIMARY_COLOR_HOVER};
             }}
         """)
         submit_button.clicked.connect(self.handle_manual_rfid_entry)
@@ -160,7 +160,7 @@ class LoginWindow(BaseWindow):
                 min-height: {ConsultEaseTheme.TOUCH_MIN_HEIGHT}px;
             }}
             QPushButton:hover {{
-                background-color: #2980b9;
+                background-color: {ConsultEaseTheme.PRIMARY_COLOR};
                 color: {ConsultEaseTheme.TEXT_LIGHT};
             }}
         """)
@@ -191,7 +191,8 @@ class LoginWindow(BaseWindow):
                 min-height: {ConsultEaseTheme.TOUCH_MIN_HEIGHT}px;
             }}
             QPushButton:hover {{
-                background-color: #3a4b5c;
+                background-color: {ConsultEaseTheme.PRIMARY_COLOR};
+                color: {ConsultEaseTheme.TEXT_LIGHT};
             }}
         ''')
         admin_button.clicked.connect(self.admin_login)

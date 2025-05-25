@@ -12,6 +12,7 @@ sys.path.insert(0, os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirna
 
 # Import utilities
 from central_system.utils.icons import IconProvider, Icons  # Import IconProvider and Icons
+from central_system.utils.theme import ConsultEaseTheme # Added import
 
 logger = logging.getLogger(__name__)
 
@@ -59,27 +60,27 @@ class BaseWindow(QMainWindow):
         self.apply_touch_friendly_style()
 
         # Add keyboard toggle button to the status bar
-        self.statusBar().setStyleSheet("QStatusBar { border-top: 1px solid #cccccc; }")
+        self.statusBar().setStyleSheet(f"QStatusBar {{ border-top: 1px solid {ConsultEaseTheme.BORDER_COLOR_LIGHT}; }}")
 
         # Create keyboard toggle button with icon if available
         self.keyboard_toggle_button = QPushButton("⌨ Keyboard")
         self.keyboard_toggle_button.setFixedSize(140, 40)
-        self.keyboard_toggle_button.setStyleSheet("""
-            QPushButton {
-                background-color: #f4d35e;  /* Gold accent color for visibility */
-                color: #0d3b66;  /* Dark blue text for contrast */
+        self.keyboard_toggle_button.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {ConsultEaseTheme.ACCENT_COLOR};
+                color: {ConsultEaseTheme.PRIMARY_COLOR};
                 border-radius: 6px;
                 padding: 6px 10px;
                 font-weight: bold;
                 font-size: 12pt;
-                border: 2px solid #0d3b66;  /* Border for better visibility */
-            }
-            QPushButton:hover {
-                background-color: #f7e07e;  /* Lighter gold on hover */
-            }
-            QPushButton:pressed {
-                background-color: #e6c54a;  /* Darker gold when pressed */
-            }
+                border: 2px solid {ConsultEaseTheme.PRIMARY_COLOR};
+            }}
+            QPushButton:hover {{
+                background-color: {ConsultEaseTheme.PRIMARY_COLOR_HOVER}; /* Placeholder for ACCENT_COLOR_HOVER */
+            }}
+            QPushButton:pressed {{
+                background-color: {ConsultEaseTheme.PRIMARY_COLOR}; /* Placeholder for ACCENT_COLOR_PRESSED */
+            }}
         """)
 
         # Try to set an icon if available
@@ -101,76 +102,76 @@ class BaseWindow(QMainWindow):
         """
         Apply touch-friendly styles to the application
         """
-        self.setStyleSheet('''
+        self.setStyleSheet(f'''
             /* General styles */
-            QWidget {
+            QWidget {{
                 font-size: 14pt;
-            }
+            }}
 
-            QMainWindow {
-                background-color: #f0f0f0;
-            }
+            QMainWindow {{
+                background-color: {ConsultEaseTheme.BG_PRIMARY_MUTED};
+            }}
 
             /* Touch-friendly buttons */
-            QPushButton {
+            QPushButton {{
                 min-height: 50px;
                 padding: 10px 20px;
                 font-size: 14pt;
                 border-radius: 5px;
-                background-color: #4a86e8;
-                color: white;
-            }
+                background-color: {ConsultEaseTheme.PRIMARY_COLOR};
+                color: {ConsultEaseTheme.TEXT_LIGHT};
+            }}
 
-            QPushButton:hover {
-                background-color: #5a96f8;
-            }
+            QPushButton:hover {{
+                background-color: {ConsultEaseTheme.PRIMARY_COLOR_HOVER};
+            }}
 
-            QPushButton:pressed {
-                background-color: #3a76d8;
-            }
+            QPushButton:pressed {{
+                background-color: {ConsultEaseTheme.PRIMARY_COLOR}; /* Consider defining PRIMARY_COLOR_PRESSED */
+            }}
 
             /* Touch-friendly input fields */
-            QLineEdit, QTextEdit, QComboBox {
+            QLineEdit, QTextEdit, QComboBox {{
                 min-height: 40px;
                 padding: 5px 10px;
                 font-size: 14pt;
-                border: 1px solid #cccccc;
+                border: 1px solid {ConsultEaseTheme.BORDER_COLOR};
                 border-radius: 5px;
-            }
+            }}
 
-            QLineEdit:focus, QTextEdit:focus {
-                border: 2px solid #4a86e8;
-            }
+            QLineEdit:focus, QTextEdit:focus {{
+                border: 2px solid {ConsultEaseTheme.PRIMARY_COLOR};
+            }}
 
             /* Table headers and cells */
-            QTableWidget {
+            QTableWidget {{
                 font-size: 12pt;
-            }
+            }}
 
-            QTableWidget::item {
+            QTableWidget::item {{
                 padding: 8px;
-            }
+            }}
 
-            QHeaderView::section {
-                background-color: #e0e0e0;
+            QHeaderView::section {{
+                background-color: {ConsultEaseTheme.BG_PRIMARY_MUTED};
                 padding: 8px;
                 font-size: 12pt;
                 font-weight: bold;
-            }
+            }}
 
             /* Tabs for better touch */
-            QTabBar::tab {
+            QTabBar::tab {{
                 min-width: 120px;
                 min-height: 40px;
                 padding: 8px 16px;
                 font-size: 14pt;
-            }
+            }}
 
             /* Dialog buttons */
-            QDialogButtonBox > QPushButton {
+            QDialogButtonBox > QPushButton {{
                 min-width: 100px;
                 min-height: 40px;
-            }
+            }}
         ''')
         logger.info("Applied touch-optimized UI settings")
 

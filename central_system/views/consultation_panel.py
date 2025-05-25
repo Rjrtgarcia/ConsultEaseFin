@@ -949,7 +949,7 @@ class ConsultationPanel(QTabWidget):
                 margin-bottom: -1px; /* Overlap with pane top border */
             }}
             QTabBar::tab:hover:!selected {{
-                background-color: {theme.BG_PRIMARY_HOVER};
+                background-color: {theme.BG_PRIMARY_MUTED};
                 color: {theme.PRIMARY_COLOR};
             }}
             QTabWidget::tab-bar {{

@@ -492,7 +492,7 @@ class ConsultationHistoryPanel(QFrame):
         self.consultation_table.setHorizontalHeaderLabels(["Faculty", "Course", "Status", "Date", "Actions"])
         
         header = self.consultation_table.horizontalHeader()
-        header.setMinimumSectionSize(100)  # Set a minimum width for all columns
+        header.setMinimumSectionSize(120)  # Set a minimum width for all columns
         header.setStretchLastSection(False) # Don't automatically stretch the last section
 
         header.setSectionResizeMode(0, QHeaderView.Interactive)  # Faculty column
@@ -502,7 +502,8 @@ class ConsultationHistoryPanel(QFrame):
         header.setSectionResizeMode(2, QHeaderView.ResizeToContents) # Status - to fit the badge
         header.setSectionResizeMode(3, QHeaderView.Interactive)  # Date
         self.consultation_table.setColumnWidth(3, 180)           # Date: Set initial width for "YYYY-MM-DD HH:MM"
-        header.setSectionResizeMode(4, QHeaderView.ResizeToContents) # Actions column - ResizeToContents
+        header.setSectionResizeMode(4, QHeaderView.Interactive) # Actions column - Interactive
+        self.consultation_table.setColumnWidth(4, 220)           # Actions: Set fixed width to accommodate buttons
 
         self.consultation_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.consultation_table.setSelectionBehavior(QTableWidget.SelectRows)

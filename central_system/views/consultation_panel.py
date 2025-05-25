@@ -600,52 +600,39 @@ class ConsultationHistoryPanel(QFrame):
             course_item = QTableWidgetItem(consultation.course_code if consultation.course_code else "N/A")
             self.consultation_table.setItem(row_position, 1, course_item)
 
-            # Status with enhanced color coding and improved contrast
-            status_item = QTableWidgetItem(consultation.status.value.capitalize())
+            # Status with enhanced color coding using QLabel for better styling
+            status_label_widget = QLabel(consultation.status.value.capitalize())
+            status_label_widget.setAlignment(Qt.AlignCenter) # Center the text
+
+            status_value = consultation.status.value
+            style_parts = [
+                "font-weight: bold",
+                f"font-size: {self.font().pointSize() + 1}pt", # Match existing font sizing intent
+                "padding: 5px 8px", # Add some padding
+                "border-radius: 4px" # Add border radius
+            ]
 
             # Define status colors with better contrast and accessibility
+            # These are the same colors as before
             status_colors = {
-                "pending": {
-                    "bg": QColor(255, 193, 7),    # Amber (darker yellow)
-                    "fg": QColor(0, 0, 0),        # Black text for contrast
-                    "border": "#f08c00"           # Darker border for definition
-                },
-                "accepted": {
-                    "bg": QColor(40, 167, 69),    # Enhanced green
-                    "fg": QColor(255, 255, 255),  # White text for contrast
-                    "border": "#2b8a3e"           # Darker border for definition
-                },
-                "completed": {
-                    "bg": QColor(0, 123, 255),    # Enhanced blue
-                    "fg": QColor(255, 255, 255),  # White text for contrast
-                    "border": "#1864ab"           # Darker border for definition
-                },
-                "cancelled": {
-                    "bg": QColor(220, 53, 69),    # Enhanced red
-                    "fg": QColor(255, 255, 255),  # White text for contrast
-                    "border": "#a61e4d"           # Darker border for definition
-                }
+                "pending": {"bg": "#ffc107", "fg": "#000000", "border": "#f08c00"}, # Amber, Black text
+                "accepted": {"bg": "#28a745", "fg": "#ffffff", "border": "#2b8a3e"}, # Green, White text
+                "completed": {"bg": "#007bff", "fg": "#ffffff", "border": "#1864ab"},# Blue, White text
+                "cancelled": {"bg": "#dc3545", "fg": "#ffffff", "border": "#a61e4d"} # Red, White text
             }
 
-            # Apply the appropriate color scheme
-            status_value = consultation.status.value
             if status_value in status_colors:
                 colors = status_colors[status_value]
-                status_item.setBackground(colors["bg"])
-                status_item.setForeground(colors["fg"])
+                style_parts.append(f"background-color: {colors['bg']}")
+                style_parts.append(f"color: {colors['fg']}")
+                style_parts.append(f"border: 1px solid {colors['border']}") # Use 1px border for a less chunky look
+            else: # Default fallback style if status not in map
+                style_parts.append("background-color: #e9ecef") # Light gray
+                style_parts.append("color: #495057") # Dark gray text
+                style_parts.append("border: 1px solid #ced4da")
 
-                # Apply custom styling with border for better definition
-                status_item.setData(
-                    Qt.UserRole,
-                    f"border: 2px solid {colors['border']}; border-radius: 4px; padding: 4px;"
-                )
-
-            # Make text bold and slightly larger for better readability
-            font = status_item.font()
-            font.setBold(True)
-            font.setPointSize(font.pointSize() + 1)
-            status_item.setFont(font)
-            self.consultation_table.setItem(row_position, 2, status_item)
+            status_label_widget.setStyleSheet("; ".join(style_parts) + ";")
+            self.consultation_table.setCellWidget(row_position, 2, status_label_widget)
 
             # Date
             date_str = consultation.requested_at.strftime("%Y-%m-%d %H:%M")

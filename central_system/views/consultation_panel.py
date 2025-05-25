@@ -908,7 +908,7 @@ class ConsultationPanel(QTabWidget):
         self.refresh_timer = QTimer(self)
         self.refresh_timer.timeout.connect(self.auto_refresh_history)
         # Increased refresh interval for history, less frequent updates
-        self.refresh_timer.start(config.get('ui.history_refresh_interval_ms', 120000)) # Default 2 mins
+        self.refresh_timer.start(self.config.get('ui.history_refresh_interval_ms', 120000)) # Default 2 mins
 
         self.currentChanged.connect(self.on_tab_changed)
 

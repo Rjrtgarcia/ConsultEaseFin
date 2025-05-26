@@ -87,6 +87,18 @@ The Central System follows a layered architecture, broadly aligning with Model-V
     *   The `@db_operation_with_retry` decorator implements retry logic for database operations.
     *   MQTT service includes reconnection logic.
     *   Consistent logging of errors.
+8.  **UI Patterns**:
+    *   Consistent light theme styling applied via `BaseWindow` and stylesheets.
+    *   Fullscreen toggle via F11 key.
+    *   Manual input fallback provided for hardware-dependent features (RFID scan via UI).
+    *   Status indicators use consistent color coding (green for success, red for error).
+    *   Confirmations required for destructive actions (delete, restore).
+    *   Auto-appearing on-screen keyboard for text input, managed by `KeyboardManager`.
+    *   Informative error messages with suggestions for resolution.
+    *   Views interact with **singleton controller instances**.
+    *   **QTableWidget Styling and Layout Patterns**:
+        *   **Custom Cell Widgets**: For complex cell content requiring specific styling beyond `QTableWidgetItem` capabilities (e.g., status badges with background, border, and padding), `QLabel` or other widgets are used and set via `QTableWidget.setCellWidget()`.
+        *   **Column Sizing Strategies**: A combination of `QHeaderView.setSectionResizeMode()` (using `Interactive`, `ResizeToContents`, `Stretch`), `QTableWidget.setColumnWidth()`, and `QHeaderView.setMinimumSectionSize()` is often necessary to achieve balanced and responsive table layouts, especially when dealing with variable content and action buttons.
 
 ### Faculty Desk Unit
 1.  **State Pattern**:

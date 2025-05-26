@@ -27,6 +27,9 @@ The system has undergone extensive refactoring to enhance stability, maintainabi
     - Automatic on-screen keyboard integration (via `KeyboardManager`).
     - Fullscreen Toggle (F11).
     - Admin password hashing with bcrypt.
+- **Debugging & UI Enhancements (Completed)**:
+    - Resolved numerous runtime errors (NameError, AttributeError, DetachedInstanceError, RuntimeError with LoadingDialog) across controllers and views.
+    - Refined `ConsultationHistoryPanel` UI: Implemented robust column sizing for the table and improved status display using styled QLabels.
 
 ### What's Left to Build / Needs Verification
 - **Hardware Integration & Testing**:

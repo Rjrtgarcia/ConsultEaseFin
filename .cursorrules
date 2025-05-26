@@ -36,6 +36,9 @@ ConsultEase is a student-faculty interaction system with a Central System (Raspb
 - **Keyboard**: Auto-appearing on-screen keyboard via `KeyboardManager` (configurable: `squeekboard`, `matchbox-keyboard`).
 - **Feedback**: Clear status indicators (green for available/success, red for unavailable/error). Confirmations for destructive actions.
 - **Interaction**: Views interact with singleton controller instances.
+- **QTableWidget Layouts**: For complex tables like consultation history:
+    - Use `setCellWidget` with styled `QLabel` for rich cell content (e.g., status badges).
+    - Employ a mix of `QHeaderView.Interactive` with `setColumnWidth` for predictable sizing, `QHeaderView.ResizeToContents` for dynamic content columns, and `QHeaderView.setMinimumSectionSize` to prevent columns from becoming too small. Avoid overuse of `QHeaderView.Stretch` if it unbalances the layout.
 
 ## Critical Implementation Paths & Considerations
 1.  **RFID Authentication**: `RFIDService` (cache & DB lookup), VID/PID from `config.json`.

@@ -40,6 +40,16 @@ The application has undergone significant refactoring to improve stability, main
     - `Faculty`: `last_seen` attribute confirmed present.
 - **Logging**: Centralized logging setup. `main.py` now uses `RotatingFileHandler` with `max_size` and `backup_count` from `config.py` for improved log management.
 
+## Recent Changes (Continued from above)
+- **Runtime Error Resolution**: Addressed a series of runtime errors including:
+    - `AttributeError` and `NameError` issues due to incorrect import paths (e.g., `get_db`, `close_db`, `IconProvider`, `ConsultEaseTheme`, `QSize`) or incorrect attribute/method calls (e.g., `BG_PRIMARY_HOVER`, `Icons.LIST`, `config` object access, `faculty_controller.get_available_faculty`, `consultation.name` in feedback).
+    - SQLAlchemy `DetachedInstanceError` in consultation creation and retrieval by implementing eager loading (`joinedload`) in `ConsultationController.get_consultations()` and `get_consultation_by_id()`, and ensuring `create_consultation` returns a fully-loaded object.
+    - `RuntimeError: wrapped C/C++ object of type LoadingDialog has been deleted` by adding checks in `NotificationManager.LoadingDialog.run_operation` to ensure the dialog is still visible before attempting to `accept()` or `reject()`.
+- **UI Refinements (Consultation History Panel - `central_system/views/consultation_panel.py`)**:
+    - Iteratively adjusted `QTableWidget` column widths and resize modes (`setColumnWidth`, `setSectionResizeMode`, `setMinimumSectionSize`) to improve layout and ensure visibility of all data and action buttons.
+    - Replaced direct `QTableWidgetItem` for "Status" with a custom-styled `QLabel` set via `setCellWidget` to allow for better visual styling (background color, border, padding) of the status badges.
+    - Ensured action buttons ("View", "Cancel") in the history table are clickable and have adequate space.
+
 ## Next Steps
 - **Hardware Integration Testing**:
     - Thoroughly test with the actual 13.56 MHz RFID reader (verify VID/PID in `config.json`) and various card types.

@@ -237,6 +237,9 @@ consultations
    - `KeyboardManager` attempts to use the `preferred` keyboard (e.g., `squeekboard`, `matchbox-keyboard`) as defined in `config.json` (`keyboard.preferred`), with a `keyboard.fallback` option if the preferred one is not available or fails.
    - Installation of the actual keyboard programs (like `squeekboard`) is a system setup step (see `deployment_guide.md`).
 
+5. **QTableWidget Layout Challenges**
+   - Achieving consistent and balanced column widths in `QTableWidget` (e.g., for the consultation history) often requires a careful combination of `setSectionResizeMode`, `setColumnWidth`, and `setMinimumSectionSize` on the `QHeaderView` and `QTableWidget` itself. Using `ResizeToContents` for columns with custom widgets (like styled `QLabel` for status badges) or multiple buttons needs to be balanced with fixed or interactive widths for other columns to prevent overly cramped or excessively wide layouts.
+
 ## Development Workflow
 1. Feature branch development
 2. Local testing on development hardware/simulators

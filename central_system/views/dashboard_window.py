@@ -181,30 +181,32 @@ class FacultyCard(QFrame):
 
     def _load_faculty_image(self):
         pixmap_loaded = False
-        if hasattr(self.faculty, 'get_image_path') and self.faculty.image_path:
+        # Assume self.faculty.get_image_path() returns an absolute, verified path or None
+        image_path = self.faculty.get_image_path() if hasattr(self.faculty, 'get_image_path') else None
+
+        if image_path: # If model provides a valid path
             try:
-                image_path = self.faculty.get_image_path()
-                if image_path and os.path.exists(image_path):
-                    pixmap = QPixmap(image_path)
-                    if not pixmap.isNull():
-                        self.image_label.setPixmap(pixmap)
-                        pixmap_loaded = True
-                    else:
-                        logger.warning(f"Could not load image for faculty {self.faculty.name}: {image_path} (pixmap isNull)")
+                pixmap = QPixmap(image_path)
+                if not pixmap.isNull():
+                    self.image_label.setPixmap(pixmap)
+                    pixmap_loaded = True
                 else:
-                    logger.warning(f"Image path not found or is invalid for faculty {self.faculty.name}: {image_path}")
+                    logger.warning(f"Could not load image for faculty {self.faculty.name} from provided path: {image_path} (pixmap isNull)")
             except Exception as e:
-                logger.error(f"Error loading faculty image for {self.faculty.name} from {getattr(self.faculty, 'image_path', 'N/A')}: {str(e)}")
+                logger.error(f"Error loading faculty image for {self.faculty.name} from {image_path}: {str(e)}")
         
         if not pixmap_loaded:
+            # Fallback to default icon
             try:
-                default_icon = IconProvider.get_icon(Icons.USER, QSize(60, 60))
-                if default_icon and not default_icon.isNull():
-                    self.image_label.setPixmap(default_icon.pixmap(QSize(60,60)))
+                # Assuming IconProvider.get_icon returns a QIcon object
+                default_qicon = IconProvider.get_icon(Icons.USER) 
+                if default_qicon and not default_qicon.isNull():
+                    self.image_label.setPixmap(default_qicon.pixmap(QSize(60, 60))) # Specify size for pixmap
+                    # pixmap_loaded = True # Not strictly needed to set true here as it's a fallback
                 else:
-                    logger.warning(f"Default user icon (Icons.USER) could not be loaded. Using theme placeholder for {self.faculty.name}.")
+                    logger.warning(f"Default user icon (Icons.USER) could not be loaded or is null. Using theme placeholder for {self.faculty.name}.")
                     fallback_pixmap = QPixmap(QSize(60, 60))
-                    fallback_pixmap.fill(QColor(self.theme.BG_SECONDARY)) # Theme color for placeholder bg
+                    fallback_pixmap.fill(QColor(self.theme.BG_SECONDARY)) 
                     self.image_label.setPixmap(fallback_pixmap)
             except Exception as e:
                 logger.error(f"Exception while trying to load default user icon for {self.faculty.name}: {str(e)}")
@@ -257,7 +259,7 @@ class DashboardWindow(BaseWindow):
         self.no_results_label.setVisible(False)
         
         # Store faculty cards to manage them directly
-        self._faculty_cards_widgets = []
+        self._faculty_card_map = {} # Changed from _faculty_cards_widgets list to a map
 
         # Initialize UI components - REMOVED as super().__init__ calls init_ui polymorphicly
         # self.init_ui()
@@ -423,7 +425,54 @@ class DashboardWindow(BaseWindow):
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.scroll_area.setStyleSheet(f"background-color: {self.theme.BG_SECONDARY}; border-radius: {self.theme.BORDER_RADIUS_NORMAL}px; border: 1px solid {self.theme.BORDER_COLOR_LIGHT};")
+        self.scroll_area.setStyleSheet(f"""
+            QScrollArea {{
+                border: none;
+                background-color: transparent;
+            }}
+            QScrollBar:vertical {{
+                border: none;
+                background: {self.theme.SCROLLBAR_BG_COLOR if hasattr(self.theme, 'SCROLLBAR_BG_COLOR') else '#f0f0f0'}; 
+                width: 15px;
+                margin: 0px;
+            }}
+            QScrollBar::handle:vertical {{
+                background: {self.theme.SCROLLBAR_HANDLE_COLOR if hasattr(self.theme, 'SCROLLBAR_HANDLE_COLOR') else '#adb5bd'}; 
+                min-height: 30px;
+                border-radius: {self.theme.BORDER_RADIUS_NORMAL if hasattr(self.theme, 'BORDER_RADIUS_NORMAL') else '7px'};
+            }}
+            QScrollBar::handle:vertical:hover {{
+                background: {self.theme.SCROLLBAR_HANDLE_HOVER_COLOR if hasattr(self.theme, 'SCROLLBAR_HANDLE_HOVER_COLOR') else '#868e96'}; 
+            }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+                height: 0px;
+                background: none;
+            }}
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
+                background: none;
+            }}
+            QScrollBar:horizontal {{ 
+                border: none;
+                background: {self.theme.SCROLLBAR_BG_COLOR if hasattr(self.theme, 'SCROLLBAR_BG_COLOR') else '#f0f0f0'};
+                height: 15px;
+                margin: 0px;
+            }}
+            QScrollBar::handle:horizontal {{
+                background: {self.theme.SCROLLBAR_HANDLE_COLOR if hasattr(self.theme, 'SCROLLBAR_HANDLE_COLOR') else '#adb5bd'};
+                min-width: 30px;
+                border-radius: {self.theme.BORDER_RADIUS_NORMAL if hasattr(self.theme, 'BORDER_RADIUS_NORMAL') else '7px'};
+            }}
+            QScrollBar::handle:horizontal:hover {{
+                background: {self.theme.SCROLLBAR_HANDLE_HOVER_COLOR if hasattr(self.theme, 'SCROLLBAR_HANDLE_HOVER_COLOR') else '#868e96'};
+            }}
+            QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
+                width: 0px;
+                background: none;
+            }}
+            QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {{
+                background: none;
+            }}
+        """)
 
         self.faculty_cards_widget = QWidget()
         self.faculty_grid_layout = QGridLayout(self.faculty_cards_widget)
@@ -456,57 +505,87 @@ class DashboardWindow(BaseWindow):
     def populate_faculty_grid(self, faculties):
         """
         Populate the faculty grid with faculty cards.
-        Optimized for performance with batch processing and reduced UI updates.
+        Optimized to reuse existing FacultyCard widgets.
 
         Args:
             faculties (list): List of faculty objects
         """
-        # Temporarily disable updates to reduce flickering and improve performance
-        self.setUpdatesEnabled(False)
+        self.setUpdatesEnabled(False) # Temporarily disable updates for performance
 
         try:
-            # Clear existing faculty cards from the grid and delete them
-            for i in reversed(range(self.faculty_grid_layout.count())):
-                widget_to_remove = self.faculty_grid_layout.itemAt(i).widget()
-                if widget_to_remove:
-                    self.faculty_grid_layout.removeWidget(widget_to_remove)
-                    widget_to_remove.deleteLater()
-            self._faculty_cards_widgets.clear()
             self.loading_label.setVisible(False)
             self.no_results_label.setVisible(False)
 
-            # Grid layout logic
-            # Card width + spacing defined in FacultyCard and grid layout
-            # Calculate max_cols based on scroll_area width
-            scroll_area_width = self.scroll_area.viewport().width() if self.scroll_area.viewport() else 600
-            card_plus_spacing = 260 + self.faculty_grid_layout.spacing() # FacultyCard width + grid spacing
-            max_cols = max(1, int(scroll_area_width / card_plus_spacing))
+            new_faculty_ids = {f.id for f in faculties}
+            current_map_ids = set(self._faculty_card_map.keys())
 
-            if not faculties:
-                # Add no_results_label to grid layout directly (spanning columns)
-                self.faculty_grid_layout.addWidget(self.no_results_label, 0, 0, 1, max_cols, Qt.AlignCenter)
-                self.no_results_label.setVisible(True)
-            else:
-                row, col = 0, 0
-                for faculty in faculties:
-                    # No need for extra container if FacultyCard handles its own margins/shadows well
+            # Remove cards for faculty no longer present
+            ids_to_remove = current_map_ids - new_faculty_ids
+            for faculty_id in ids_to_remove:
+                card_to_delete = self._faculty_card_map.pop(faculty_id)
+                if card_to_delete: # Ensure it exists
+                    self.faculty_grid_layout.removeWidget(card_to_delete)
+                    card_to_delete.deleteLater()
+            
+            # Update existing cards and create new ones
+            ordered_cards_for_layout = []
+            for faculty in faculties:
+                if faculty.id in self._faculty_card_map:
+                    card = self._faculty_card_map[faculty.id]
+                    card.update_faculty(faculty)
+                else:
                     card = FacultyCard(faculty)
                     card.consultation_requested.connect(self.show_consultation_form_for_faculty)
+                    self._faculty_card_map[faculty.id] = card
+                ordered_cards_for_layout.append(card)
+
+            # Clear current layout (widgets are managed by _faculty_card_map now)
+            # Detach widgets from layout without deleting them if they are in ordered_cards_for_layout
+            current_widgets_in_layout = []
+            for i in reversed(range(self.faculty_grid_layout.count())):
+                item = self.faculty_grid_layout.itemAt(i)
+                if item and item.widget():
+                    widget = item.widget()
+                    current_widgets_in_layout.append(widget)
+                    # Detach by setting parent to None, or removeWidget.
+                    # removeWidget also sets parent to None if widget is child of layout's parent.
+                    self.faculty_grid_layout.removeWidget(widget) 
+                    # widget.setParent(None) # Alternative, if removeWidget isn't enough
+                    # Do not deleteLater here if it's an FacultyCard we might re-add
+
+            # Re-populate the grid with the ordered cards
+            if not ordered_cards_for_layout:
+                self.faculty_grid_layout.addWidget(self.no_results_label, 0, 0, 1, 1, Qt.AlignCenter) # Span if max_cols known
+                self.no_results_label.setVisible(True)
+            else:
+                scroll_area_width = self.scroll_area.viewport().width() if self.scroll_area.viewport() else 600
+                card_plus_spacing = 260 + self.faculty_grid_layout.spacing()
+                max_cols = max(1, int(scroll_area_width / card_plus_spacing))
+                
+                row, col = 0, 0
+                for card in ordered_cards_for_layout:
+                    # Ensure widget is not already in a layout if removeWidget didn't reparent it fully.
+                    # Or, ensure it's properly parented to self.faculty_cards_widget
+                    if card.parent() != self.faculty_cards_widget: # Check if it needs reparenting
+                        card.setParent(self.faculty_cards_widget) # Ensure correct parent for layout
+                    
                     self.faculty_grid_layout.addWidget(card, row, col)
-                    self._faculty_cards_widgets.append(card) # Store the card itself
+                    card.setVisible(True) # Ensure it's visible if it was hidden
                     col += 1
                     if col >= max_cols:
                         col = 0
                         row += 1
-                # Add stretch to fill remaining space if cards don't fill last row
-                if faculties:
+                
+                # Add stretch to fill remaining space
+                if ordered_cards_for_layout:
                     self.faculty_grid_layout.setRowStretch(row + 1, 1)
-                    self.faculty_grid_layout.setColumnStretch(col +1, 1)
+                    self.faculty_grid_layout.setColumnStretch(max_cols, 1) # Stretch column beyond last item if not full
+
 
         finally:
             self.setUpdatesEnabled(True)
-            self.faculty_cards_widget.adjustSize() # Crucial for grid to recalculate size
-            QApplication.processEvents() # Ensure UI updates are processed
+            self.faculty_cards_widget.adjustSize() # Adjust size of the container for the grid
+            # QApplication.processEvents() # Usually not needed if updatesEnabled(True) is handled correctly
 
     def filter_faculty(self):
         """

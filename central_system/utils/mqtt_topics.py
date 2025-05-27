@@ -23,6 +23,9 @@ class MQTTTopics:
     FACULTY_REQUESTS = "consultease/faculty/{faculty_id}/requests"
     FACULTY_MESSAGES = "consultease/faculty/{faculty_id}/messages"
     
+    # Student topics
+    STUDENT_NOTIFICATIONS = "consultease/student/{student_id}/notifications"
+    
     # System topics
     SYSTEM_NOTIFICATIONS = "consultease/system/notifications"
     SYSTEM_PING = "consultease/system/ping"
@@ -45,3 +48,8 @@ class MQTTTopics:
     def get_faculty_messages_topic(faculty_id):
         """Get the topic for faculty messages."""
         return MQTTTopics.FACULTY_MESSAGES.format(faculty_id=faculty_id)
+    
+    @staticmethod
+    def get_student_notification_topic(student_id):
+        """Get the topic for student-specific notifications."""
+        return MQTTTopics.STUDENT_NOTIFICATIONS.format(student_id=student_id)

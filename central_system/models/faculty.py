@@ -1,5 +1,6 @@
 from sqlalchemy import Column, Integer, String, Boolean, DateTime
 from sqlalchemy.sql import func
+from sqlalchemy.orm import validates
 from .base import Base
 import os
 import re
@@ -20,11 +21,30 @@ class Faculty(Base):
     email = Column(String, unique=True, index=True)
     ble_id = Column(String, unique=True, index=True)
     image_path = Column(String, nullable=True)  # Path to faculty image
-    status = Column(Boolean, default=False)  # False = Unavailable, True = Available
+    status = Column(Boolean, default=False, index=True)  # False = Unavailable, True = Available
     always_available = Column(Boolean, default=False)  # If True, faculty is always shown as available
     last_seen = Column(DateTime, default=func.now())
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    @validates('name')
+    def _validate_name(self, key, name_value):
+        if not Faculty.validate_name(name_value):
+            raise ValueError(f"Invalid faculty name: {name_value}")
+        return name_value
+
+    @validates('email')
+    def _validate_email(self, key, email_value):
+        if not Faculty.validate_email(email_value):
+            raise ValueError(f"Invalid email format: {email_value}")
+        return email_value
+
+    @validates('ble_id')
+    def _validate_ble_id(self, key, ble_id_value):
+        # Allow ble_id to be None or empty string initially, validation applies if a value is set.
+        if ble_id_value and not Faculty.validate_ble_id(ble_id_value):
+            raise ValueError(f"Invalid BLE ID format: {ble_id_value}")
+        return ble_id_value
 
     def __repr__(self):
         return f"<Faculty {self.name}>"

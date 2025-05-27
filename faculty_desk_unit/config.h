@@ -14,9 +14,30 @@
 
 // MQTT Configuration
 #define MQTT_SERVER "172.20.10.8"  // Updated to match central system's MQTT broker IP
-#define MQTT_PORT 1883
+#define MQTT_PORT 1883             // Default non-TLS port
+#define MQTT_TLS_PORT 8883         // Default TLS port
+#define MQTT_USE_TLS true          // Set to true to enable MQTT over TLS
 #define MQTT_USERNAME ""  // Leave empty if not using authentication
 #define MQTT_PASSWORD ""  // Leave empty if not using authentication
+
+// MQTT TLS Certificates (Replace with your actual PEM-formatted certificates)
+// Make sure to escape newlines with \n if defining as a single string literal,
+// or use R"(-----BEGIN CERTIFICATE-----\n...-----END CERTIFICATE-----)" raw string literals.
+const char* mqtt_ca_cert = \
+"-----BEGIN CERTIFICATE-----\n" \
+"MIIDQTCCAimgAwIBAgITBmyfz5m/jAo54vB4ikPmljZbyjANBgkqhkiG9w0BAQsF\n" \
+// ... (rest of your CA certificate)
+"-----END CERTIFICATE-----\n";
+
+const char* mqtt_client_cert = \
+"-----BEGIN CERTIFICATE-----\n" \
+// ... (your client certificate)
+"-----END CERTIFICATE-----\n";
+
+const char* mqtt_client_key = \
+"-----BEGIN PRIVATE KEY-----\n" \
+// ... (your client private key)
+"-----END PRIVATE KEY-----\n";
 
 // Faculty Configuration
 #define FACULTY_ID 3  // This should match the faculty ID in the database
@@ -24,6 +45,9 @@
 #define FACULTY_DEPARTMENT "Computer Science"  // This should match the faculty department in the database
 
 // BLE Configuration
+// #define SERVICE_UUID "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" // Ensuring no old service UUID is active
+#define TARGET_BLE_MAC_ADDRESS "51:00:25:04:02:A2" // MAC address from your beacon image
+
 #define BLE_SCAN_INTERVAL 5000  // Scan interval in milliseconds
 #define BLE_SCAN_DURATION 3     // Scan duration in seconds
 #define BLE_RSSI_THRESHOLD -80  // RSSI threshold for presence detection (higher values = closer proximity required)
@@ -63,5 +87,12 @@
 
 // Debug Configuration
 #define DEBUG_ENABLED true  // Set to false to disable debug output
+
+#define LED_PIN 2 // Define a default LED pin, adjust if your board uses a different one
+
+// Button Configuration
+#define BUTTON_PIN 4 // Example pin for a manual status override button (adjust as needed)
+#define ACCEPT_BUTTON_PIN 16 // Example pin for Accept button (adjust as needed)
+#define REJECT_BUTTON_PIN 17 // Example pin for Reject button (adjust as needed)
 
 #endif // CONFIG_H

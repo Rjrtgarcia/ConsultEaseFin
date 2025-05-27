@@ -8,6 +8,8 @@ import pathlib
 import random
 from datetime import datetime
 import ssl
+import queue
+from ..controllers import ConsultationController
 
 # Import configuration system
 from central_system.config import get_config
@@ -15,6 +17,10 @@ from central_system.config import get_config
 # Set up logging
 # logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s') # REMOVED
 logger = logging.getLogger(__name__)
+
+# MQTT Topics (consider moving to a central place like mqtt_topics.py if not already)
+# ... (other topic definitions if any)
+CONSULTATION_RESPONSE_TOPIC_PATTERN = "consultease/faculty/+/consultation/response"
 
 class MQTTService:
     """
@@ -131,6 +137,10 @@ class MQTTService:
 
         # Set up automatic reconnect
         self.client.reconnect_delay_set(min_delay=1, max_delay=60)
+
+        # Add default handler for consultation responses
+        # This might also be registered externally after MQTTService is initialized
+        self.register_topic_handler(CONSULTATION_RESPONSE_TOPIC_PATTERN, self._handle_consultation_response)
 
     def connect(self):
         """
@@ -272,21 +282,78 @@ class MQTTService:
             logger.debug(f"Received message on topic {topic}: {payload}")
 
             # Process message with registered handler
-            if topic in self.topic_handlers:
-                try:
-                    # Try to parse as JSON
-                    data = json.loads(payload)
-                except json.JSONDecodeError:
-                    logger.warning(f"Message is not JSON, treating as string: {payload}")
-                    data = payload  # Use the raw string as data
-
-                for handler in self.topic_handlers[topic]:
+            # Updated to handle wildcard subscriptions more effectively
+            matched_handler = False
+            for pattern, handlers in self.topic_handlers.items():
+                if mqtt.topic_matches_sub(pattern, topic):
                     try:
-                        handler(topic, data)
-                    except Exception as e:
-                        logger.error(f"Error in message handler for topic {topic}: {str(e)}")
+                        data = json.loads(payload)
+                    except json.JSONDecodeError:
+                        logger.warning(f"Message on {topic} is not JSON, treating as string: {payload}")
+                        data = payload
+                    
+                    for handler in handlers:
+                        try:
+                            handler(topic, data) # Pass original topic and parsed data
+                            matched_handler = True
+                        except Exception as e:
+                            logger.error(f"Error in message handler for {pattern} matching {topic}: {str(e)}")
+                    break # Assuming first matching pattern is specific enough
+            
+            if not matched_handler:
+                logger.debug(f"No specific handler found for topic {topic}. Message ignored or handled by generic means.")
+
         except Exception as e:
             logger.error(f"Error processing MQTT message: {str(e)}")
+
+    def _handle_consultation_response(self, topic: str, data: dict):
+        """
+        Handle consultation responses (accept/reject) from faculty desk units.
+        """
+        logger.info(f"Handling consultation response on topic {topic}: {data}")
+        try:
+            # Extract faculty_id from topic. Topic: consultease/faculty/{faculty_id}/consultation/response
+            parts = topic.split('/')
+            if len(parts) >= 3 and parts[1] == 'faculty':
+                faculty_id_str = parts[2]
+                try:
+                    faculty_id = int(faculty_id_str)
+                except ValueError:
+                    logger.error(f"Could not parse faculty_id from topic {topic}: {faculty_id_str} is not an integer.")
+                    return
+            else:
+                logger.error(f"Could not extract faculty_id from topic {topic}")
+                return
+
+            action = data.get('action')
+            consultation_id = data.get('consultation_id')
+
+            if not action or consultation_id is None:
+                logger.error(f"Missing 'action' or 'consultation_id' in payload from {topic}: {data}")
+                return
+
+            consultation_controller = ConsultationController.instance()
+
+            if action == 'accepted':
+                logger.info(f"Faculty {faculty_id} accepted consultation {consultation_id}")
+                consultation_controller.accept_consultation_request(consultation_id, faculty_id)
+            elif action == 'rejected_by_faculty':
+                logger.info(f"Faculty {faculty_id} rejected consultation {consultation_id}")
+                consultation_controller.reject_consultation_request(consultation_id, faculty_id)
+            elif action == 'started':
+                logger.info(f"Faculty {faculty_id} started consultation {consultation_id}")
+                consultation_controller.start_consultation(consultation_id, faculty_id)
+            elif action == 'completed':
+                logger.info(f"Faculty {faculty_id} completed consultation {consultation_id}")
+                consultation_controller.complete_consultation(consultation_id, faculty_id)
+            elif action == 'cancelled_by_faculty':
+                logger.info(f"Faculty {faculty_id} cancelled consultation {consultation_id}")
+                consultation_controller.cancel_consultation_by_faculty(consultation_id, faculty_id)
+            else:
+                logger.warning(f"Unknown action '{action}' in consultation response from {topic}")
+
+        except Exception as e:
+            logger.error(f"Error in _handle_consultation_response for topic {topic}, data {data}: {str(e)}")
 
     def register_topic_handler(self, topic, handler):
         """
@@ -741,6 +808,7 @@ class MQTTService:
                 'student_name': student_name,
                 'course_code': course_code,
                 'consultation_id': data.get('id'),
+                'consultation_status': data.get('status'),
                 'timestamp': data.get('requested_at')
             }
 

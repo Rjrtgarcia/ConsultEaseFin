@@ -157,10 +157,10 @@ class ConsultEaseApp:
         self.admin_controller.ensure_default_admin()
 
         # Initialize windows
-        self.login_window = None
-        self.dashboard_window = None
-        self.admin_login_window = None
-        self.admin_dashboard_window = None
+        self.login_window = None # Main RFID/Login window
+        self.dashboard_window = None # Main student/faculty dashboard
+        self.admin_login_window = None # Instance for AdminLoginWindow
+        self.admin_dashboard_window = None # Instance for AdminDashboardWindow
 
         # Start controllers
         logger.info("Starting RFID controller")
@@ -387,57 +387,44 @@ class ConsultEaseApp:
         logger.info(f"Showing dashboard for student: {student.name if student else 'Unknown'}")
 
     def show_admin_login_window(self):
-        """
-        Show the admin login window.
-        """
-        if self.admin_login_window is None:
+        """Show the admin login window."""
+        logger.info("Showing admin login window")
+        if not self.admin_login_window:
             self.admin_login_window = AdminLoginWindow()
+            # Connect the signal from AdminLoginWindow to a handler in ConsultEaseApp
             self.admin_login_window.admin_authenticated.connect(self.handle_admin_authenticated)
-            self.admin_login_window.change_window.connect(self.handle_window_change)
+            # Connect the change_window signal if AdminLoginWindow needs to navigate (e.g. back)
+            # self.admin_login_window.change_window.connect(self.handle_window_change)
+            # The AdminLoginWindow has a 'Back' button that emits change_window('login', None)
+            # This should ideally go back to the main login/RFID screen, or a selection screen.
+            # For now, let's assume 'login' in change_window means the main RFID login.
+            if hasattr(self.admin_login_window, 'change_window'): # Check if signal exists
+                 self.admin_login_window.change_window.connect(self.handle_window_change)
+            else:
+                 logger.warning("AdminLoginWindow does not have a 'change_window' signal.")
 
-        # Determine which window is currently visible
-        current_window = None
-        if self.login_window and self.login_window.isVisible():
-            current_window = self.login_window
-        elif self.dashboard_window and self.dashboard_window.isVisible():
-            current_window = self.dashboard_window
-        elif self.admin_dashboard_window and self.admin_dashboard_window.isVisible():
-            current_window = self.admin_dashboard_window
 
-        # Hide other windows that aren't transitioning
-        if self.login_window and self.login_window != current_window:
-            self.login_window.hide()
-        if self.dashboard_window and self.dashboard_window != current_window:
-            self.dashboard_window.hide()
-        if self.admin_dashboard_window and self.admin_dashboard_window != current_window:
-            self.admin_dashboard_window.hide()
-
-        # Define a callback for after the transition completes
-        def after_transition():
-            # Force the keyboard to show
-            if self.keyboard_handler:
-                logger.info("Showing keyboard using improved keyboard handler")
-                self.keyboard_handler.show_keyboard()
-
-                # Focus the username input to trigger the keyboard
-                QTimer.singleShot(300, lambda: self.admin_login_window.username_input.setFocus())
-                # Focus again after a longer delay to ensure keyboard appears
-                QTimer.singleShot(800, lambda: self.admin_login_window.username_input.setFocus())
-
-        # Apply transition if there's a visible window to transition from
-        if current_window:
-            logger.info(f"Transitioning from {current_window.__class__.__name__} to AdminLoginWindow")
-            # Ensure admin login window is ready for fullscreen
+        current_active_window = self.app.activeWindow() or self.login_window # Fallback if no active window
+        
+        # Ensure the window is properly sized and centered or fullscreen
+        if self.config.get('ui.fullscreen', False):
             self.admin_login_window.showFullScreen()
-            # Apply transition with callback
-            self.transition_manager.fade_out_in(current_window, self.admin_login_window, after_transition)
         else:
-            # No transition needed, just show the window
-            logger.info("Showing admin login window without transition")
-            self.admin_login_window.show()
-            self.admin_login_window.showFullScreen()  # Force fullscreen
-            # Call the callback directly
-            after_transition()
+            self.admin_login_window.show_normal_centered()
+            # self.admin_login_window.show() # Fallback
+
+        # Use transition manager if a previous window was active
+        if current_active_window and current_active_window != self.admin_login_window and current_active_window.isVisible():
+            self.transition_manager.fade_transition(current_active_window, self.admin_login_window)
+        else:
+            self.admin_login_window.show() # Directly show if no prior window or it's the same
+            if self.config.get('ui.fullscreen', False):
+                 self.admin_login_window.showFullScreen()
+            else:
+                 self.admin_login_window.show_normal_centered()
+
+        # Optional: If keyboard manager is used and focus isn't set automatically by AdminLoginWindow.showEvent
+        # QTimer.singleShot(100, lambda: self.admin_login_window.username_input.setFocus() if self.admin_login_window and hasattr(self.admin_login_window, 'username_input') else None)
 
     def show_admin_dashboard_window(self, admin=None):
         """
@@ -522,27 +509,19 @@ class ConsultEaseApp:
         # Show the dashboard window
         self.show_dashboard_window(student)
 
-    def handle_admin_authenticated(self, credentials):
+    def handle_admin_authenticated(self, admin_user_object):
         """
-        Handle admin authentication event.
-
-        Args:
-            credentials (tuple): Admin credentials (username, password)
+        Handle successful admin authentication.
+        The admin_user_object is expected to be the authenticated admin model instance.
         """
-        # Unpack credentials from tuple
-        username, password = credentials
+        logger.info(f"Admin authenticated: {getattr(admin_user_object, 'username', 'Unknown Admin')}")
+        self.current_admin = admin_user_object # Store admin session
+        # Potentially hide the admin login window if it's still visible or manage via transitions
+        if self.admin_login_window and self.admin_login_window.isVisible():
+            # self.admin_login_window.hide() # Hide will be handled by transition manager
+            pass # Transition manager will handle hiding
 
-        # Authenticate admin
-        admin = self.admin_controller.authenticate(username, password)
-
-        if admin:
-            logger.info(f"Admin authenticated: {username}")
-            # Pass the admin model object directly
-            self.show_admin_dashboard_window(admin)
-        else:
-            logger.warning(f"Admin authentication failed: {username}")
-            if self.admin_login_window:
-                self.admin_login_window.show_login_error("Invalid username or password")
+        self.show_admin_dashboard_window(admin=admin_user_object)
 
     def handle_consultation_request(self, faculty, message, course_code):
         """
@@ -616,23 +595,37 @@ class ConsultEaseApp:
         #     self.dashboard_window.refresh_student_related_ui()
 
     def handle_window_change(self, window_name, data=None):
-        """
-        Handle window change event.
+        """Handle requests to change the current window."""
+        logger.info(f"Handling window change request to '{window_name}' with data: {data}")
+        current_active_window = self.app.activeWindow()
 
-        Args:
-            window_name (str): Name of window to show
-            data (any): Optional data to pass to the window
-        """
         if window_name == "login":
+            # This typically means the main RFID/student login
+            self.current_student = None # Clear student session
+            self.current_admin = None # Clear admin session
             self.show_login_window()
         elif window_name == "dashboard":
-            self.show_dashboard_window(data)
-        elif window_name == "admin_login":
+            if isinstance(data, dict) and "student" in data:
+                self.show_dashboard_window(student=data["student"])
+            elif self.current_student: # Fallback to current student if any
+                self.show_dashboard_window(student=self.current_student)
+            else:
+                logger.warning("Dashboard change requested without student data and no current student session. Showing main login.")
+                self.show_login_window()
+        elif window_name == "admin_login" or window_name == "admin_login_requested": # Added condition
+            self.current_admin = None # Clear admin session before showing login
             self.show_admin_login_window()
         elif window_name == "admin_dashboard":
-            self.show_admin_dashboard_window(data)
+            if self.current_admin: # Check if an admin session exists
+                 self.show_admin_dashboard_window(admin=self.current_admin)
+            elif isinstance(data, AdminController.instance().get_admin_model_class()): # Check if data is an admin object
+                 self.current_admin = data
+                 self.show_admin_dashboard_window(admin=self.current_admin)
+            else:
+                 logger.warning("Admin dashboard change requested without admin data or session. Showing admin login.")
+                 self.show_admin_login_window()
         else:
-            logger.warning(f"Unknown window: {window_name}")
+            logger.warning(f"Unknown window name '{window_name}' requested.")
 
 if __name__ == "__main__":
     # Config object is already initialized globally when config is imported

@@ -172,9 +172,9 @@ class AdminDashboardWindow(BaseWindow):
         # Hide this window
         self.hide()
 
-        # Emit signal to change to the main login window (RFID scan) instead of admin login
-        logger.info("Redirecting to main login window (RFID scan) after admin logout")
-        self.change_window.emit("login", None)
+        # Emit signal to change to the admin login window
+        logger.info("Redirecting to Admin Login window after admin logout")
+        self.change_window.emit("admin_login_requested", None) # More specific signal
 
     def handle_faculty_updated(self):
         """
@@ -1085,21 +1085,21 @@ class RFIDScanDialog(QDialog):
         # Manual UID entry
         manual_entry_group = QGroupBox("Manual Entry / Simulation")
         manual_entry_group.setContentsMargins(10,10,10,10) # Add margins to groupbox
-        manual_form_layout = QFormLayout(manual_entry_group) # Use QFormLayout for better label-field alignment
-        manual_form_layout.setSpacing(10) # Spacing within the form
+        manual_entry_layout = QFormLayout(manual_entry_group) # Use QFormLayout for better label-field alignment
+        manual_entry_layout.setSpacing(10) # Spacing within the form
 
         self.manual_uid_input = QLineEdit()
         self.manual_uid_input.setPlaceholderText("Enter RFID UID manually")
-        manual_form_layout.addRow("RFID UID:", self.manual_uid_input)
+        manual_entry_layout.addRow("RFID UID:", self.manual_uid_input)
 
         manual_entry_button = QPushButton("Submit UID")
         manual_entry_button.clicked.connect(self.handle_manual_input)
-        manual_form_layout.addRow(manual_entry_button)
+        manual_entry_layout.addRow(manual_entry_button)
 
         if self.config.get("development_mode", False):
             self.simulate_scan_button = QPushButton("Simulate Scan (Dev)")
             self.simulate_scan_button.clicked.connect(self.simulate_scan)
-            manual_form_layout.addRow(self.simulate_scan_button)
+            manual_entry_layout.addRow(self.simulate_scan_button)
 
         main_layout.addWidget(manual_entry_group)
         main_layout.addStretch(1) # Add stretch to push buttons to bottom
@@ -1328,39 +1328,94 @@ class SystemMaintenanceTab(QWidget):
         tab_layout.addWidget(scroll_area)
     
     def backup_database(self):
-        logger.warning("Database backup functionality is not fully implemented yet.")
-        # Recommendation for pg_dump (security - avoid shell=True):
-        # DB_USER = self.config.get('database.user')
-        # DB_HOST = self.config.get('database.host')
-        # DB_NAME = self.config.get('database.name')
-        # file_path = 'backup.sql' # Should be a configurable path
-        # env = os.environ.copy()
-        # if self.config.get('database.password'):
-        #     env['PGPASSWORD'] = self.config.get('database.password')
-        # cmd_list = ['pg_dump', '-U', DB_USER, '-h', DB_HOST, '-d', DB_NAME, '-f', file_path]
-        # try:
-        #     result = subprocess.run(cmd_list, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False, text=True)
-        #     if result.returncode == 0:
-        #         QMessageBox.information(self, "Backup", f"Database backup successful to {file_path}")
-        #     else:
-        #         logger.error(f"Database backup failed. STDERR: {result.stderr}")
-        #         QMessageBox.critical(self, "Backup Error", f"Database backup failed: {result.stderr}")
-        # except FileNotFoundError:
-        #     logger.error("pg_dump command not found. Ensure PostgreSQL client tools are installed and in PATH.")
-        #     QMessageBox.critical(self, "Backup Error", "pg_dump command not found. Ensure PostgreSQL client tools are installed and in PATH.")
-        # except Exception as e:
-        #     logger.error(f"Error during database backup: {e}")
-        #     QMessageBox.critical(self, "Backup Error", f"An unexpected error occurred: {e}")
-        QMessageBox.information(self, "Not Implemented", "Database backup is not yet implemented.")
-        # raise NotImplementedError("Database backup functionality needs to be securely implemented.")
+        """
+        Handle database backup.
+        """
+        # Default backup filename with timestamp
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        default_filename = f"consultease_backup_{timestamp}.backup"
+        
+        # Suggest a default directory (e.g., user's Documents folder or a configured backup path)
+        # For simplicity, let's use a 'backups' subdirectory in the app's main data/log area
+        # This path should ideally come from config or be more robustly determined.
+        config = get_config()
+        # A base path for data/logs might be defined in config, e.g., config.get('system.data_path')
+        # If not, use a subdirectory relative to where the app is run or a user-specific path.
+        # For now, let's assume a 'backups' dir in the current working directory for simplicity,
+        # or better, relative to the log file directory if that's well-defined.
+        log_file_path = config.get('logging.file', 'logs/consultease.log')
+        base_backup_dir = os.path.join(os.path.dirname(log_file_path), '.. reinstated original line ', 'backups')
+        os.makedirs(base_backup_dir, exist_ok=True)
+        default_path = os.path.join(base_backup_dir, default_filename)
+
+        options = QFileDialog.Options()
+        # options |= QFileDialog.DontUseNativeDialog # Uncomment if native dialog is problematic
+        backup_file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Database Backup",
+            default_path, # Default path and filename
+            "Backup Files (*.backup *.db *.sqlite *.dump);;All Files (*)",
+            options=options
+        )
+
+        if backup_file_path:
+            logger.info(f"User selected backup path: {backup_file_path}")
+            # Call controller method
+            success, message = self.admin_controller.backup_database(backup_file_path)
+            
+            if success:
+                QMessageBox.information(self, "Backup Successful", message)
+                logger.info(f"Database backup successful: {message}")
+            else:
+                QMessageBox.critical(self, "Backup Failed", message)
+                logger.error(f"Database backup failed: {message}")
+        else:
+            logger.info("Database backup cancelled by user.")
 
     def restore_database(self):
-        logger.warning("Database restore functionality is not fully implemented yet.")
-        # Recommendation for psql (security - avoid shell=True):
-        # Similar structure to backup_database, using 'psql' instead of 'pg_dump'
-        # Ensure to handle potential issues like database existence, user permissions etc.
-        QMessageBox.information(self, "Not Implemented", "Database restore is not yet implemented.")
-        # raise NotImplementedError("Database restore functionality needs to be securely implemented.")
+        """
+        Handle database restore.
+        """
+        # Default restore filename with timestamp
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        default_filename = f"consultease_restore_{timestamp}.backup"
+        
+        # Suggest a default directory (e.g., user's Documents folder or a configured restore path)
+        # For simplicity, let's use a 'restores' subdirectory in the app's main data/log area
+        # This path should ideally come from config or be more robustly determined.
+        config = get_config()
+        # A base path for data/logs might be defined in config, e.g., config.get('system.data_path')
+        # If not, use a subdirectory relative to where the app is run or a user-specific path.
+        # For now, let's assume a 'restores' dir in the current working directory for simplicity,
+        # or better, relative to the log file directory if that's well-defined.
+        log_file_path = config.get('logging.file', 'logs/consultease.log')
+        base_restore_dir = os.path.join(os.path.dirname(log_file_path), '.. reinstated original line ', 'restores')
+        os.makedirs(base_restore_dir, exist_ok=True)
+        default_path = os.path.join(base_restore_dir, default_filename)
+
+        options = QFileDialog.Options()
+        # options |= QFileDialog.DontUseNativeDialog # Uncomment if native dialog is problematic
+        restore_file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Restore Database Backup",
+            default_path, # Default path and filename
+            "Backup Files (*.backup *.db *.sqlite *.dump);;All Files (*)",
+            options=options
+        )
+
+        if restore_file_path:
+            logger.info(f"User selected restore path: {restore_file_path}")
+            # Call controller method
+            success, message = self.admin_controller.restore_database(restore_file_path)
+            
+            if success:
+                QMessageBox.information(self, "Restore Successful", message)
+                logger.info(f"Database restore successful: {message}")
+            else:
+                QMessageBox.critical(self, "Restore Failed", message)
+                logger.error(f"Database restore failed: {message}")
+        else:
+            logger.info("Database restore cancelled by user.")
 
     def view_logs(self):
         log_dialog = LogViewerDialog(self)
@@ -1478,37 +1533,55 @@ class SystemMaintenanceTab(QWidget):
             QMessageBox.critical(self, "Error", str(e))
 
     def save_settings(self):
-        try:
-            mqtt_host = self.mqtt_host_input.text().strip()
-            mqtt_port_str = self.mqtt_port_input.text().strip()
-            auto_start = self.auto_start_checkbox.isChecked()
+        """Gather settings from UI and attempt to save them via AdminController."""
+        logger.info("Save Settings button clicked in SystemMaintenanceTab.")
 
-            if not (mqtt_host and mqtt_port_str):
-                QMessageBox.warning(self, "Input Error", "MQTT Host and Port are required.")
-                return
-            try:
-                mqtt_port = int(mqtt_port_str)
-                if not (0 < mqtt_port < 65536):
-                    raise ValueError("Port out of range")
-            except ValueError:
-                QMessageBox.warning(self, "Input Error", "MQTT Port must be a valid number (1-65535).")
-                return
+        settings_to_update = {}
 
-            logger.info(f"Saving settings: MQTT Host={mqtt_host}, Port={mqtt_port}, AutoStart={auto_start}")
-            
-            self.config.set('mqtt.broker_host', mqtt_host)
-            self.config.set('mqtt.broker_port', mqtt_port)
-            self.config.set('system.auto_start', auto_start)
-            
-            if self.config.save():
-                QMessageBox.information(self, "Settings Saved", 
-                    "Settings saved to config.json. Restart application for changes to MQTT broker or auto-start to take full effect.")
+        # UI Theme
+        settings_to_update['ui.theme'] = self.theme_combo.currentText().lower()
+        
+        # Logging Level
+        settings_to_update['logging.level'] = self.log_level_combo.currentText().upper()
+        
+        # RFID Simulation Mode
+        settings_to_update['rfid.simulation_mode'] = self.rfid_simulation_checkbox.isChecked()
+        
+        # Keyboard Preference
+        settings_to_update['keyboard.preference'] = self.keyboard_combo.currentText()
+
+        # pg_dump and pg_restore paths
+        pg_dump_val = self.pg_dump_path_input.text().strip()
+        if pg_dump_val:
+            settings_to_update['database.pg_dump_path'] = pg_dump_val
+        else: # If empty, perhaps remove or set to a default like 'pg_dump' if that's intended
+            settings_to_update['database.pg_dump_path'] = 'pg_dump' # Or handle as error / keep old value
+
+        pg_restore_val = self.pg_restore_path_input.text().strip()
+        if pg_restore_val:
+            settings_to_update['database.pg_restore_path'] = pg_restore_val
+        else:
+            settings_to_update['database.pg_restore_path'] = 'pg_restore'
+
+        logger.debug(f"Attempting to save settings: {settings_to_update}")
+
+        # Confirmation Dialog
+        reply = QMessageBox.question(self, 'Confirm Save', 
+                                     "Saving these settings will modify config.json. Some changes may require an application restart. Proceed?",
+                                     QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+
+        if reply == QMessageBox.Yes:
+            success, message = self.admin_controller.save_system_settings(settings_to_update)
+            if success:
+                QMessageBox.information(self, "Settings Saved", message)
+                logger.info(f"System settings saved: {message}")
+                # Potentially update self.config in this tab if live updates are desired for some settings
+                # self.config = get_config() # Re-fetch, but this might not be enough if get_config() caches extensively
             else:
-                QMessageBox.critical(self, "Save Error", "Failed to save settings to config.json.")
-            self.load_faculty_list()
-        except Exception as e:
-            logger.error(f"Error saving settings: {str(e)}")
-            QMessageBox.critical(self, "Save Error", f"An unexpected error occurred: {str(e)}")
+                QMessageBox.critical(self, "Save Failed", message)
+                logger.error(f"Failed to save system settings: {message}")
+        else:
+            logger.info("User cancelled saving system settings.")
 
 class LogViewerDialog(QDialog):
     def __init__(self, parent=None):

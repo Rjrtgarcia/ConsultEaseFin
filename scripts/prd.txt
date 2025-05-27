@@ -1,0 +1,105 @@
+# Product Requirements Document: ConsultEase ProMax
+
+## 1. Introduction
+
+ConsultEase is a comprehensive system designed to streamline and enhance the interaction between students and faculty members for consultation purposes. It aims to replace manual or ad-hoc methods with a centralized, efficient, and user-friendly platform. The system comprises a Central System (typically run on a Raspberry Pi with a touchscreen interface using PyQt) and a Faculty Desk Unit (based on ESP32).
+
+## 2. Goals
+
+*   **Improve Accessibility:** Make it easier for students to find and request consultation slots with faculty.
+*   **Enhance Efficiency:** Reduce administrative overhead for faculty in managing consultation requests and availability.
+*   **Provide Real-time Information:** Offer up-to-date status on faculty availability.
+*   **Streamline Authentication:** Utilize RFID for quick and secure student identification.
+*   **Centralized Management:** Allow administrators to manage users, system settings, and view consultation history.
+
+## 3. Target Users
+
+*   **Students:** Seeking consultations with faculty members.
+*   **Faculty Members:** Providing consultations and managing their availability.
+*   **System Administrators:** Managing user accounts, system configuration, and monitoring.
+
+## 4. Key Features
+
+### 4.1. Central System (Raspberry Pi + PyQt)
+
+*   **User Authentication:**
+    *   Student: RFID card tap.
+    *   Faculty: Login credentials (username/password).
+    *   Admin: Login credentials (username/password).
+*   **Student Interface:**
+    *   View faculty list and their real-time availability (Available, Unavailable, In Consultation).
+    *   Request a consultation with an available faculty member.
+    *   View their own upcoming and past consultations.
+    *   Cancel an upcoming consultation.
+*   **Faculty Interface:**
+    *   Manually set their availability status (Available, Unavailable). Status can also be influenced by BLE presence from the Faculty Desk Unit.
+    *   View incoming consultation requests.
+    *   Accept/Reject consultation requests.
+    *   Start/End consultation sessions (which updates their status).
+    *   View their consultation history.
+*   **Admin Interface:**
+    *   User Management: Add, edit, delete student and faculty accounts. Register RFID cards for students.
+    *   System Configuration: Manage MQTT settings, database connections, UI theme, keyboard preferences, logging levels.
+    *   Consultation Log: View a comprehensive log of all consultations.
+    *   Backup and Restore: Placeholder for database backup/restore functionality.
+    *   Faculty Desk Unit Management: View status of connected/configured FDUs.
+*   **Real-time Updates:** UI dynamically updates based on MQTT messages and database changes.
+*   **On-Screen Keyboard:** Automatic pop-up keyboard for text input fields.
+
+### 4.2. Faculty Desk Unit (ESP32)
+
+*   **BLE Presence Detection:** ESP32 detects faculty presence via a BLE beacon (e.g., smartphone, wearable) and publishes status to MQTT.
+*   **Status Display:** Small display showing current availability status (e.g., "Available", "Unavailable", "In Consultation").
+*   **Manual Override:** Physical button(s) to quickly toggle availability status (e.g., step out for a quick break).
+*   **MQTT Communication:** Securely communicates status changes and receives commands from the Central System via MQTT (with TLS).
+
+### 4.3. System-Wide Features
+
+*   **MQTT Integration:** Core communication backbone for real-time status updates between the Central System and Faculty Desk Units.
+*   **Database Management:** PostgreSQL (production) / SQLite (development) for storing user data, consultation records, and system settings.
+*   **Logging:** Robust logging with configurable levels, file rotation, and size limits.
+*   **Configuration Management:** Centralized `config.json` for all critical system parameters.
+
+## 5. Technical Requirements
+
+*   **Central System Hardware:** Raspberry Pi (3B+ or newer recommended), touchscreen display (e.g., 7-inch official RPi display), RFID reader (PN532 or compatible).
+*   **Central System Software:** Python 3.9+, PyQt5, Paho MQTT, SQLAlchemy, evdev (for direct RFID reader input if needed).
+*   **Faculty Desk Unit Hardware:** ESP32 development board, small OLED/TFT display, BLE capabilities.
+*   **Faculty Desk Unit Software:** Arduino IDE/PlatformIO, ESP32 Arduino Core, libraries for display (e.g., TFT_eSPI), BLE (e.g., NimBLE-Arduino), MQTT (e.g., PubSubClient), JSON parsing (e.g., ArduinoJson).
+*   **Network:** Reliable Wi-Fi network for MQTT communication.
+*   **Security:**
+    *   Password hashing (e.g., bcrypt) for faculty/admin accounts.
+    *   Secure MQTT communication using TLS.
+    *   Appropriate file permissions and system hardening for the Raspberry Pi.
+
+## 6. Design and UX Considerations
+
+*   **Intuitive Interface:** Easy to navigate for all user types, even those with minimal technical expertise.
+*   **Touch-Optimized:** UI elements on the Central System should be large enough for easy touch interaction (min 48x48px).
+*   **Clear Visual Feedback:** Use distinct colors and icons for status (e.g., green for available, red for unavailable).
+*   **Minimal Latency:** Real-time updates should appear promptly.
+*   **Accessibility:** Consider basic accessibility principles (e.g., sufficient contrast).
+
+## 7. Future Considerations / Potential Enhancements (Out of Scope for V1)
+
+*   **Calendar Integration:** Sync faculty availability with external calendar systems.
+*   **Automated Reminders:** Email/SMS notifications for upcoming consultations.
+*   **Reporting and Analytics:** Detailed reports on consultation metrics.
+*   **Mobile Application:** Companion mobile app for students/faculty.
+*   **Advanced Admin Dashboard:** More sophisticated system monitoring and analytics.
+*   **Group Consultations:** Support for multiple students in a single consultation.
+
+## 8. Assumptions
+
+*   Reliable Wi-Fi network is available where the Central System and Faculty Desk Units are deployed.
+*   Faculty members will have a compatible BLE beacon device for presence detection if this feature is actively used.
+*   Students will be provided with RFID cards.
+
+## 9. Open Questions / Items for Discussion
+
+*   Specific BLE beacon type/protocol to be used for faculty presence.
+*   Detailed error handling and recovery strategy for MQTT disconnections.
+*   Specifics of the "Backup and Restore" functionality for admin.
+*   Deployment strategy and initial setup process for new installations.
+---
+*This PRD is a living document and will be updated as the project evolves.* 

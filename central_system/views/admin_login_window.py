@@ -199,34 +199,44 @@ class AdminLoginWindow(BaseWindow):
         """
         self.error_label.setText(message)
         self.error_label.setVisible(True)
-
-        # Clear the password field for security
-        self.password_input.clear()
+        # Optionally clear password field after a short delay
+        QTimer.singleShot(3000, lambda: self.error_label.setVisible(False))
 
     def login(self):
         """
-        Handle login button click.
+        Handle the login attempt.
         """
-        # Hide any previous error message
-        self.error_label.setVisible(False)
-
-        # Get username and password
         username = self.username_input.text().strip()
-        password = self.password_input.text()
+        password = self.password_input.text() # No strip for password
 
-        # Validate inputs
-        if not username:
-            self.show_login_error('Please enter a username')
-            self.username_input.setFocus()
+        if not username or not password:
+            self.show_login_error("Username and password cannot be empty.")
             return
 
-        if not password:
-            self.show_login_error('Please enter a password')
-            self.password_input.setFocus()
-            return
+        try:
+            logger.info(f"Attempting admin login for user: {username}")
+            admin_user = self.admin_controller.authenticate(username, password)
 
-        # Emit the signal with the credentials as a tuple
-        self.admin_authenticated.emit((username, password))
+            if admin_user:
+                logger.info(f"Admin login successful for user: {admin_user.username}")
+                self.error_label.setVisible(False) # Clear any previous errors
+                # Emit signal with admin user object (or username/ID as needed by receiver)
+                self.admin_authenticated.emit(admin_user) 
+                # The parent or main application will handle switching to the admin dashboard
+                # For example, by connecting a slot to admin_authenticated signal.
+                # self.close() # Or let the main app manage window visibility
+            else:
+                logger.warning(f"Admin login failed for user: {username}. Controller returned no user.")
+                # AdminController.authenticate should handle logging of specific failure reasons (lockout, wrong pass)
+                self.show_login_error("Invalid username or password, or account locked.")
+                self.password_input.clear()
+                self.username_input.selectAll()
+                self.username_input.setFocus()
+
+        except Exception as e:
+            logger.error(f"Exception during admin login attempt for {username}: {str(e)}", exc_info=True)
+            self.show_login_error(f"An unexpected error occurred. Please try again.")
+            self.password_input.clear()
 
     def back_to_login(self):
         """

@@ -35,6 +35,7 @@ class ConsultationController:
 
         self.mqtt_service = get_mqtt_service()
         self.callbacks = []
+        self._db_retry_decorator = db_operation_with_retry() # Store an instance of the decorator
         ConsultationController._instance = self
 
     def start(self):
@@ -337,3 +338,210 @@ class ConsultationController:
             return False
         finally:
             close_db()
+
+    @db_operation_with_retry()
+    def accept_consultation_request(self, db, consultation_id: int, faculty_id: int):
+        """
+        Mark a consultation request as ACCEPTED by the faculty.
+        `db` is provided by the decorator.
+        """
+        logger.info(f"Faculty {faculty_id} attempting to accept consultation {consultation_id}")
+        consultation = db.query(Consultation).filter(Consultation.id == consultation_id).first()
+
+        if not consultation:
+            logger.error(f"Accept failed: Consultation {consultation_id} not found.")
+            return None
+        
+        if consultation.faculty_id != faculty_id:
+            logger.error(f"Accept failed: Faculty {faculty_id} not authorized for consultation {consultation_id} (belongs to faculty {consultation.faculty_id}).")
+            return None
+
+        if consultation.status != ConsultationStatus.PENDING:
+            logger.warning(f"Consultation {consultation_id} is already in status {consultation.status.value}, cannot accept again.")
+            # Optionally return the consultation if already accepted, or None/error if it was cancelled/completed
+            if consultation.status == ConsultationStatus.ACCEPTED:
+                return consultation # Or return an error/message indicating it's already accepted
+            return None 
+
+        consultation.status = ConsultationStatus.ACCEPTED
+        consultation.accepted_at = datetime.datetime.now()
+        # db.commit() is handled by the decorator
+        logger.info(f"Consultation {consultation_id} status updated to ACCEPTED by faculty {faculty_id}.")
+        
+        # Re-fetch for callbacks to ensure relationships are loaded
+        loaded_consultation = db.query(Consultation).options(joinedload('*_related')).filter(Consultation.id == consultation.id).first()
+        self._notify_callbacks(loaded_consultation if loaded_consultation else consultation)
+        
+        # Notify student
+        if loaded_consultation and loaded_consultation.student_id:
+            self._notify_student_of_status_change(loaded_consultation)
+
+        return loaded_consultation if loaded_consultation else consultation
+
+    @db_operation_with_retry()
+    def reject_consultation_request(self, db, consultation_id: int, faculty_id: int):
+        """
+        Mark a consultation request as REJECTED by the faculty.
+        `db` is provided by the decorator.
+        """
+        logger.info(f"Faculty {faculty_id} attempting to reject consultation {consultation_id}")
+        consultation = db.query(Consultation).filter(Consultation.id == consultation_id).first()
+
+        if not consultation:
+            logger.error(f"Reject failed: Consultation {consultation_id} not found.")
+            return None
+        
+        if consultation.faculty_id != faculty_id:
+            logger.error(f"Reject failed: Faculty {faculty_id} not authorized for consultation {consultation_id} (belongs to faculty {consultation.faculty_id}).")
+            return None
+            
+        if consultation.status not in [ConsultationStatus.PENDING, ConsultationStatus.ACCEPTED]:
+            logger.warning(f"Consultation {consultation_id} is in status {consultation.status.value}, cannot reject if not PENDING or already ACCEPTED (to change mind). Current status: {consultation.status.value}")
+            # If it's already completed or cancelled, can't reject.
+            if consultation.status in [ConsultationStatus.COMPLETED, ConsultationStatus.CANCELLED_BY_STUDENT, ConsultationStatus.CANCELLED_BY_FACULTY]:
+                 return None
+            # Allow rejection if it was PENDING or ACCEPTED (faculty changed their mind before starting)
+
+        consultation.status = ConsultationStatus.REJECTED_BY_FACULTY # Assuming this enum value exists
+        # db.commit() is handled by the decorator
+        logger.info(f"Consultation {consultation_id} status updated to REJECTED_BY_FACULTY by faculty {faculty_id}.")
+
+        # Re-fetch for callbacks
+        loaded_consultation = db.query(Consultation).options(joinedload('*_related')).filter(Consultation.id == consultation.id).first()
+        self._notify_callbacks(loaded_consultation if loaded_consultation else consultation)
+        
+        # Notify student
+        if loaded_consultation and loaded_consultation.student_id:
+            self._notify_student_of_status_change(loaded_consultation)
+
+        return loaded_consultation if loaded_consultation else consultation
+
+    @db_operation_with_retry()
+    def start_consultation(self, db, consultation_id: int, faculty_id: int):
+        """
+        Mark a consultation as STARTED by the faculty.
+        `db` is provided by the decorator.
+        """
+        logger.info(f"Faculty {faculty_id} attempting to start consultation {consultation_id}")
+        consultation = db.query(Consultation).filter(Consultation.id == consultation_id).first()
+
+        if not consultation:
+            logger.error(f"Start failed: Consultation {consultation_id} not found.")
+            return None
+        if consultation.faculty_id != faculty_id:
+            logger.error(f"Start failed: Faculty {faculty_id} not authorized for consultation {consultation_id}.")
+            return None
+        if consultation.status != ConsultationStatus.ACCEPTED:
+            logger.warning(f"Cannot start consultation {consultation_id}: current status is {consultation.status.value}, not ACCEPTED.")
+            return None
+
+        consultation.status = ConsultationStatus.STARTED
+        # Optionally set a started_at timestamp if your model has one
+        logger.info(f"Consultation {consultation_id} status updated to STARTED by faculty {faculty_id}.")
+        loaded_consultation = db.query(Consultation).options(joinedload('*_related')).filter(Consultation.id == consultation.id).first()
+        self._notify_callbacks(loaded_consultation if loaded_consultation else consultation)
+        
+        # Notify student
+        if loaded_consultation and loaded_consultation.student_id:
+            self._notify_student_of_status_change(loaded_consultation)
+
+        return loaded_consultation if loaded_consultation else consultation
+
+    @db_operation_with_retry()
+    def complete_consultation(self, db, consultation_id: int, faculty_id: int):
+        """
+        Mark a consultation as COMPLETED by the faculty.
+        `db` is provided by the decorator.
+        """
+        logger.info(f"Faculty {faculty_id} attempting to complete consultation {consultation_id}")
+        consultation = db.query(Consultation).filter(Consultation.id == consultation_id).first()
+
+        if not consultation:
+            logger.error(f"Complete failed: Consultation {consultation_id} not found.")
+            return None
+        if consultation.faculty_id != faculty_id:
+            logger.error(f"Complete failed: Faculty {faculty_id} not authorized for consultation {consultation_id}.")
+            return None
+        # Allow completion if STARTED or if ACCEPTED (e.g., quick verbal confirmation then complete)
+        if consultation.status not in [ConsultationStatus.STARTED, ConsultationStatus.ACCEPTED]:
+            logger.warning(f"Cannot complete consultation {consultation_id}: current status is {consultation.status.value}, not STARTED or ACCEPTED.")
+            return None
+
+        consultation.status = ConsultationStatus.COMPLETED
+        consultation.completed_at = datetime.datetime.now()
+        logger.info(f"Consultation {consultation_id} status updated to COMPLETED by faculty {faculty_id}.")
+        loaded_consultation = db.query(Consultation).options(joinedload('*_related')).filter(Consultation.id == consultation.id).first()
+        self._notify_callbacks(loaded_consultation if loaded_consultation else consultation)
+        
+        # Notify student
+        if loaded_consultation and loaded_consultation.student_id:
+            self._notify_student_of_status_change(loaded_consultation)
+
+        return loaded_consultation if loaded_consultation else consultation
+
+    @db_operation_with_retry()
+    def cancel_consultation_by_faculty(self, db, consultation_id: int, faculty_id: int):
+        """
+        Mark a consultation as CANCELLED_BY_FACULTY.
+        `db` is provided by the decorator.
+        """
+        logger.info(f"Faculty {faculty_id} attempting to cancel consultation {consultation_id}")
+        consultation = db.query(Consultation).filter(Consultation.id == consultation_id).first()
+
+        if not consultation:
+            logger.error(f"Faculty cancel failed: Consultation {consultation_id} not found.")
+            return None
+        if consultation.faculty_id != faculty_id:
+            logger.error(f"Faculty cancel failed: Faculty {faculty_id} not authorized for consultation {consultation_id}.")
+            return None
+        
+        # Prevent cancelling if already completed or cancelled by student
+        if consultation.status in [ConsultationStatus.COMPLETED, ConsultationStatus.CANCELLED_BY_STUDENT, ConsultationStatus.REJECTED_BY_FACULTY]:
+            logger.warning(f"Cannot cancel consultation {consultation_id}: current status is {consultation.status.value}.")
+            return None # Or return the consultation itself if no state change
+
+        consultation.status = ConsultationStatus.CANCELLED_BY_FACULTY
+        # Optionally clear accepted_at or set a cancelled_at timestamp
+        logger.info(f"Consultation {consultation_id} status updated to CANCELLED_BY_FACULTY by faculty {faculty_id}.")
+        loaded_consultation = db.query(Consultation).options(joinedload('*_related')).filter(Consultation.id == consultation.id).first()
+        self._notify_callbacks(loaded_consultation if loaded_consultation else consultation)
+        
+        # Notify student
+        if loaded_consultation and loaded_consultation.student_id:
+            self._notify_student_of_status_change(loaded_consultation)
+
+        return loaded_consultation if loaded_consultation else consultation
+
+    def _notify_student_of_status_change(self, consultation: Consultation):
+        """
+        Publishes a notification to the student about a change in consultation status.
+        """
+        if not consultation or not consultation.student_id or not consultation.faculty:
+            logger.warning(f"_notify_student_of_status_change: Missing data for consultation {consultation.id if consultation else 'Unknown'}")
+            return
+
+        try:
+            topic = MQTTTopics.get_student_notification_topic(consultation.student_id)
+            payload = {
+                "type": "consultation_update",
+                "consultation_id": consultation.id,
+                "new_status": consultation.status.value,
+                "faculty_name": consultation.faculty.name,
+                "request_message_snippet": (consultation.request_message[:50] + '...') if len(consultation.request_message) > 50 else consultation.request_message,
+                "timestamp": datetime.datetime.now().isoformat()
+            }
+            
+            # Create a user-friendly message
+            status_text = consultation.status.value.replace("_", " ").title()
+            message = f"Consultation with {consultation.faculty.name} has been {status_text}."
+            if consultation.status == ConsultationStatus.REJECTED_BY_FACULTY:
+                message = f"Consultation with {consultation.faculty.name} was regrettably rejected."
+            elif consultation.status == ConsultationStatus.CANCELLED_BY_FACULTY:
+                message = f"Consultation with {consultation.faculty.name} has been cancelled by the faculty."
+            
+            payload["display_message"] = message
+
+            logger.info(f"Notifying student {consultation.student_id} on topic {topic} with payload: {payload}")
+            self.mqtt_service.publish(topic, payload, qos=1) # Use QoS 1 for important notifications
+        except Exception as e:
+            logger.error(f"Error in _notify_student_of_status_change for C_ID {consultation.id}: {e}", exc_info=True)

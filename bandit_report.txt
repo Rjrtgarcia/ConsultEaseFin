@@ -1,0 +1,653 @@
+Run started:2025-05-28 05:35:40.834568
+
+Test results:
+>> Issue: [B404:blacklist] Consider possible security implications associated with the subprocess module.
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/blacklists/blacklist_imports.html#b404-import-subprocess
+   Location: .\central_system\controllers\admin_controller.py:3:0
+2	import shutil
+3	import subprocess
+4	import os
+
+--------------------------------------------------
+>> Issue: [B105:hardcoded_password_string] Possible hardcoded password: 'admin'
+   Severity: Low   Confidence: Medium
+   CWE: CWE-259 (https://cwe.mitre.org/data/definitions/259.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/plugins/b105_hardcoded_password_string.html
+   Location: .\central_system\controllers\admin_controller.py:293:27
+292	                # For now, direct creation:
+293	                password = "admin" # Consider making this configurable or prompting
+294	                password_hash, salt = Admin.hash_password(password)
+
+--------------------------------------------------
+>> Issue: [B603:subprocess_without_shell_equals_true] subprocess call - check for execution of untrusted input.
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/plugins/b603_subprocess_without_shell_equals_true.html
+   Location: .\central_system\controllers\admin_controller.py:386:26
+385	                logger.info(f"Executing pg_dump command: {' '.join(command)}")
+386	                process = subprocess.Popen(command, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+387	                stdout, stderr = process.communicate()
+
+--------------------------------------------------
+>> Issue: [B603:subprocess_without_shell_equals_true] subprocess call - check for execution of untrusted input.
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/plugins/b603_subprocess_without_shell_equals_true.html
+   Location: .\central_system\controllers\admin_controller.py:493:26
+492	                logger.info(f"Executing pg_restore command: {' '.join(command)}")
+493	                process = subprocess.Popen(command, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+494	                stdout, stderr = process.communicate()
+
+--------------------------------------------------
+>> Issue: [B404:blacklist] Consider possible security implications associated with the subprocess module.
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/blacklists/blacklist_imports.html#b404-import-subprocess
+   Location: .\central_system\main.py:4:0
+3	import logging
+4	import subprocess
+5	from PyQt5.QtWidgets import QApplication, QLineEdit, QTextEdit, QSplashScreen, QDesktopWidget
+
+--------------------------------------------------
+>> Issue: [B105:hardcoded_password_string] Possible hardcoded password: 'DefaultAdminP@ss1'
+   Severity: Low   Confidence: Medium
+   CWE: CWE-259 (https://cwe.mitre.org/data/definitions/259.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/plugins/b105_hardcoded_password_string.html
+   Location: .\central_system\models\base.py:246:31
+245	            # Ensure the default password meets strength requirements
+246	            default_password = "DefaultAdminP@ss1" # Changed default password
+247	            try:
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/blacklists/blacklist_calls.html#b311-random
+   Location: .\central_system\services\mqtt_service.py:40:53
+39	        base_client_id = self.config.get('mqtt.client_id', 'central_system')
+40	        self.client_id = f"{base_client_id}_{''.join(random.choices('0123456789abcdef', k=6))}"
+41	        self.username = self.config.get('mqtt.username', None)
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/blacklists/blacklist_calls.html#b311-random
+   Location: .\central_system\services\mqtt_service.py:653:24
+652	            timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+653	            random_id = random.randint(1000, 9999)
+654	            filename = f"{self.message_queue_dir}/msg_{timestamp}_{random_id}.json"
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/plugins/b110_try_except_pass.html
+   Location: .\central_system\services\mqtt_service.py:877:16
+876	                    self.client.disconnect()
+877	                except Exception:
+878	                    # Ignore errors during disconnect
+879	                    pass
+880	
+
+--------------------------------------------------
+>> Issue: [B404:blacklist] Consider possible security implications associated with the subprocess module.
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/blacklists/blacklist_imports.html#b404-import-subprocess
+   Location: .\central_system\services\rfid_service.py:6:0
+5	import sys
+6	import subprocess
+7	from PyQt5.QtCore import QObject, pyqtSignal
+
+--------------------------------------------------
+>> Issue: [B607:start_process_with_partial_path] Starting a process with a partial executable path
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/plugins/b607_start_process_with_partial_path.html
+   Location: .\central_system\services\rfid_service.py:71:27
+70	            logger.info(f"Looking for USB device with VID:{self.target_vid} PID:{self.target_pid}")
+71	            lsusb_output = subprocess.check_output(['lsusb'], universal_newlines=True)
+72	            logger.info(f"Available USB devices:\n{lsusb_output}")
+
+--------------------------------------------------
+>> Issue: [B603:subprocess_without_shell_equals_true] subprocess call - check for execution of untrusted input.
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/plugins/b603_subprocess_without_shell_equals_true.html
+   Location: .\central_system\services\rfid_service.py:71:27
+70	            logger.info(f"Looking for USB device with VID:{self.target_vid} PID:{self.target_pid}")
+71	            lsusb_output = subprocess.check_output(['lsusb'], universal_newlines=True)
+72	            logger.info(f"Available USB devices:\n{lsusb_output}")
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/plugins/b110_try_except_pass.html
+   Location: .\central_system\services\rfid_service.py:109:20
+108	                        logger.info(f"{device_info} {info}")
+109	                    except Exception:
+110	                        pass
+111	
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/plugins/b110_try_except_pass.html
+   Location: .\central_system\services\rfid_service.py:440:24
+439	                            device.ungrab()
+440	                        except:
+441	                            pass
+442	
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/plugins/b110_try_except_pass.html
+   Location: .\central_system\services\rfid_service.py:450:24
+449	                            logger.info("Regained exclusive access to RFID reader")
+450	                        except:
+451	                            pass
+452	                    except Exception as e2:
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/plugins/b110_try_except_pass.html
+   Location: .\central_system\services\rfid_service.py:460:12
+459	                logger.info("Released exclusive access to RFID reader")
+460	            except:
+461	                pass
+462	
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/blacklists/blacklist_calls.html#b311-random
+   Location: .\central_system\services\rfid_service.py:576:31
+575	            import random
+576	            rfid_uid = ''.join(random.choices('0123456789ABCDEF', k=10))
+577	
+
+--------------------------------------------------
+>> Issue: [B404:blacklist] Consider possible security implications associated with the subprocess module.
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/blacklists/blacklist_imports.html#b404-import-subprocess
+   Location: .\central_system\utils\keyboard_manager.py:9:0
+8	import logging
+9	import subprocess
+10	import threading
+
+--------------------------------------------------
+>> Issue: [B607:start_process_with_partial_path] Starting a process with a partial executable path
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/plugins/b607_start_process_with_partial_path.html
+   Location: .\central_system\utils\keyboard_manager.py:87:25
+86	                # Check if squeekboard is installed
+87	                result = subprocess.run(['which', 'squeekboard'],
+88	                                      stdout=subprocess.PIPE,
+89	                                      stderr=subprocess.PIPE)
+90	                return result.returncode == 0
+
+--------------------------------------------------
+>> Issue: [B603:subprocess_without_shell_equals_true] subprocess call - check for execution of untrusted input.
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/plugins/b603_subprocess_without_shell_equals_true.html
+   Location: .\central_system\utils\keyboard_manager.py:87:25
+86	                # Check if squeekboard is installed
+87	                result = subprocess.run(['which', 'squeekboard'],
+88	                                      stdout=subprocess.PIPE,
+89	                                      stderr=subprocess.PIPE)
+90	                return result.returncode == 0
+
+--------------------------------------------------
+>> Issue: [B607:start_process_with_partial_path] Starting a process with a partial executable path
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/plugins/b607_start_process_with_partial_path.html
+   Location: .\central_system\utils\keyboard_manager.py:93:25
+92	                # Check if onboard is installed
+93	                result = subprocess.run(['which', 'onboard'],
+94	                                      stdout=subprocess.PIPE,
+95	                                      stderr=subprocess.PIPE)
+96	                return result.returncode == 0
+
+--------------------------------------------------
+>> Issue: [B603:subprocess_without_shell_equals_true] subprocess call - check for execution of untrusted input.
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/plugins/b603_subprocess_without_shell_equals_true.html
+   Location: .\central_system\utils\keyboard_manager.py:93:25
+92	                # Check if onboard is installed
+93	                result = subprocess.run(['which', 'onboard'],
+94	                                      stdout=subprocess.PIPE,
+95	                                      stderr=subprocess.PIPE)
+96	                return result.returncode == 0
+
+--------------------------------------------------
+>> Issue: [B607:start_process_with_partial_path] Starting a process with a partial executable path
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/plugins/b607_start_process_with_partial_path.html
+   Location: .\central_system\utils\keyboard_manager.py:135:21
+134	        try:
+135	            result = subprocess.run(['which', 'dbus-send'],
+136	                                  stdout=subprocess.PIPE,
+137	                                  stderr=subprocess.PIPE)
+138	            return result.returncode == 0
+
+--------------------------------------------------
+>> Issue: [B603:subprocess_without_shell_equals_true] subprocess call - check for execution of untrusted input.
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/plugins/b603_subprocess_without_shell_equals_true.html
+   Location: .\central_system\utils\keyboard_manager.py:135:21
+134	        try:
+135	            result = subprocess.run(['which', 'dbus-send'],
+136	                                  stdout=subprocess.PIPE,
+137	                                  stderr=subprocess.PIPE)
+138	            return result.returncode == 0
+
+--------------------------------------------------
+>> Issue: [B607:start_process_with_partial_path] Starting a process with a partial executable path
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/plugins/b607_start_process_with_partial_path.html
+   Location: .\central_system\utils\keyboard_manager.py:201:16
+200	                # Kill any existing zombie processes first
+201	                subprocess.run(['pkill', '-f', 'squeekboard'],
+202	                             stdout=subprocess.DEVNULL,
+203	                             stderr=subprocess.DEVNULL)
+204	
+
+--------------------------------------------------
+>> Issue: [B603:subprocess_without_shell_equals_true] subprocess call - check for execution of untrusted input.
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/plugins/b603_subprocess_without_shell_equals_true.html
+   Location: .\central_system\utils\keyboard_manager.py:201:16
+200	                # Kill any existing zombie processes first
+201	                subprocess.run(['pkill', '-f', 'squeekboard'],
+202	                             stdout=subprocess.DEVNULL,
+203	                             stderr=subprocess.DEVNULL)
+204	
+
+--------------------------------------------------
+>> Issue: [B607:start_process_with_partial_path] Starting a process with a partial executable path
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/plugins/b607_start_process_with_partial_path.html
+   Location: .\central_system\utils\keyboard_manager.py:212:16
+211	                # Start squeekboard with appropriate options
+212	                subprocess.Popen(['squeekboard'],
+213	                               stdout=subprocess.DEVNULL,
+214	                               stderr=subprocess.DEVNULL,
+215	                               env=env,
+216	                               start_new_session=True)
+217	
+
+--------------------------------------------------
+>> Issue: [B603:subprocess_without_shell_equals_true] subprocess call - check for execution of untrusted input.
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/plugins/b603_subprocess_without_shell_equals_true.html
+   Location: .\central_system\utils\keyboard_manager.py:212:16
+211	                # Start squeekboard with appropriate options
+212	                subprocess.Popen(['squeekboard'],
+213	                               stdout=subprocess.DEVNULL,
+214	                               stderr=subprocess.DEVNULL,
+215	                               env=env,
+216	                               start_new_session=True)
+217	
+
+--------------------------------------------------
+>> Issue: [B603:subprocess_without_shell_equals_true] subprocess call - check for execution of untrusted input.
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/plugins/b603_subprocess_without_shell_equals_true.html
+   Location: .\central_system\utils\keyboard_manager.py:239:29
+238	                    ]
+239	                    result = subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+240	                    if result.returncode == 0:
+
+--------------------------------------------------
+>> Issue: [B603:subprocess_without_shell_equals_true] subprocess call - check for execution of untrusted input.
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/plugins/b603_subprocess_without_shell_equals_true.html
+   Location: .\central_system\utils\keyboard_manager.py:253:33
+252	                        ]
+253	                        result = subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+254	                        if result.returncode == 0:
+
+--------------------------------------------------
+>> Issue: [B603:subprocess_without_shell_equals_true] subprocess call - check for execution of untrusted input.
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/plugins/b603_subprocess_without_shell_equals_true.html
+   Location: .\central_system\utils\keyboard_manager.py:267:33
+266	                        ]
+267	                        result = subprocess.run(cmd, capture_output=True, text=True)
+268	                        logger.info(f"DBus print-reply result: {result.stdout}, errors: {result.stderr}")
+
+--------------------------------------------------
+>> Issue: [B603:subprocess_without_shell_equals_true] subprocess call - check for execution of untrusted input.
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/plugins/b603_subprocess_without_shell_equals_true.html
+   Location: .\central_system\utils\keyboard_manager.py:294:16
+293	                logger.info(f"Using keyboard script at {script_path}")
+294	                subprocess.Popen([script_path],
+295	                               stdout=subprocess.DEVNULL,
+296	                               stderr=subprocess.DEVNULL)
+297	                return True
+
+--------------------------------------------------
+>> Issue: [B603:subprocess_without_shell_equals_true] subprocess call - check for execution of untrusted input.
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/plugins/b603_subprocess_without_shell_equals_true.html
+   Location: .\central_system\utils\keyboard_manager.py:313:16
+312	                ]
+313	                subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+314	                logger.info("Hid squeekboard via DBus")
+
+--------------------------------------------------
+>> Issue: [B607:start_process_with_partial_path] Starting a process with a partial executable path
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/plugins/b607_start_process_with_partial_path.html
+   Location: .\central_system\utils\keyboard_manager.py:323:21
+322	        try:
+323	            result = subprocess.run(['pgrep', '-f', 'squeekboard'],
+324	                                  stdout=subprocess.PIPE,
+325	                                  stderr=subprocess.PIPE)
+326	            return result.returncode == 0
+
+--------------------------------------------------
+>> Issue: [B603:subprocess_without_shell_equals_true] subprocess call - check for execution of untrusted input.
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/plugins/b603_subprocess_without_shell_equals_true.html
+   Location: .\central_system\utils\keyboard_manager.py:323:21
+322	        try:
+323	            result = subprocess.run(['pgrep', '-f', 'squeekboard'],
+324	                                  stdout=subprocess.PIPE,
+325	                                  stderr=subprocess.PIPE)
+326	            return result.returncode == 0
+
+--------------------------------------------------
+>> Issue: [B607:start_process_with_partial_path] Starting a process with a partial executable path
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/plugins/b607_start_process_with_partial_path.html
+   Location: .\central_system\utils\keyboard_manager.py:336:16
+335	                # Start onboard with appropriate options
+336	                subprocess.Popen(
+337	                    ['onboard', '--size=small', '--layout=Phone', '--enable-background-transparency'],
+338	                    stdout=subprocess.DEVNULL,
+339	                    stderr=subprocess.DEVNULL,
+340	                    start_new_session=True
+341	                )
+342	                logger.info("Started onboard")
+
+--------------------------------------------------
+>> Issue: [B603:subprocess_without_shell_equals_true] subprocess call - check for execution of untrusted input.
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/plugins/b603_subprocess_without_shell_equals_true.html
+   Location: .\central_system\utils\keyboard_manager.py:336:16
+335	                # Start onboard with appropriate options
+336	                subprocess.Popen(
+337	                    ['onboard', '--size=small', '--layout=Phone', '--enable-background-transparency'],
+338	                    stdout=subprocess.DEVNULL,
+339	                    stderr=subprocess.DEVNULL,
+340	                    start_new_session=True
+341	                )
+342	                logger.info("Started onboard")
+
+--------------------------------------------------
+>> Issue: [B607:start_process_with_partial_path] Starting a process with a partial executable path
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/plugins/b607_start_process_with_partial_path.html
+   Location: .\central_system\utils\keyboard_manager.py:350:12
+349	            # Just kill the process
+350	            subprocess.run(['pkill', '-f', 'onboard'],
+351	                         stdout=subprocess.DEVNULL,
+352	                         stderr=subprocess.DEVNULL)
+353	            logger.info("Killed onboard process")
+
+--------------------------------------------------
+>> Issue: [B603:subprocess_without_shell_equals_true] subprocess call - check for execution of untrusted input.
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/plugins/b603_subprocess_without_shell_equals_true.html
+   Location: .\central_system\utils\keyboard_manager.py:350:12
+349	            # Just kill the process
+350	            subprocess.run(['pkill', '-f', 'onboard'],
+351	                         stdout=subprocess.DEVNULL,
+352	                         stderr=subprocess.DEVNULL)
+353	            logger.info("Killed onboard process")
+
+--------------------------------------------------
+>> Issue: [B607:start_process_with_partial_path] Starting a process with a partial executable path
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/plugins/b607_start_process_with_partial_path.html
+   Location: .\central_system\utils\keyboard_manager.py:360:21
+359	        try:
+360	            result = subprocess.run(['pgrep', '-f', 'onboard'],
+361	                                  stdout=subprocess.PIPE,
+362	                                  stderr=subprocess.PIPE)
+363	            return result.returncode == 0
+
+--------------------------------------------------
+>> Issue: [B603:subprocess_without_shell_equals_true] subprocess call - check for execution of untrusted input.
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/plugins/b603_subprocess_without_shell_equals_true.html
+   Location: .\central_system\utils\keyboard_manager.py:360:21
+359	        try:
+360	            result = subprocess.run(['pgrep', '-f', 'onboard'],
+361	                                  stdout=subprocess.PIPE,
+362	                                  stderr=subprocess.PIPE)
+363	            return result.returncode == 0
+
+--------------------------------------------------
+>> Issue: [B404:blacklist] Consider possible security implications associated with the subprocess module.
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/blacklists/blacklist_imports.html#b404-import-subprocess
+   Location: .\central_system\utils\transitions.py:10:0
+9	import platform
+10	import subprocess
+11	from PyQt5.QtCore import QPropertyAnimation, QEasingCurve, QTimer, Qt, QRect
+
+--------------------------------------------------
+>> Issue: [B607:start_process_with_partial_path] Starting a process with a partial executable path
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/plugins/b607_start_process_with_partial_path.html
+   Location: .\central_system\utils\transitions.py:142:25
+141	            try:
+142	                result = subprocess.run(['xprop', '-root', '_NET_SUPPORTING_WM_CHECK'],
+143	                                      stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+144	                if result.returncode == 0:
+
+--------------------------------------------------
+>> Issue: [B603:subprocess_without_shell_equals_true] subprocess call - check for execution of untrusted input.
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/plugins/b603_subprocess_without_shell_equals_true.html
+   Location: .\central_system\utils\transitions.py:142:25
+141	            try:
+142	                result = subprocess.run(['xprop', '-root', '_NET_SUPPORTING_WM_CHECK'],
+143	                                      stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+144	                if result.returncode == 0:
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/plugins/b110_try_except_pass.html
+   Location: .\central_system\utils\transitions.py:148:12
+147	                    return False
+148	            except:
+149	                # If xprop fails, we can't determine compositor status
+150	                pass
+151	
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/blacklists/blacklist_calls.html#b311-random
+   Location: .\central_system\views\admin_dashboard_window.py:1198:37
+1197	                import random
+1198	                random_uid = ''.join(random.choices('0123456789ABCDEF', k=8))
+1199	                logger.info(f"Generated random RFID: {random_uid}")
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/plugins/b110_try_except_pass.html
+   Location: .\central_system\views\base_window.py:91:8
+90	                self.keyboard_toggle_button.setIcon(keyboard_icon)
+91	        except:
+92	            # If icon not available, just use text
+93	            pass
+94	
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/plugins/b110_try_except_pass.html
+   Location: .\central_system\views\consultation_panel.py:1284:12
+1283	                QTimer.singleShot(500, reset_color)
+1284	            except:
+1285	                # If even this fails, just change the tab without animation
+1286	                pass
+1287	
+
+--------------------------------------------------
+>> Issue: [B201:flask_debug_true] A Flask app appears to be run with debug=True, which exposes the Werkzeug debugger and allows the execution of arbitrary code.
+   Severity: High   Confidence: Medium
+   CWE: CWE-94 (https://cwe.mitre.org/data/definitions/94.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/plugins/b201_flask_debug_true.html
+   Location: .\central_system\web_interface\app.py:236:4
+235	    # Run the Flask app
+236	    socketio.run(app, host='0.0.0.0', port=5000, debug=True)
+
+--------------------------------------------------
+>> Issue: [B104:hardcoded_bind_all_interfaces] Possible binding to all interfaces.
+   Severity: Medium   Confidence: Medium
+   CWE: CWE-605 (https://cwe.mitre.org/data/definitions/605.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/plugins/b104_hardcoded_bind_all_interfaces.html
+   Location: .\central_system\web_interface\app.py:236:27
+235	    # Run the Flask app
+236	    socketio.run(app, host='0.0.0.0', port=5000, debug=True)
+
+--------------------------------------------------
+>> Issue: [B105:hardcoded_password_string] Possible hardcoded password: 'admin123'
+   Severity: Low   Confidence: Medium
+   CWE: CWE-259 (https://cwe.mitre.org/data/definitions/259.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/plugins/b105_hardcoded_password_string.html
+   Location: .\init_admin.py:50:31
+49	            default_username = "admin"
+50	            default_password = "admin123"
+51	            
+
+--------------------------------------------------
+>> Issue: [B404:blacklist] Consider possible security implications associated with the subprocess module.
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/blacklists/blacklist_imports.html#b404-import-subprocess
+   Location: .\scripts\debug_rfid.py:24:0
+23	import logging
+24	import subprocess
+25	
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/plugins/b110_try_except_pass.html
+   Location: .\scripts\debug_rfid.py:118:12
+117	                        print("  *** EXACT MATCH FOR TARGET RFID READER (VID:ffff PID:0035) ***")
+118	            except:
+119	                pass
+120	                
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/blacklists/blacklist_calls.html#b311-random
+   Location: .\scripts\test_utility.py:226:31
+225	            'course_code': "TEST101",
+226	            'consultation_id': random.randint(1000, 9999),
+227	            'timestamp': time.time()
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/blacklists/blacklist_calls.html#b311-random
+   Location: .\scripts\test_utility.py:298:31
+297	                            # Update the characteristic value occasionally
+298	                            if random.random() < 0.1:  # 10% chance each second
+299	                                # Add some random data to simulate updates
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/blacklists/blacklist_calls.html#b311-random
+   Location: .\scripts\test_utility.py:300:46
+299	                                # Add some random data to simulate updates
+300	                                random_data = random.randint(0, 255).to_bytes(1, byteorder='big')
+301	                                new_value = faculty_id_bytes + random_data
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.3/blacklists/blacklist_calls.html#b311-random
+   Location: .\scripts\test_utility.py:378:27
+377	        'course_code': "CS101",
+378	        'consultation_id': random.randint(10000, 99999),
+379	        'timestamp': time.time()
+
+--------------------------------------------------
+
+Code scanned:
+	Total lines of code: 11951
+	Total lines skipped (#nosec): 0
+	Total potential issues skipped due to specifically being disabled (e.g., #nosec BXXX): 0
+
+Run metrics:
+	Total issues (by severity):
+		Undefined: 0
+		Low: 55
+		Medium: 1
+		High: 1
+	Total issues (by confidence):
+		Undefined: 0
+		Low: 0
+		Medium: 5
+		High: 52
+Files skipped (1):
+	.\central_system\utils\mqtt_service.py (syntax error while parsing AST from file)

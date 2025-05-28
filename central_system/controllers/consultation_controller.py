@@ -8,6 +8,7 @@ from ..models.faculty import Faculty # Direct model imports
 from ..models.base import get_db, close_db, db_operation_with_retry # Corrected imports
 from ..utils.mqtt_topics import MQTTTopics
 from sqlalchemy.orm import joinedload # Add this import
+from ..controllers.faculty_controller import FacultyController # Direct import
 
 # Set up logging
 # logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s') # REMOVED
@@ -129,41 +130,68 @@ class ConsultationController:
 
     def create_consultation(self, student_id, faculty_id, request_message, course_code=None):
         """
-        Create a new consultation request, store in DB, then publish.
+        Create a new consultation request.
+        
+        Args:
+            student_id (int): Student ID
+            faculty_id (int): Faculty ID
+            request_message (str): Request message
+            course_code (str, optional): Course code
+            
+        Returns:
+            Consultation: New consultation object or None if error
         """
-        logger.info(f"Attempting to create consultation (Student: {student_id}, Faculty: {faculty_id})")
-        consultation = None
+        # Validate inputs
+        if not student_id or not faculty_id or not request_message:
+            logger.error("Cannot create consultation: Missing required fields")
+            return None
+            
+        # Validate input types
         try:
+            student_id = int(student_id)
+            faculty_id = int(faculty_id)
+        except (ValueError, TypeError):
+            logger.error(f"Invalid student_id or faculty_id: {student_id}, {faculty_id}")
+            return None
+            
+        # Validate request message length
+        if len(request_message) < 2 or len(request_message) > 500:
+            logger.error(f"Invalid request message length: {len(request_message)}")
+            return None
+            
+        # Validate course code if provided
+        if course_code and (len(course_code) < 2 or len(course_code) > 20):
+            logger.error(f"Invalid course code length: {len(course_code)}")
+            return None
+            
+        # Check if faculty is available
+        faculty_controller = FacultyController.instance()
+        faculty = faculty_controller.get_faculty_by_id(faculty_id)
+        if not faculty:
+            logger.error(f"Faculty not found: {faculty_id}")
+            return None
+            
+        if not faculty.status and not faculty.always_available:
+            logger.warning(f"Faculty not available: {faculty_id}")
+            return None
+
+        try:
+            # Create consultation in DB
             consultation = self._create_consultation_in_db(student_id, faculty_id, request_message, course_code)
-            if consultation and consultation.id: # Check if ID is populated (meaning commit was successful)
-                logger.info(f"DB: Created consultation request: {consultation.id}")
-                
-                if self._ensure_mqtt_connected(f"publishing consultation {consultation.id}"):
-                    publish_success = self._publish_consultation_to_mqtt(consultation.id)
-                    if publish_success:
-                        logger.info(f"MQTT: Successfully published consultation {consultation.id}")
-                    else:
-                        logger.error(f"MQTT: Failed to publish consultation {consultation.id}. It is saved in DB.")
-                else:
-                    # _ensure_mqtt_connected already logs the failure to connect
-                    logger.error(f"MQTT: Not connected. Consultation {consultation.id} saved in DB but not published.")
-                
-                # Re-fetch the consultation to ensure all relationships are loaded for signal emission
-                loaded_consultation = self.get_consultation_by_id(consultation.id)
-                if loaded_consultation:
-                    self._notify_callbacks(loaded_consultation)
-                    return loaded_consultation
-                else:
-                    logger.error(f"Failed to re-load consultation {consultation.id} after creation. Callbacks not notified with full data.")
-                    # Fallback to returning the original instance, which might lack relationships
-                    self._notify_callbacks(consultation)
-                    return consultation
-            else:
-                logger.error(f"DB: Failed to create consultation or retrieve ID after commit.")
+            if not consultation:
+                logger.error("Failed to create consultation in database")
                 return None
+                
+            # Publish to MQTT
+            if not self._publish_consultation_to_mqtt(consultation.id):
+                logger.warning(f"Consultation created but failed to publish to MQTT: {consultation.id}")
+                
+            # Notify callbacks
+            self._notify_callbacks(consultation)
+            logger.info(f"Created consultation: {consultation.id}")
+            return consultation
         except Exception as e:
-            logger.error(f"Error in create_consultation controller method: {str(e)}")
-            # The decorator on _create_consultation_in_db handles DB rollback
+            logger.error(f"Error creating consultation: {str(e)}")
             return None
 
     def _publish_consultation_to_mqtt(self, consultation_id):
@@ -268,6 +296,14 @@ class ConsultationController:
         """
         Get consultations, optionally filtered.
         Eagerly loads related student and faculty data.
+        
+        Args:
+            student_id (int, optional): Filter by student ID
+            faculty_id (int, optional): Filter by faculty ID
+            status (str or list, optional): Filter by status or list of statuses
+            
+        Returns:
+            list: List of consultation objects
         """
         db = get_db()
         try:
@@ -275,17 +311,41 @@ class ConsultationController:
                 joinedload(Consultation.student),
                 joinedload(Consultation.faculty)
             )
-            if student_id:
-                query = query.filter(Consultation.student_id == student_id)
-            if faculty_id:
-                query = query.filter(Consultation.faculty_id == faculty_id)
-            if status:
-                query = query.filter(Consultation.status == status)
             
-            consultations = query.order_by(Consultation.requested_at.desc()).all()
+            # Apply filters
+            if student_id is not None:
+                # Ensure student_id is treated as an integer to prevent SQL injection
+                try:
+                    student_id_int = int(student_id)
+                    query = query.filter(Consultation.student_id == student_id_int)
+                except (ValueError, TypeError):
+                    logger.error(f"Invalid student_id provided: {student_id}")
+                    return []
+                    
+            if faculty_id is not None:
+                # Ensure faculty_id is treated as an integer to prevent SQL injection
+                try:
+                    faculty_id_int = int(faculty_id)
+                    query = query.filter(Consultation.faculty_id == faculty_id_int)
+                except (ValueError, TypeError):
+                    logger.error(f"Invalid faculty_id provided: {faculty_id}")
+                    return []
+                
+            if status is not None:
+                if isinstance(status, list):
+                    # Use SQL's IN operator for a list of statuses
+                    query = query.filter(Consultation.status.in_(status))
+                else:
+                    # Simple equality for a single status
+                    query = query.filter(Consultation.status == status)
+            
+            # Order by most recent first
+            query = query.order_by(Consultation.requested_at.desc())
+            
+            consultations = query.all()
             return consultations
         except Exception as e:
-            logger.error(f"Error getting consultations: {str(e)}", exc_info=True)
+            logger.error(f"Error getting consultations: {str(e)}")
             return []
         finally:
             close_db()

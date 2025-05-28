@@ -3,6 +3,7 @@ from sqlalchemy.exc import IntegrityError
 from ..models.student import Student
 from ..models.base import get_db, close_db, db_operation_with_retry
 from ..services import get_rfid_service
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -29,43 +30,64 @@ class StudentController:
         logger.info("StudentController initialized")
 
     @db_operation_with_retry()
-    def add_student(self, db, name: str, department: str, rfid_uid: str):
+    def add_student(self, db, name, student_id, email, rfid_uid=None):
         """
-        Add a new student to the database.
-        Checks for existing RFID UID.
-        Refreshes RFID service cache on success.
-
+        Add a new student.
+        Note: `db` is provided by the decorator.
         Args:
-            db: The database session.
-            name (str): Name of the student.
-            department (str): Department of the student.
-            rfid_uid (str): RFID UID of the student.
+            db: SQLAlchemy session (from decorator)
+            name (str): Student name
+            student_id (str): Student ID
+            email (str): Student email
+            rfid_uid (str, optional): RFID UID
 
         Returns:
-            Student: The newly created student object, or None if error.
-        
-        Raises:
-            ValueError: If RFID UID already exists.
+            Student: New student object
         """
-        logger.info(f"Attempting to add student (FULLY RESTORED + EARLY FLUSH): Name='{name}', Department='{department}', RFID='{rfid_uid}'")
-        # Case-insensitive check for existing RFID UID
-        existing_student = db.query(Student).filter(Student.rfid_uid.ilike(rfid_uid)).first()
-        if existing_student:
-            logger.warning(f"Failed to add student. RFID UID '{rfid_uid}' already exists for student '{existing_student.name}'.")
-            raise ValueError(f"RFID UID '{rfid_uid}' already exists.")
+        # Validate inputs
+        if not name or not student_id or not email:
+            raise ValueError("Name, student ID, and email are required")
+            
+        # Basic email validation
+        if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
+            raise ValueError("Invalid email format")
+            
+        # Validate student ID format (assuming alphanumeric with possible dashes/dots)
+        if not re.match(r"^[A-Za-z0-9.\-_]{3,20}$", student_id):
+            raise ValueError("Student ID must be 3-20 alphanumeric characters (dots, dashes, underscores allowed)")
+            
+        # Validate name (no extremely long names, no special characters except spaces)
+        if not re.match(r"^[A-Za-z0-9 ]{2,100}$", name):
+            raise ValueError("Name must be 2-100 characters (letters, numbers, spaces only)")
+            
+        # Validate RFID UID format if provided
+        if rfid_uid and not re.match(r"^[A-Fa-f0-9]{4,32}$", rfid_uid):
+            raise ValueError("RFID UID must be a valid hexadecimal string (4-32 characters)")
 
-        new_student = Student(name=name, department=department, rfid_uid=rfid_uid)
-        db.add(new_student)
-        logger.info(f"DB: Added student '{new_student.name}' (ID before early flush: {new_student.id}) to session {db}.")
-        
-        try:
-            db.flush() # Attempt to flush here
-            logger.info(f"DB: Flushed student '{new_student.name}' (ID after early flush: {new_student.id}) in session {db}.")
-        except Exception as e:
-            logger.error(f"Error flushing student {new_student.name} (ID: {new_student.id}) within add_student: {e}", exc_info=True)
-            raise # Re-raise to let decorator handle rollback etc.
-        
-        return new_student
+        # Check if student_id already exists
+        existing = db.query(Student).filter(Student.student_id == student_id).first()
+        if existing:
+            raise ValueError(f"Student with ID {student_id} already exists")
+
+        # Check if RFID UID already exists (if provided)
+        if rfid_uid:
+            existing_rfid = db.query(Student).filter(Student.rfid_uid == rfid_uid).first()
+            if existing_rfid:
+                raise ValueError(f"RFID UID {rfid_uid} is already assigned to another student")
+
+        # Create new student
+        student = Student(
+            name=name,
+            student_id=student_id,
+            email=email,
+            rfid_uid=rfid_uid
+        )
+
+        db.add(student)
+        # db.commit() # Decorator handles commit on success
+
+        logger.info(f"Created new student: {student.name} (ID: {student.id}, Student ID: {student.student_id})")
+        return student
 
     @db_operation_with_retry()
     def update_student(self, db, student_id: int, name: str, department: str, rfid_uid: str):

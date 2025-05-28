@@ -6,6 +6,7 @@ import os
 import json
 import logging
 import pathlib
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +25,8 @@ class Config:
             "pool_size": 5,
             "max_overflow": 10,
             "pool_timeout": 30,
-            "pool_recycle": 1800
+            "pool_recycle": 1800,
+            "debug": False  # Add option to control SQL debugging
         },
         "mqtt": {
             "broker_host": "localhost",
@@ -60,7 +62,10 @@ class Config:
             "min_password_length": 8,
             "password_lockout_threshold": 5,
             "password_lockout_duration": 900,  # 15 minutes in seconds
-            "session_timeout": 1800  # 30 minutes in seconds
+            "session_timeout": 1800,  # 30 minutes in seconds
+            "default_admin_password": None,  # Force explicit setting in config or code
+            "bcrypt_rounds": 12,  # Control password hashing strength
+            "enforce_password_complexity": True  # Require mixed case, numbers, etc.
         },
         "logging": {
             "level": "INFO",
@@ -274,6 +279,57 @@ class Config:
         except Exception as e:
             logger.error(f"Failed to save configuration to {config_path}: {e}")
             return False
+
+    def _load_config_from_file(self):
+        """
+        Load configuration from JSON file.
+        """
+        try:
+            # If the config file exists, load it
+            if os.path.exists(self.config_file):
+                try:
+                    with open(self.config_file, 'r') as f:
+                        try:
+                            file_config = json.load(f)
+                            self.logger.info(f"Loaded configuration from {self.config_file}")
+                            return file_config
+                        except json.JSONDecodeError as e:
+                            self.logger.error(f"Invalid JSON in config file {self.config_file}: {e}")
+                            # Create a backup of the invalid config file
+                            backup_file = f"{self.config_file}.bak.{int(time.time())}"
+                            try:
+                                import shutil
+                                shutil.copy2(self.config_file, backup_file)
+                                self.logger.info(f"Created backup of invalid config file at {backup_file}")
+                            except Exception as backup_err:
+                                self.logger.error(f"Failed to create backup of invalid config file: {backup_err}")
+                except Exception as e:
+                    self.logger.error(f"Error reading config file {self.config_file}: {e}")
+            else:
+                self.logger.warning(f"Config file {self.config_file} not found")
+                
+                # Create config directory if it doesn't exist
+                config_dir = os.path.dirname(self.config_file)
+                if config_dir and not os.path.exists(config_dir):
+                    try:
+                        os.makedirs(config_dir, exist_ok=True)
+                        self.logger.info(f"Created config directory: {config_dir}")
+                    except Exception as e:
+                        self.logger.error(f"Error creating config directory {config_dir}: {e}")
+                
+                # Write default config to file if requested
+                if self.write_default_if_missing:
+                    try:
+                        with open(self.config_file, 'w') as f:
+                            json.dump(self.DEFAULT_CONFIG, f, indent=4)
+                            self.logger.info(f"Created default config file at {self.config_file}")
+                    except Exception as e:
+                        self.logger.error(f"Error creating default config file: {e}")
+        except Exception as e:
+            self.logger.error(f"Unexpected error in _load_config_from_file: {e}")
+            
+        # Return empty dict if we couldn't load the config
+        return {}
 
 # Convenience function to get the configuration instance
 def get_config():

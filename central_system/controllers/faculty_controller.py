@@ -175,19 +175,43 @@ class FacultyController:
         logger.info(f"DB: Updated status for faculty {faculty.name} (ID: {faculty.id}) to {status_bool}")
         return faculty
 
-    def get_all_faculty(self, filter_available=None, search_term=None):
+    def get_all_faculty(self, filter_available=None, search_term=None, limit=100, offset=0):
         """
         Get all faculty, optionally filtered by availability or search term.
+        Now supports pagination and only selects necessary columns.
+        
+        Args:
+            filter_available (bool, optional): Filter by availability status
+            search_term (str, optional): Search for faculty by name or department
+            limit (int, optional): Maximum number of results to return (default 100)
+            offset (int, optional): Number of results to skip (for pagination)
+            
+        Returns:
+            list: List of faculty objects
         """
         db = get_db()
         try:
-            query = db.query(Faculty)
+            # Select only necessary columns to reduce query load
+            query = db.query(
+                Faculty.id,
+                Faculty.name,
+                Faculty.department,
+                Faculty.status,
+                Faculty.email,
+                Faculty.phone,
+                Faculty.ble_id
+            )
+            
+            # Apply filters if provided
             if filter_available is not None:
                 query = query.filter(Faculty.status == filter_available)
+                
             if search_term:
                 search_val = f"%{search_term}%"
                 query = query.filter(or_(Faculty.name.ilike(search_val), Faculty.department.ilike(search_val)))
-            faculties = query.all()
+                
+            # Apply pagination
+            faculties = query.order_by(Faculty.name).limit(limit).offset(offset).all()
             return faculties
         except Exception as e:
             logger.error(f"Error getting faculty list: {str(e)}")

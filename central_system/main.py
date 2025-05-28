@@ -19,34 +19,59 @@ from central_system.config import get_config #, initialize_config, log_config_lo
 config = get_config()
 # log_config_load_status()
 
-# Configure logging using settings from config.py
-log_level_str = config.get('logging.level', 'INFO').upper()
-log_level = getattr(logging, log_level_str, logging.INFO)
+# Configure logging
+log_level = getattr(logging, config.get('logging.level', 'INFO').upper())
 log_file = config.get('logging.file', 'consultease.log')
-log_max_size = config.get('logging.max_size', 10*1024*1024) # Default 10MB
-log_backup_count = config.get('logging.backup_count', 5)
+log_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+log_max_size = config.get('logging.max_size', 10485760)  # 10MB default
+log_backup_count = config.get('logging.backup_count', 5)  # 5 backups default
 
 # Ensure logs directory exists
 log_dir = os.path.dirname(log_file)
 if log_dir: # Only call makedirs if log_dir is not an empty string
-    os.makedirs(log_dir, exist_ok=True)
+    try:
+        os.makedirs(log_dir, exist_ok=True)
+        logger.info(f"Ensured log directory exists: {log_dir}")
+    except PermissionError as e:
+        print(f"ERROR: Cannot create log directory {log_dir}: Permission denied")
+        print(f"The application may continue but logs cannot be written to {log_file}")
+        print(f"Please check folder permissions or run the application with appropriate privileges")
+        # Fall back to current directory
+        log_file = "consultease.log"
+        print(f"Attempting to use current directory for log file: {log_file}")
 
-# Create handlers
-stream_handler = logging.StreamHandler(sys.stdout)
-# Use RotatingFileHandler
-file_handler = RotatingFileHandler(
-    log_file, maxBytes=log_max_size, backupCount=log_backup_count
-)
-
-logging.basicConfig(
-    level=log_level,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        stream_handler,
-        file_handler
-    ]
-)
-logger = logging.getLogger(__name__)
+try:
+    # Create a rotating file handler for logging
+    handler = RotatingFileHandler(
+        log_file, 
+        maxBytes=log_max_size,
+        backupCount=log_backup_count
+    )
+    handler.setFormatter(logging.Formatter(log_format))
+    
+    # Add the handler to the root logger
+    root_logger = logging.getLogger()
+    root_logger.setLevel(log_level)
+    
+    # Remove existing handlers if any
+    for existing_handler in list(root_logger.handlers):
+        root_logger.removeHandler(existing_handler)
+    
+    # Add the new rotating handler
+    root_logger.addHandler(handler)
+    
+    # Optional: Add a console handler as well
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(logging.Formatter(log_format))
+    root_logger.addHandler(console_handler)
+    
+    logger.info(f"Logging configured with level {log_level}, rotating file handler to {log_file} " +
+               f"(max size: {log_max_size/1024/1024:.1f}MB, backups: {log_backup_count})")
+except Exception as e:
+    print(f"ERROR: Failed to configure logging: {e}")
+    # Set up basic console logging as fallback
+    logging.basicConfig(level=log_level, format=log_format)
+    logger.warning(f"Using basic console logging due to error: {e}")
 
 # Import models and controllers
 from central_system.models import init_db
@@ -265,24 +290,63 @@ class ConsultEaseApp:
         """
         Clean up resources before exiting.
         """
-        logger.info("Cleaning up ConsultEase application")
+        logger.info("Cleaning up resources before exit...")
+        
+        # Set cleanup flag to prevent new operations during shutdown
+        self.is_shutting_down = True
+        
+        # Gracefully close all database connections
+        try:
+            from .models.base import close_db
+            logger.info("Closing database connections...")
+            close_db()
+            logger.info("Database connections closed successfully")
+        except Exception as e:
+            logger.error(f"Error closing database connections: {e}")
 
-        # Stop controllers
-        self.rfid_controller.stop()
-        self.faculty_controller.stop()
-        self.consultation_controller.stop()
+        # Stop RFID service
+        try:
+            if self.rfid_service:
+                logger.info("Stopping RFID service...")
+                self.rfid_service.stop()
+                logger.info("RFID service stopped successfully")
+        except Exception as e:
+            logger.error(f"Error stopping RFID service: {e}")
 
-        if self.keyboard_manager: # Cleanup keyboard manager
-            self.keyboard_manager.cleanup()
-            logger.info("Keyboard manager cleaned up.")
+        # Disconnect MQTT service
+        try:
+            from .services import get_mqtt_service
+            mqtt_service = get_mqtt_service()
+            if mqtt_service:
+                logger.info("Disconnecting MQTT service...")
+                mqtt_service.disconnect()
+                logger.info("MQTT service disconnected successfully")
+        except Exception as e:
+            logger.error(f"Error disconnecting MQTT service: {e}")
 
-        # Close all windows gracefully
-        self.login_window = None
-        self.dashboard_window = None
-        self.admin_login_window = None
-        self.admin_dashboard_window = None
+        # Clean up keyboard manager
+        try:
+            from .utils.keyboard_manager import get_keyboard_manager
+            keyboard_manager = get_keyboard_manager()
+            if keyboard_manager:
+                logger.info("Cleaning up keyboard manager...")
+                keyboard_manager.hide_keyboard()
+                # Check if cleanup method exists
+                if hasattr(keyboard_manager, 'cleanup'):
+                    keyboard_manager.cleanup()
+                logger.info("Keyboard manager cleaned up successfully")
+        except Exception as e:
+            logger.error(f"Error cleaning up keyboard manager: {e}")
 
-        logger.info("Cleanup finished.")
+        # Explicitly call garbage collection to release resources
+        try:
+            import gc
+            gc.collect()
+            logger.info("Garbage collection completed")
+        except Exception as e:
+            logger.error(f"Error during garbage collection: {e}")
+
+        logger.info("Cleanup complete. Exiting application.")
 
     def show_login_window(self):
         """

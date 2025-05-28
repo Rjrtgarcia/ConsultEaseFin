@@ -1,6 +1,9 @@
 #include <WiFi.h>
 #if MQTT_USE_TLS // Conditional include for WiFiClientSecure
 #include <WiFiClientSecure.h>
+WiFiClientSecure espClientSecure;
+#else
+WiFiClient espClient;             
 #endif
 #include <PubSubClient.h>  // MQTT client
 #include <NimBLEDevice.h>  // Using NimBLE for scanning
@@ -70,11 +73,10 @@ const int   daylightOffset_sec = 3600;
 
 // Variables
 #if MQTT_USE_TLS
-WiFiClientSecure espClientSecure; // Use WiFiClientSecure for TLS
+PubSubClient mqttClient(espClientSecure); // Use secure client for TLS
 #else
-WiFiClient espClient;             // Standard WiFiClient for non-TLS
+PubSubClient mqttClient(espClient); // Use standard client for non-TLS
 #endif
-PubSubClient mqttClient(MQTT_USE_TLS ? (Client&)espClientSecure : (Client&)espClient); // Pass appropriate client
 char timeStringBuff[50];
 char dateStringBuff[50];
 String lastMessage = "";
@@ -156,7 +158,10 @@ class MyAdvertisedDeviceCallbacks: public NimBLEAdvertisedDeviceCallbacks {
 
 // Function to process incoming messages and extract content from JSON if needed
 String processMessage(const String& payload) { // Changed to const String&
-  StaticJsonDocument<256> doc; // Adjust size as needed for your expected JSON
+  // Calculate an appropriate buffer size based on the payload length
+  // ArduinoJson recommends 1.5x the size of the payload for most JSON documents
+  const size_t capacity = JSON_OBJECT_SIZE(10) + payload.length() * 2;  // Allocate more space than needed to be safe
+  DynamicJsonDocument doc(capacity); // Adjust size dynamically based on payload
   DeserializationError error = deserializeJson(doc, payload);
 
   if (error) {
@@ -170,8 +175,28 @@ String processMessage(const String& payload) { // Changed to const String&
     String requestMsg = doc["request_message"] | ""; // Get value or empty string if null
     String studentName = doc["student_name"] | "";
     String courseCode = doc["course_code"] | "";
-    current_consultation_id = doc["consultation_id"] | -1; // Extract consultation_id
-    current_consultation_status = doc["consultation_status"] | ""; // Extract consultation_status
+    
+    // Add validation for consultation_id to ensure it's a valid number
+    long consultation_id_long = doc["consultation_id"] | -1;
+    if (consultation_id_long > 0 && consultation_id_long < 1000000) { // Reasonable limits for an ID
+      current_consultation_id = consultation_id_long;
+    } else {
+      Serial.println("Invalid consultation_id received");
+      current_consultation_id = -1;
+    }
+    
+    current_consultation_status = doc["consultation_status"] | "";
+    // Add validation for status string
+    if (current_consultation_status.length() > 0) {
+      if (current_consultation_status != "pending" && 
+          current_consultation_status != "accepted" && 
+          current_consultation_status != "started" && 
+          current_consultation_status != "completed" && 
+          current_consultation_status != "cancelled") {
+        Serial.println("Unknown consultation status: " + current_consultation_status);
+        current_consultation_status = "unknown";
+      }
+    }
     
     String formattedMessage = "REQ ID: " + String(current_consultation_id) + " (Status: " + current_consultation_status + ")\n";
     if (!studentName.isEmpty()) { formattedMessage += "Student: " + studentName + "\n"; }
@@ -404,10 +429,29 @@ void reconnect() {
     // Load certificates
     // Note: For ESP32, setCACert, setCertificate, setPrivateKey are the correct methods
     // For some older examples you might see setCACertificate etc.
-    espClientSecure.setCACert(mqtt_ca_cert);
-    espClientSecure.setCertificate(mqtt_client_cert); // Client certificate
-    espClientSecure.setPrivateKey(mqtt_client_key);     // Client private key
-    Serial.println("MQTT TLS: Certificates loaded.");
+    try {
+      espClientSecure.setCACert(mqtt_ca_cert);
+      if (mqtt_client_cert && mqtt_client_cert[0] != '\0') {
+        espClientSecure.setCertificate(mqtt_client_cert); // Client certificate
+      }
+      if (mqtt_client_key && mqtt_client_key[0] != '\0') {
+        espClientSecure.setPrivateKey(mqtt_client_key);   // Client private key
+      }
+      Serial.println("MQTT TLS: Certificates loaded.");
+    } catch (const std::exception& e) {
+      Serial.print("TLS certificate error: ");
+      Serial.println(e.what());
+      displaySystemStatus("TLS certificate error");
+      delay(2000);
+      displaySystemStatus("Will retry with fallback");
+      return; // Exit this attempt, will retry
+    } catch (...) {
+      Serial.println("Unknown TLS certificate error");
+      displaySystemStatus("Unknown TLS error");
+      delay(2000);
+      displaySystemStatus("Will retry with fallback");
+      return; // Exit this attempt, will retry
+    }
     #endif
 
     if (mqttClient.connect(clientId.c_str())) {
@@ -423,6 +467,20 @@ void reconnect() {
     } else {
       Serial.print("failed, rc="); Serial.print(mqttClient.state()); Serial.println(" try again in 5 seconds");
       displaySystemStatus("MQTT connection failed. Retrying...");
+      
+      // Handle specific error codes
+      int errorCode = mqttClient.state();
+      String errorMsg = "Error: ";
+      switch (errorCode) {
+        case -1: errorMsg += "Timeout"; break;
+        case -2: errorMsg += "Failed"; break;
+        case -3: errorMsg += "Connection Lost"; break;
+        case -4: errorMsg += "Connection Failed"; break;
+        case -5: errorMsg += "Bad Protocol"; break;
+        default: errorMsg += String(errorCode);
+      }
+      displaySystemStatus(errorMsg);
+      
       delay(5000); attempts++;
     }
   }
@@ -464,9 +522,37 @@ void setup() {
   sprintf(mqtt_client_id, "DeskUnitScanner_%s", FACULTY_NAME); // Use FACULTY_NAME from config.h
   Serial.println("MQTT topics initialized for scanner mode.");
 
-  SPI.begin();
-  tft.init(240, 320);
-  Serial.println("Display initialized");
+  // Initialize display with error handling
+  boolean displayInitSuccess = false;
+  int displayRetryCount = 0;
+  
+  while (!displayInitSuccess && displayRetryCount < 3) {
+    try {
+      SPI.begin();
+      tft.init(240, 320);
+      displayInitSuccess = true;
+      Serial.println("Display initialized successfully");
+    } catch (const std::exception& e) {
+      displayRetryCount++;
+      Serial.print("Display initialization error (attempt "); 
+      Serial.print(displayRetryCount);
+      Serial.print("/3): ");
+      Serial.println(e.what());
+      delay(1000); // Wait before retry
+    } catch (...) {
+      displayRetryCount++;
+      Serial.print("Unknown display error (attempt ");
+      Serial.print(displayRetryCount);
+      Serial.println("/3)");
+      delay(1000); // Wait before retry
+    }
+  }
+  
+  if (!displayInitSuccess) {
+    Serial.println("CRITICAL: Display failed to initialize after multiple attempts");
+    // Continue without display, system will show errors on serial
+  }
+  
   tft.setRotation(TFT_ROTATION); // Use TFT_ROTATION from config.h
   testScreen();
   drawUIFramework();
@@ -510,22 +596,31 @@ void setup() {
 }
 
 void publishStatus(bool isPresent, bool isManual) {
-    String statusJson = "{";
-    statusJson += "\"status\": " + String(isPresent ? "true" : "false") + ",";
-    statusJson += "\"type\": \"" + String(isManual ? "manual" : "ble") + "\"}";
+    // Use static memory allocation for JSON document to avoid heap fragmentation
+    StaticJsonDocument<128> doc; // Small fixed-size document uses stack memory
     
-    // Previous simple status message:
-    // const char* statusMsg = isPresent ? "keychain_connected" : "keychain_disconnected";
-
-    if (mqttClient.connected()) {
-        mqttClient.publish(mqtt_topic_status, statusJson.c_str());
-        Serial.print("Published to "); Serial.print(mqtt_topic_status); Serial.print(": "); Serial.println(statusJson);
+    // Add data to document
+    doc["status"] = isPresent;
+    doc["type"] = isManual ? "manual" : "ble";
+    
+    // Serialize JSON directly to a buffer
+    char jsonBuffer[128]; // Fixed buffer size
+    size_t jsonSize = serializeJson(doc, jsonBuffer, sizeof(jsonBuffer));
+    
+    // Check if serialization was successful
+    if (jsonSize > 0 && jsonSize < sizeof(jsonBuffer)) {
+        if (mqttClient.connected()) {
+            mqttClient.publish(mqtt_topic_status, jsonBuffer);
+            Serial.print("Published to "); Serial.print(mqtt_topic_status); Serial.print(": "); Serial.println(jsonBuffer);
+        }
+        lastStatusPublishTime = millis();
+        digitalWrite(LED_PIN, isPresent ? HIGH : LOW); 
+        // Update display based on the actual status being published
+        String displayStatusStr = String(isManual ? "Status (Manual): " : "Status (BLE): ") + (isPresent ? "Available" : "Unavailable");
+        displaySystemStatus(displayStatusStr);
+    } else {
+        Serial.println("Error serializing JSON or buffer too small");
     }
-    lastStatusPublishTime = millis();
-    digitalWrite(LED_PIN, isPresent ? HIGH : LOW); 
-    // Update display based on the actual status being published
-    String displayStatusStr = String(isManual ? "Status (Manual): " : "Status (BLE): ") + (isPresent ? "Available" : "Unavailable");
-    displaySystemStatus(displayStatusStr);
 }
 
 #ifdef BUTTON_PIN
@@ -588,7 +683,7 @@ void handleConsultationActionButtons() {
       acceptButtonState = acceptReading;
       if (acceptButtonState == LOW) { // Button pressed
         Serial.println("Contextual Action Button (Accept/Start/End) Pressed!");
-        if (current_consultation_id != -1 && !current_consultation_status.isEmpty()) {
+        if (current_consultation_id != -1 && current_consultation_id > 0 && !current_consultation_status.isEmpty()) {
           String action = "";
           String displayMsgAction = "";
 
@@ -622,7 +717,7 @@ void handleConsultationActionButtons() {
   }
   lastAcceptButtonState = acceptReading;
 
-  // Read Reject/Cancel button
+  // Read Reject/Cancel button (add same validation)
   int rejectReading = digitalRead(REJECT_BUTTON_PIN);
   if (rejectReading != lastRejectButtonState) {
     lastRejectDebounceTime = millis();
@@ -632,7 +727,7 @@ void handleConsultationActionButtons() {
       rejectButtonState = rejectReading;
       if (rejectButtonState == LOW) { // Button pressed
         Serial.println("Contextual Action Button (Reject/Cancel) Pressed!");
-        if (current_consultation_id != -1 && !current_consultation_status.isEmpty()) {
+        if (current_consultation_id != -1 && current_consultation_id > 0 && !current_consultation_status.isEmpty()) {
           String action = "";
           String displayMsgAction = "";
 
@@ -693,11 +788,18 @@ void loop() {
   } else {
     // BLE Presence Logic (only if not manually overridden)
     if (!pBLEScan->isScanning()) {
-        if (!isFacultyPresent || (currentMillis - lastBeaconSignalTime > BLE_SCAN_INTERVAL)) {
-            Serial.println("Starting BLE scan...");
-            bleScanActive = true; 
-            pBLEScan->start(BLE_SCAN_DURATION, nullptr, false); 
+      if (!isFacultyPresent || (currentMillis - lastBeaconSignalTime > BLE_SCAN_INTERVAL)) {
+        Serial.println("Starting BLE scan...");
+        
+        // Clear results from previous scan to prevent memory leaks
+        if (pBLEScan->getResults().getCount() > 0) {
+          Serial.println("Clearing previous scan results to prevent memory leaks");
+          pBLEScan->clearResults();
         }
+        
+        bleScanActive = true; 
+        pBLEScan->start(BLE_SCAN_DURATION, nullptr, false); 
+      }
     }
     if (isFacultyPresent && (currentMillis - lastBeaconSignalTime > BLE_CONNECTION_TIMEOUT)) {
       Serial.println("Beacon signal lost (timeout).");

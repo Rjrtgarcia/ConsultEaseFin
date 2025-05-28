@@ -67,17 +67,25 @@ class KeyboardManager(QObject):
 
     def _detect_available_keyboards(self):
         """Detect which keyboards are available on the system."""
-        # Check for squeekboard
-        self.squeekboard_available = self._check_keyboard_available('squeekboard')
-        logger.info(f"Squeekboard available: {self.squeekboard_available}")
+        try:
+            # Check for squeekboard
+            self.squeekboard_available = self._is_squeekboard_available()
+            logger.info(f"Squeekboard available: {self.squeekboard_available}")
 
-        # Check for onboard
-        self.onboard_available = self._check_keyboard_available('onboard')
-        logger.info(f"Onboard available: {self.onboard_available}")
+            # Check for onboard
+            self.onboard_available = self._check_keyboard_available('onboard')
+            logger.info(f"Onboard available: {self.onboard_available}")
 
-        # Determine which keyboard to use
-        self.active_keyboard = self._determine_active_keyboard()
-        logger.info(f"Active keyboard: {self.active_keyboard}")
+            # Determine which keyboard to use
+            self.active_keyboard = self._determine_active_keyboard()
+            logger.info(f"Active keyboard: {self.active_keyboard}")
+        except Exception as e:
+            logger.error(f"Error detecting available keyboards: {e}")
+            # Set defaults for graceful degradation
+            self.squeekboard_available = False
+            self.onboard_available = False
+            self.active_keyboard = None
+            logger.warning("Using fallback mode with no on-screen keyboard due to initialization error")
 
     def _check_keyboard_available(self, keyboard_type):
         """Check if a specific keyboard is available on the system."""
@@ -371,6 +379,29 @@ class KeyboardManager(QObject):
         self.keyboard_visible = False 
         self.show_keyboard()
         # The show_keyboard method itself contains fallbacks (e.g., script for squeekboard if DBus fails)
+
+    def _is_squeekboard_available(self):
+        """Check if squeekboard is available on the system."""
+        if not self._is_linux():
+            return False
+            
+        try:
+            # Define full path to which command
+            WHICH_PATH = "/usr/bin/which"
+            
+            # Check if which command exists
+            if not os.path.exists(WHICH_PATH):
+                logger.warning(f"which command not found at {WHICH_PATH}")
+                return False
+                
+            # Check if squeekboard is installed
+            result = subprocess.run([WHICH_PATH, 'squeekboard'],
+                                  stdout=subprocess.PIPE,
+                                  stderr=subprocess.PIPE)
+            return result.returncode == 0
+        except Exception as e:
+            logger.error(f"Error checking for squeekboard: {e}")
+            return False
 
 # Convenience function to get the keyboard manager instance
 def get_keyboard_manager():

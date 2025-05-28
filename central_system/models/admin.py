@@ -80,38 +80,33 @@ class Admin(Base):
         return True, "Password meets strength requirements"
 
     @staticmethod
-    def hash_password(password, salt=None):
+    def hash_password(password):
         """
-        Hash a password using bcrypt with improved security.
+        Hash a password using bcrypt.
 
         Args:
             password (str): The password to hash
-            salt (str, optional): Not used with bcrypt, kept for backward compatibility
 
         Returns:
-            tuple: (password_hash, salt) - salt is included in the hash with bcrypt
-                   but we keep a separate salt field for backward compatibility
-
-        Raises:
-            ValueError: If password doesn't meet strength requirements
+            tuple: (hashed_password, salt)
         """
-        # Validate password strength
-        is_valid, error_message = Admin.validate_password_strength(password)
-        if not is_valid:
-            raise ValueError(error_message)
-
         try:
-            # Generate a salt and hash the password
+            # Get work factor from config (higher is more secure but slower)
+            config = get_config()
+            bcrypt_rounds = config.get('security.bcrypt_rounds', 12)
+            
+            # Generate a random salt with the configured work factor
+            salt = bcrypt.gensalt(rounds=bcrypt_rounds)
+            # Hash the password
             password_bytes = password.encode('utf-8')
-            salt_bytes = bcrypt.gensalt(rounds=12)  # Increased from default 10
-            hashed = bcrypt.hashpw(password_bytes, salt_bytes)
-            password_hash = hashed.decode('utf-8')
-            salt = salt_bytes.decode('utf-8')
-
-            return password_hash, salt
+            password_hash = bcrypt.hashpw(password_bytes, salt)
+            # Store hash as string
+            password_hash_str = password_hash.decode('utf-8')
+            salt_str = salt.decode('utf-8')
+            return password_hash_str, salt_str
         except Exception as e:
             logger.error(f"Error hashing password: {str(e)}")
-            raise ValueError(f"Error processing password: {str(e)}")
+            raise e
 
     def check_password(self, password):
         """

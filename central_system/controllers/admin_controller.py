@@ -6,6 +6,7 @@ import json # Added for saving settings
 from ..models.admin import Admin
 from ..models.base import get_db, close_db, db_operation_with_retry
 from ..config import get_config # Import get_config
+import datetime
 
 # Set up logging
 # logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -42,56 +43,63 @@ class AdminController:
     def authenticate(self, username, password):
         """
         Authenticate an admin user.
-        Checks for account lockout before password verification.
-
+        
         Args:
             username (str): Admin username
             password (str): Admin password
-
+            
         Returns:
-            Admin: Admin object if authenticated, None otherwise, or a tuple (None, message) for specific errors.
+            Admin: Admin object if authentication is successful, None otherwise
         """
-        db = get_db() # Get session once for all operations in this method
+        if not username or not password:
+            logger.error("Authentication failed: Missing username or password")
+            return None
+            
+        db = get_db()
         try:
-            # Check if account is locked first using the actual model method
-            locked, remaining_time = Admin.is_account_locked(username) # db session is handled by is_account_locked
-            if locked:
-                message = f"Admin account '{username}' is locked. Try again in {remaining_time:.0f} seconds."
-                logger.warning(message)
-                # It's good practice to not record another failed attempt if already locked.
-                # The Admin.record_login_attempt method itself also has a check for this.
-                return None, message # Return a message for the UI
-
-            admin = db.query(Admin).filter(Admin.username == username, Admin.is_active == True).first()
-
+            # Get admin by username
+            admin = db.query(Admin).filter(Admin.username == username).first()
+            
             if not admin:
-                logger.warning(f"Admin '{username}' not found or inactive.")
-                # Record failed attempt for non-existent user for enumeration resistance
-                # Ensure record_login_attempt can handle a db session passed to it, or uses its own get_db/close_db
-                # Based on admin.py, record_login_attempt handles its own db session.
-                Admin.record_login_attempt(username, 'unknown_ip', False)
-                return None, "Invalid username or password."
-
-            if admin.check_password(password):
+                logger.warning(f"Authentication failed: Admin not found for username '{username}'")
+                return None
+            
+            # Check if account is locked
+            if admin.is_locked():
+                remaining_time = admin.get_lockout_remaining_time()
+                logger.warning(f"Authentication attempt for locked account '{username}'. " +
+                              f"Account is locked for another {remaining_time} seconds.")
+                return None
+                
+            # Verify password
+            if self._verify_password(admin, password):
+                # Reset failed login attempts on successful login
+                admin.failed_login_attempts = 0
+                admin.account_locked_until = None
+                db.commit()
                 logger.info(f"Admin authenticated: {username}")
-                self.current_admin = admin
-                Admin.record_login_attempt(username, 'unknown_ip', True)
-                return admin, "Authentication successful."
+                return admin
             else:
-                logger.warning(f"Invalid password for admin: {username}")
-                # Record failed attempt for existing user
-                locked_after_attempt, remaining_time_after_attempt = Admin.record_login_attempt(username, 'unknown_ip', False)
-                if locked_after_attempt:
-                    message = f"Invalid password. Account '{username}' is now locked. Try again in {remaining_time_after_attempt:.0f} seconds."
-                    return None, message
-                return None, "Invalid username or password."
+                # Increment failed login attempts
+                admin.failed_login_attempts += 1
+                
+                # Check if we should lock the account
+                max_attempts = get_config().get('security.max_failed_attempts', 5)
+                if admin.failed_login_attempts >= max_attempts:
+                    # Lock account for increasing periods based on number of failures beyond the threshold
+                    lockout_minutes = min(2 ** (admin.failed_login_attempts - max_attempts), 60)  # Exponential backoff, max 60 minutes
+                    admin.account_locked_until = datetime.datetime.now() + datetime.timedelta(minutes=lockout_minutes)
+                    logger.warning(f"Account '{username}' locked for {lockout_minutes} minutes after {admin.failed_login_attempts} failed attempts")
+                
+                db.commit()
+                logger.warning(f"Authentication failed: Invalid password for username '{username}'. " +
+                              f"Failed attempts: {admin.failed_login_attempts}")
+                return None
         except Exception as e:
-            logger.error(f"Error authenticating admin '{username}': {str(e)}")
-            # Avoid leaking detailed error messages to UI if not desired
-            return None, "An internal error occurred during authentication."
+            logger.error(f"Error during authentication: {str(e)}")
+            return None
         finally:
-            if db: # Ensure db was successfully acquired before trying to close
-                close_db()
+            close_db()
 
     @db_operation_with_retry()
     def create_admin(self, db, username, password):
@@ -106,6 +114,22 @@ class AdminController:
         Returns:
             Admin: New admin object or None if error (decorator handles raising error on persistent failure)
         """
+        # Validate username
+        if not username or len(username) < 3:
+            raise ValueError("Username must be at least 3 characters")
+            
+        # Validate password strength
+        config = get_config()
+        min_length = config.get('security.min_password_length', 8)
+        if len(password) < min_length:
+            raise ValueError(f"Password must be at least {min_length} characters")
+            
+        # Check for password complexity
+        if not any(c.isupper() for c in password) or \
+           not any(c.islower() for c in password) or \
+           not any(c.isdigit() for c in password):
+            raise ValueError("Password must contain uppercase, lowercase and numeric characters")
+        
         # Check if username already exists
         existing = db.query(Admin).filter(Admin.username == username).first()
         if existing:
@@ -135,11 +159,21 @@ class AdminController:
         Get all admin users.
 
         Returns:
-            list: List of Admin objects
+            list: List of Admin objects with selected fields
         """
         db = get_db()
         try:
-            admins = db.query(Admin).all()
+            # Only fetch necessary fields instead of entire objects
+            admins = db.query(
+                Admin.id, 
+                Admin.username, 
+                Admin.is_active, 
+                Admin.created_at, 
+                Admin.updated_at,
+                Admin.failed_login_attempts,
+                Admin.account_locked_until
+            ).all()
+            
             return admins
         except Exception as e:
             logger.error(f"Error getting admins: {str(e)}")
@@ -290,7 +324,10 @@ class AdminController:
                 # Temporarily create directly here to avoid issues with decorator in this context.
                 # Or, make ensure_default_admin call a modified create_admin that can take a session.
                 # For now, direct creation:
-                password = "admin" # Consider making this configurable or prompting
+                config = get_config()
+                password = config.get('security.default_admin_password', os.environ.get('DEFAULT_ADMIN_PASSWORD'))
+                if not password:
+                    password = "DefaultAdminP@ss1"  # Fallback only if not in config or env var
                 password_hash, salt = Admin.hash_password(password)
                 default_admin = Admin(
                     username=default_username,

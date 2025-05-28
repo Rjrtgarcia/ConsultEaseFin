@@ -4,6 +4,7 @@ import time
 import os
 import sys
 import subprocess
+import secrets  # Add this for secure random generation
 from PyQt5.QtCore import QObject, pyqtSignal
 
 # Import database utilities and Student model
@@ -66,10 +67,19 @@ class RFIDService(QObject):
         Find a USB device by VID/PID and determine its input device path.
         """
         try:
+            # Define full path to lsusb binary
+            LSUSB_PATH = "/usr/bin/lsusb"  # Standard path on most Linux systems
+            
             # Use lsusb to find the device
             logger.info(f"Looking for USB device with VID:{self.target_vid} PID:{self.target_pid}")
-            lsusb_output = subprocess.check_output(['lsusb'], universal_newlines=True)
-            logger.info(f"Available USB devices:\n{lsusb_output}")
+            
+            # Check if lsusb exists at the specified path
+            if os.path.exists(LSUSB_PATH):
+                lsusb_output = subprocess.check_output([LSUSB_PATH], universal_newlines=True)
+                logger.info(f"Available USB devices:\n{lsusb_output}")
+            else:
+                logger.error(f"lsusb not found at {LSUSB_PATH}. RFID device detection may fail.")
+                return False
 
             # Look for our target device in lsusb output
             target_line = None
@@ -437,8 +447,9 @@ class RFIDService(QObject):
                         # First try to ungrab if we had grabbed it
                         try:
                             device.ungrab()
-                        except:
-                            pass
+                        except Exception as e:
+                            logger.debug(f"Error ungrabbing device: {e}")
+                            # Non-critical error, continue
 
                         device = evdev.InputDevice(self.device_path)
                         logger.info(f"Reconnected to RFID device: {device.name}")
@@ -457,16 +468,17 @@ class RFIDService(QObject):
             try:
                 device.ungrab()
                 logger.info("Released exclusive access to RFID reader")
-            except:
-                pass
+            except Exception as e:
+                logger.debug(f"Error ungrabbing device: {e}")
+                # Non-critical error, continue
 
-        except ImportError:
-            logger.error("evdev library not installed. Please install it with: pip install evdev")
+        except ImportError as e:
+            logger.error(f"evdev library not installed: {e}. Please install it with: pip install evdev")
             logger.info("Falling back to simulation mode")
             self.simulation_mode = True
             self._simulate_rfid_reading()
         except Exception as e:
-            logger.error(f"Error reading RFID: {str(e)}")
+            logger.error(f"Error reading RFID: {str(e)}", exc_info=True)
             logger.info("Falling back to simulation mode")
             self.simulation_mode = True
             self._simulate_rfid_reading()
@@ -482,86 +494,72 @@ class RFIDService(QObject):
 
     def refresh_student_data(self):
         """
-        Refresh the student data cache from the database.
-        This should be called when students are added, updated, or deleted.
+        Refresh the student data in the cache from the database.
         """
-        logger.info("Attempting to refresh RFID service student data cache")
-        new_cache = {}
+        logger.info("Refreshing student RFID cache")
+        db = get_db()
         try:
-            # Get a new session to ensure fresh data from DB
-            db = get_db(force_new=True) # Force new session for refresh
-            db.expire_all() # Ensure subsequent queries hit the DB for this session
-
-            students = db.query(Student).all()
-            for student_obj in students:
-                if student_obj.rfid_uid:
-                    # Store a simplified student representation or the full object
-                    # For simplicity, let's store the object, but ensure it's handled correctly if it becomes detached
-                    new_cache[student_obj.rfid_uid] = student_obj 
+            # Get all students with RFID UIDs
+            students = db.query(Student).filter(Student.rfid_uid != None).all()
             
-            with self.cache_lock:
-                self.student_rfid_cache = new_cache
-            logger.info(f"RFID student cache refreshed with {len(new_cache)} entries.")
-
+            # Update cache with fresh data
+            with self.cache_lock:  # Use lock for thread safety
+                # Clear existing cache
+                self.student_rfid_cache.clear()
+                
+                # Add all students to cache
+                for student in students:
+                    if student.rfid_uid:  # Double-check to avoid None keys
+                        self.student_rfid_cache[student.rfid_uid] = student
+                        
+            logger.info(f"Refreshed student RFID cache with {len(students)} students")
         except Exception as e:
-            logger.error(f"Error refreshing student data cache: {str(e)}")
-            # Consider if db session needs rollback here if an error occurs mid-transaction, though it's a read op.
+            logger.error(f"Error refreshing student RFID cache: {str(e)}")
         finally:
-            if 'db' in locals() and db is not None: # Check if db was successfully initialized
-                close_db() # Corrected: No arguments
+            close_db()
 
     def get_student_by_rfid(self, rfid_uid):
         """
-        Get a student by RFID UID, checking cache first, then database.
-        Updates cache if found in DB but not cache.
+        Get student by RFID UID.
+        First checks the in-memory cache, then the database.
+        
         Args:
-            rfid_uid (str): The RFID UID to search for.
+            rfid_uid (str): RFID UID
+            
         Returns:
-            Student: The student object if found, else None.
+            Student: Student object or None if not found
         """
         if not rfid_uid:
+            logger.warning("Cannot get student: RFID UID is empty")
             return None
-
-        # Try cache first (case-insensitive)
-        with self.cache_lock:
-            student = self.student_rfid_cache.get(rfid_uid)
-            if not student:
-                for cached_uid, cached_student in self.student_rfid_cache.items():
-                    if cached_uid.lower() == rfid_uid.lower():
-                        student = cached_student
-                        logger.info(f"Found student {student.name} by RFID {rfid_uid} (case-insensitive) in cache.")
-                        return student # Return here as it's from cache
-        if student: # If exact match found initially
-            logger.info(f"Found student {student.name} by RFID {rfid_uid} (exact) in cache.")
-            return student
-
-        # If not in cache, try database
-        logger.info(f"Student with RFID {rfid_uid} not in cache, querying database.")
-        db_session = None
+            
+        # First check in-memory cache for better performance
+        with self.cache_lock:  # Use lock for thread safety
+            if rfid_uid in self.student_rfid_cache:
+                logger.info(f"Student found in cache for RFID: {rfid_uid}")
+                return self.student_rfid_cache[rfid_uid]
+        
+        # If not in cache, query the database
+        logger.info(f"Student not in cache, checking database for RFID: {rfid_uid}")
+        db = get_db()
         try:
-            db_session = get_db()
-            # Perform a case-insensitive query if your DB supports it, or handle in Python
-            # For PostgreSQL, use ILIKE or lower()
-            # For SQLite (default), string comparisons are often case-insensitive by default for ASCII
-            # but explicit lower is safer for wider compatibility or specific collations.
-            student_from_db = db_session.query(Student).filter(Student.rfid_uid.ilike(rfid_uid)).first() 
-            # If your DB is case-sensitive by default for rfid_uid and you need exact match after all:
-            # student_from_db = db_session.query(Student).filter(Student.rfid_uid == rfid_uid).first()
-
-            if student_from_db:
-                logger.info(f"Found student {student_from_db.name} by RFID {rfid_uid} in database. Updating cache.")
-                with self.cache_lock:
-                    self.student_rfid_cache[student_from_db.rfid_uid] = student_from_db # Use actual UID from DB for cache key
-                return student_from_db
+            # Query database for student with this RFID UID
+            student = db.query(Student).filter(Student.rfid_uid == rfid_uid).first()
+            
+            if student:
+                logger.info(f"Student found in database: {student.name} (ID: {student.id})")
+                # Add to cache for future lookups
+                with self.cache_lock:  # Use lock for thread safety
+                    self.student_rfid_cache[rfid_uid] = student
+                return student
             else:
-                logger.warning(f"Student with RFID {rfid_uid} not found in database either.")
+                logger.warning(f"No student found for RFID: {rfid_uid}")
                 return None
         except Exception as e:
-            logger.error(f"Error querying database for RFID {rfid_uid}: {str(e)}", exc_info=True)
+            logger.error(f"Error querying student by RFID: {str(e)}")
             return None
         finally:
-            if db_session:
-                close_db() # Corrected: No arguments
+            close_db()
 
     def simulate_card_read(self, rfid_uid=None):
         """
@@ -572,8 +570,7 @@ class RFIDService(QObject):
         """
         if not rfid_uid:
             # Generate a random RFID UID (10 characters hexadecimal - more like 13.56 MHz cards)
-            import random
-            rfid_uid = ''.join(random.choices('0123456789ABCDEF', k=10))
+            rfid_uid = ''.join(secrets.choice('0123456789ABCDEF') for _ in range(10))
 
         logger.info(f"Simulating RFID read (13.56 MHz format): {rfid_uid}")
 

@@ -1546,7 +1546,7 @@ class SystemMaintenanceTab(QWidget):
         
         # RFID Simulation Mode
         settings_to_update['rfid.simulation_mode'] = self.rfid_simulation_checkbox.isChecked()
-        
+
         # Keyboard Preference
         settings_to_update['keyboard.preference'] = self.keyboard_combo.currentText()
 
@@ -1560,7 +1560,7 @@ class SystemMaintenanceTab(QWidget):
         pg_restore_val = self.pg_restore_path_input.text().strip()
         if pg_restore_val:
             settings_to_update['database.pg_restore_path'] = pg_restore_val
-        else:
+            else:
             settings_to_update['database.pg_restore_path'] = 'pg_restore'
 
         logger.debug(f"Attempting to save settings: {settings_to_update}")

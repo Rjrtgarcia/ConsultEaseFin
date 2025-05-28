@@ -58,14 +58,38 @@ pool_recycle = config.get('database.pool_recycle', 1800)  # Recycle connections 
 # Create engine with connection pooling
 if DB_TYPE.lower() == 'sqlite':
     # SQLite doesn't support the same level of connection pooling
+    # Get debug mode from config with default of False
+    sql_debug = config.get('database.debug', False)
+    
     engine = create_engine(
         DATABASE_URL,
         connect_args={"check_same_thread": False},  # Allow SQLite to be used across threads
-        echo=True  # <<< ADD THIS FOR SQL DEBUGGING
+        echo=sql_debug  # Configurable SQL debugging
     )
-    logger.info("Created SQLite engine with thread safety enabled")
+    logger.info(f"Created SQLite engine with thread safety enabled, SQL debugging: {sql_debug}")
 else:
     # PostgreSQL with full connection pooling
+    # Get debug mode from config with default of False
+    sql_debug = config.get('database.debug', False)
+    
+    # Get additional performance settings from config
+    # These are based on SQLAlchemy connection pool best practices
+    pool_pre_ping = config.get('database.pool_pre_ping', True)  # Check connections before using
+    use_batch_mode = config.get('database.use_batch_mode', True)  # Use batch mode for better performance
+    
+    # Use server-side statement caching by default (reduces parse overhead)
+    use_prepared_statements = config.get('database.use_prepared_statements', True) 
+    
+    # Set up connection arguments specific to PostgreSQL
+    connect_args = {}
+    
+    # Set application name for easier identification in pg_stat_activity
+    connect_args["application_name"] = "ConsultEase"
+    
+    # Optional: Set a statement timeout to prevent long-running queries
+    if config.get('database.statement_timeout'):
+        connect_args["options"] = f"-c statement_timeout={config.get('database.statement_timeout')}"
+    
     engine = create_engine(
         DATABASE_URL,
         poolclass=QueuePool,
@@ -73,10 +97,14 @@ else:
         max_overflow=max_overflow,
         pool_timeout=pool_timeout,
         pool_recycle=pool_recycle,
-        pool_pre_ping=True,  # Check connection validity before using it
-        echo=True  # <<< ADD THIS FOR SQL DEBUGGING (if using PostgreSQL too)
+        pool_pre_ping=pool_pre_ping,  # Check connection validity before using it
+        echo=sql_debug,  # Configurable SQL debugging
+        connect_args=connect_args,
+        use_batch_mode=use_batch_mode  # Enable batch mode for better performance
     )
-    logger.info(f"Created PostgreSQL engine with connection pooling (size={pool_size}, max_overflow={max_overflow})")
+    logger.info(f"Created PostgreSQL engine with optimized connection pooling " +
+               f"(size={pool_size}, max_overflow={max_overflow}, pre_ping={pool_pre_ping}, " +
+               f"batch_mode={use_batch_mode})")
 
 # Create session factory with thread safety
 session_factory = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -243,7 +271,7 @@ def init_db():
             logger.info("No admin users found, creating default admin.")
             # Use Admin model's hash_password to create the default admin
             # Ensure the default password meets strength requirements
-            default_password = "DefaultAdminP@ss1" # Changed default password
+            default_password = config.get('security.default_admin_password', 'DefaultAdminP@ss1') # Get from config instead of hardcoding
             try:
                 hashed_password, salt = Admin.hash_password(default_password)
                 admin = Admin(

@@ -6,6 +6,7 @@ import time
 import os
 import pathlib
 import random
+import secrets  # Added for secure random token generation
 from datetime import datetime
 import ssl
 import queue
@@ -37,7 +38,7 @@ class MQTTService:
         self.broker_port = int(self.config.get('mqtt.broker_port', 1883))
         # Generate a unique client ID
         base_client_id = self.config.get('mqtt.client_id', 'central_system')
-        self.client_id = f"{base_client_id}_{''.join(random.choices('0123456789abcdef', k=6))}"
+        self.client_id = f"{base_client_id}_{''.join(secrets.choice('0123456789abcdef') for _ in range(6))}"
         self.username = self.config.get('mqtt.username', None)
         self.password = self.config.get('mqtt.password', None)
         self.use_tls = self.config.get('mqtt.use_tls', False)
@@ -148,14 +149,51 @@ class MQTTService:
         """
         try:
             logger.info(f"Connecting to MQTT broker at {self.broker_host}:{self.broker_port}")
-            self.client.connect(self.broker_host, self.broker_port, 60)
+            
+            # Set connection timeout
+            connection_timeout = self.config.get('mqtt.connection_timeout', 10)  # Default 10 seconds
+            
+            # Create a future and threading event for timeout management
+            connection_event = threading.Event()
+            
+            def on_connect_for_timeout(client, userdata, flags, rc):
+                # Mark connection as complete (either success or failure)
+                connection_event.set()
+            
+            # Store the original callback
+            original_on_connect = self.client.on_connect
+            
+            # Set temporary callback for timeout detection
+            self.client.on_connect = on_connect_for_timeout
+            
+            # Start connection process
+            self.client.connect_async(self.broker_host, self.broker_port, 60)
             self.client.loop_start()
-
-            # Start keep-alive timer
-            self._start_keep_alive_timer()
+            
+            # Wait for connection or timeout
+            if not connection_event.wait(connection_timeout):
+                logger.error(f"Connection to MQTT broker timed out after {connection_timeout} seconds")
+                self.client.loop_stop()
+                self.client.on_connect = original_on_connect  # Restore original callback
+                self.schedule_reconnect()
+                return False
+            
+            # Restore original callback
+            self.client.on_connect = original_on_connect
+            
+            # Check if connection was successful
+            if self.is_connected:
+                # Start keep-alive timer
+                self._start_keep_alive_timer()
+                return True
+            else:
+                logger.error("Failed to connect to MQTT broker")
+                self.schedule_reconnect()
+                return False
         except Exception as e:
             logger.error(f"Failed to connect to MQTT broker: {str(e)}")
             self.schedule_reconnect()
+            return False
 
     def _start_keep_alive_timer(self):
         """
@@ -274,37 +312,46 @@ class MQTTService:
 
     def on_message(self, client, userdata, msg):
         """
-        Callback when message is received.
+        Handle incoming MQTT messages and route to appropriate handlers.
+        
+        Args:
+            client: MQTT client instance
+            userdata: User data from client initialization
+            msg: MQTT message object
         """
         try:
             topic = msg.topic
             payload = msg.payload.decode('utf-8')
+            
             logger.debug(f"Received message on topic {topic}: {payload}")
-
-            # Process message with registered handler
-            # Updated to handle wildcard subscriptions more effectively
-            matched_handler = False
-            for pattern, handlers in self.topic_handlers.items():
-                if mqtt.topic_matches_sub(pattern, topic):
+            
+            # Attempt to parse JSON payload
+            try:
+                data = json.loads(payload)
+            except json.JSONDecodeError as e:
+                logger.warning(f"Failed to parse JSON from topic {topic}: {e}. Treating as string.")
+                data = {'raw_message': payload}
+                
+            # Find matching handler based on topic patterns
+            matched_handler = None
+            
+            # Check all registered handlers
+            for topic_pattern, handler in self.topic_handlers.items():
+                # Handle exact matches and wildcard patterns
+                if self._topic_matches_pattern(topic, topic_pattern):
+                    matched_handler = handler
                     try:
-                        data = json.loads(payload)
-                    except json.JSONDecodeError:
-                        logger.warning(f"Message on {topic} is not JSON, treating as string: {payload}")
-                        data = payload
-                    
-                    for handler in handlers:
-                        try:
-                            handler(topic, data) # Pass original topic and parsed data
-                            matched_handler = True
-                        except Exception as e:
-                            logger.error(f"Error in message handler for {pattern} matching {topic}: {str(e)}")
-                    break # Assuming first matching pattern is specific enough
+                        logger.debug(f"Calling handler for topic {topic}")
+                        handler(topic, data)
+                    except Exception as e:
+                        logger.error(f"Error in handler for topic {topic}: {str(e)}", exc_info=True)
+                    break
             
             if not matched_handler:
                 logger.debug(f"No specific handler found for topic {topic}. Message ignored or handled by generic means.")
 
         except Exception as e:
-            logger.error(f"Error processing MQTT message: {str(e)}")
+            logger.error(f"Error processing MQTT message: {str(e)}", exc_info=True)
 
     def _handle_consultation_response(self, topic: str, data: dict):
         """
@@ -387,28 +434,32 @@ class MQTTService:
         Returns:
             bool: True if publishing was successful, False otherwise
         """
+        # Thread safety lock for connection checking and publishing
+        connection_lock = threading.Lock()
+        
         # Store the message for potential retry
         self._store_last_message(topic, data, qos, retain)
 
-        # Check connection status
-        if not self.is_connected:
-            logger.warning(f"Cannot publish to {topic}: Not connected to MQTT broker")
-            # Try to reconnect
-            self.schedule_reconnect()
+        # Check connection status - use lock to prevent race conditions
+        with connection_lock:
+            if not self.is_connected:
+                logger.warning(f"Cannot publish to {topic}: Not connected to MQTT broker")
+                # Try to reconnect
+                self.schedule_reconnect()
 
-            # For important messages, wait briefly for reconnection
-            if qos > 0:
-                logger.info(f"Waiting briefly for reconnection to send important message (QoS {qos})")
-                for _ in range(10):  # Wait up to 5 seconds
-                    time.sleep(0.5)
-                    if self.is_connected:
-                        logger.info("Reconnected, proceeding with publish")
-                        break
+                # For important messages, wait briefly for reconnection
+                if qos > 0:
+                    logger.info(f"Waiting briefly for reconnection to send important message (QoS {qos})")
+                    for _ in range(10):  # Wait up to 5 seconds
+                        time.sleep(0.5)
+                        if self.is_connected:
+                            logger.info("Reconnected, proceeding with publish")
+                            break
+                    else:
+                        logger.warning("Reconnection timeout, message will be queued for later delivery")
+                        return False
                 else:
-                    logger.warning("Reconnection timeout, message will be queued for later delivery")
                     return False
-            else:
-                return False
 
         try:
             # Format the payload for the faculty desk unit
@@ -648,9 +699,9 @@ class MQTTService:
             # Ensure directory exists
             self._ensure_queue_directory()
 
-            # Generate a unique filename
+            # Create a unique filename with timestamp and random ID
             timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-            random_id = random.randint(1000, 9999)
+            random_id = secrets.randbelow(9000) + 1000  # Generate a random number between 1000-9999
             filename = f"{self.message_queue_dir}/msg_{timestamp}_{random_id}.json"
 
             # Write message to file
@@ -839,86 +890,40 @@ class MQTTService:
 
     def _reconnect_worker(self):
         """
-        Worker thread for reconnecting to the MQTT broker.
-        Uses exponential backoff for reconnection attempts.
+        Worker thread for reconnection attempts with exponential backoff.
         """
-        # Start with initial delay and increase up to a maximum
-        current_delay = self.reconnect_delay
-        max_delay = 60  # Maximum delay in seconds
-        attempt = 1
-        max_attempts = 20  # Maximum number of attempts before giving up temporarily
-
-        while not self.stop_reconnect and not self.is_connected:
-            logger.info(f"Attempting to reconnect to MQTT broker in {current_delay} seconds (attempt {attempt}/{max_attempts})")
-
-            # Sleep in smaller increments to check stop_reconnect more frequently
-            for _ in range(int(current_delay * 2)):
-                if self.stop_reconnect:
-                    break
-                time.sleep(0.5)  # Sleep for 0.5 seconds at a time
-
+        attempt = 0
+        max_delay = 300  # Maximum delay of 5 minutes
+        base_delay = 5   # Start with 5 seconds
+        
+        while not self.stop_reconnect:
+            if self.client.is_connected():
+                logger.info("MQTT client is already connected. Reconnect worker exiting.")
+                break
+                
+            # Calculate delay with exponential backoff
+            delay = min(base_delay * (2 ** attempt), max_delay)
+            attempt += 1
+            
+            logger.info(f"MQTT reconnection attempt {attempt} scheduled in {delay} seconds")
+            time.sleep(delay)
+            
             if self.stop_reconnect:
-                logger.info("Reconnection attempts stopped by request")
+                logger.info("Reconnect worker stopped by request")
                 break
-
-            # Check if we're already connected (might have happened in another thread)
-            if self.is_connected:
-                logger.info("Already reconnected to MQTT broker")
-                break
-
+                
+            # Try to reconnect
             try:
-                # Try to reconnect
-                logger.info(f"Reconnecting to MQTT broker at {self.broker_host}:{self.broker_port}")
-
-                # Instead of just reconnect, we'll do a full disconnect/connect cycle
-                try:
-                    # First try to disconnect cleanly if we think we're connected
-                    self.client.disconnect()
-                except Exception:
-                    # Ignore errors during disconnect
-                    pass
-
-                # Wait a moment for the disconnect to complete
-                time.sleep(1)
-
-                # Now try to connect fresh
-                self.client.connect(self.broker_host, self.broker_port, 60)
-
-                # If we get here without exception, we're connected
-                logger.info("Successfully reconnected to MQTT broker")
-
-                # Resubscribe to all topics
-                for topic in self.topic_handlers.keys():
-                    self.client.subscribe(topic)
-                    logger.info(f"Resubscribed to {topic}")
-
-                # Reset delay for next time
-                current_delay = self.reconnect_delay
-                attempt = 1
-
-                # Ensure loop is running
-                if not self.client.is_connected():
-                    self.client.loop_start()
-
+                logger.info(f"Attempting MQTT reconnection (attempt {attempt})")
+                self.connect()
+                if self.client.is_connected():
+                    logger.info("MQTT reconnection successful")
+                    # Reset attempt counter on success
+                    attempt = 0
+                    break
             except Exception as e:
-                logger.error(f"Failed to reconnect to MQTT broker (attempt {attempt}/{max_attempts}): {str(e)}")
-
-                # Increase delay with exponential backoff, but cap at max_delay
-                current_delay = min(current_delay * 1.5, max_delay)
-                attempt += 1
-
-                # If we've tried many times, log a more severe message
-                if attempt > 10:
-                    logger.critical(
-                        f"Multiple failed attempts to connect to MQTT broker. "
-                        f"Please check network connectivity and broker status."
-                    )
-
-                # If we've reached max attempts, take a longer break before trying again
-                if attempt >= max_attempts:
-                    logger.critical(f"Reached maximum reconnection attempts ({max_attempts}). Taking a longer break before trying again.")
-                    time.sleep(300)  # 5 minute break
-                    attempt = 1  # Reset attempt counter
+                logger.error(f"MQTT reconnection attempt {attempt} failed: {str(e)}")
+                # Continue loop to try again after delay
 
 # Singleton instance
 mqtt_service = None

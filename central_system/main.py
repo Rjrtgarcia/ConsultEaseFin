@@ -26,6 +26,9 @@ log_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 log_max_size = config.get('logging.max_size', 10485760)  # 10MB default
 log_backup_count = config.get('logging.backup_count', 5)  # 5 backups default
 
+# Create a logger for the main module
+logger = logging.getLogger(__name__)
+
 # Ensure logs directory exists
 log_dir = os.path.dirname(log_file)
 if log_dir: # Only call makedirs if log_dir is not an empty string

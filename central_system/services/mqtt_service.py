@@ -9,7 +9,7 @@ import random
 from datetime import datetime
 import ssl
 import queue
-from ..controllers import ConsultationController
+# from ..controllers import ConsultationController # REMOVED TOP-LEVEL IMPORT
 
 # Import configuration system
 from central_system.config import get_config
@@ -308,52 +308,52 @@ class MQTTService:
 
     def _handle_consultation_response(self, topic: str, data: dict):
         """
-        Handle consultation responses (accept/reject) from faculty desk units.
+        Handle consultation responses from the faculty unit.
         """
-        logger.info(f"Handling consultation response on topic {topic}: {data}")
-        try:
-            # Extract faculty_id from topic. Topic: consultease/faculty/{faculty_id}/consultation/response
-            parts = topic.split('/')
-            if len(parts) >= 3 and parts[1] == 'faculty':
-                faculty_id_str = parts[2]
-                try:
-                    faculty_id = int(faculty_id_str)
-                except ValueError:
-                    logger.error(f"Could not parse faculty_id from topic {topic}: {faculty_id_str} is not an integer.")
-                    return
-            else:
-                logger.error(f"Could not extract faculty_id from topic {topic}")
+        # Dynamically import here to avoid circular dependency
+        from ..controllers import ConsultationController
+
+        logger.info(f"Received consultation response on topic {topic}: {data}")
+
+        # Extract faculty_id from topic, e.g., "consultease/faculty/1/consultation/response"
+        parts = topic.split('/')
+        if len(parts) >= 3 and parts[1] == 'faculty':
+            faculty_id_str = parts[2]
+            try:
+                faculty_id = int(faculty_id_str)
+            except ValueError:
+                logger.error(f"Could not parse faculty_id from topic {topic}: {faculty_id_str} is not an integer.")
                 return
+        else:
+            logger.error(f"Could not extract faculty_id from topic {topic}")
+            return
 
-            action = data.get('action')
-            consultation_id = data.get('consultation_id')
+        action = data.get('action')
+        consultation_id = data.get('consultation_id')
 
-            if not action or consultation_id is None:
-                logger.error(f"Missing 'action' or 'consultation_id' in payload from {topic}: {data}")
-                return
+        if not action or consultation_id is None:
+            logger.error(f"Missing 'action' or 'consultation_id' in payload from {topic}: {data}")
+            return
 
-            consultation_controller = ConsultationController.instance()
+        consultation_controller = ConsultationController.instance()
 
-            if action == 'accepted':
-                logger.info(f"Faculty {faculty_id} accepted consultation {consultation_id}")
-                consultation_controller.accept_consultation_request(consultation_id, faculty_id)
-            elif action == 'rejected_by_faculty':
-                logger.info(f"Faculty {faculty_id} rejected consultation {consultation_id}")
-                consultation_controller.reject_consultation_request(consultation_id, faculty_id)
-            elif action == 'started':
-                logger.info(f"Faculty {faculty_id} started consultation {consultation_id}")
-                consultation_controller.start_consultation(consultation_id, faculty_id)
-            elif action == 'completed':
-                logger.info(f"Faculty {faculty_id} completed consultation {consultation_id}")
-                consultation_controller.complete_consultation(consultation_id, faculty_id)
-            elif action == 'cancelled_by_faculty':
-                logger.info(f"Faculty {faculty_id} cancelled consultation {consultation_id}")
-                consultation_controller.cancel_consultation_by_faculty(consultation_id, faculty_id)
-            else:
-                logger.warning(f"Unknown action '{action}' in consultation response from {topic}")
-
-        except Exception as e:
-            logger.error(f"Error in _handle_consultation_response for topic {topic}, data {data}: {str(e)}")
+        if action == 'accepted':
+            logger.info(f"Faculty {faculty_id} accepted consultation {consultation_id}")
+            consultation_controller.accept_consultation_request(consultation_id, faculty_id)
+        elif action == 'rejected_by_faculty':
+            logger.info(f"Faculty {faculty_id} rejected consultation {consultation_id}")
+            consultation_controller.reject_consultation_request(consultation_id, faculty_id)
+        elif action == 'started':
+            logger.info(f"Faculty {faculty_id} started consultation {consultation_id}")
+            consultation_controller.start_consultation(consultation_id, faculty_id)
+        elif action == 'completed':
+            logger.info(f"Faculty {faculty_id} completed consultation {consultation_id}")
+            consultation_controller.complete_consultation(consultation_id, faculty_id)
+        elif action == 'cancelled_by_faculty':
+            logger.info(f"Faculty {faculty_id} cancelled consultation {consultation_id}")
+            consultation_controller.cancel_consultation_by_faculty(consultation_id, faculty_id)
+        else:
+            logger.warning(f"Unknown action '{action}' in consultation response from {topic}")
 
     def register_topic_handler(self, topic, handler):
         """

@@ -415,7 +415,7 @@ class ConsultEaseApp:
 
         # Use transition manager if a previous window was active
         if current_active_window and current_active_window != self.admin_login_window and current_active_window.isVisible():
-            self.transition_manager.fade_transition(current_active_window, self.admin_login_window)
+            self.transition_manager.fade_out_in(current_active_window, self.admin_login_window)
         else:
             self.admin_login_window.show() # Directly show if no prior window or it's the same
             if self.config.get('ui.fullscreen', False):

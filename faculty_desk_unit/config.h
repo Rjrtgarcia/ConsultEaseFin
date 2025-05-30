@@ -1,98 +1,261 @@
-/**
- * ConsultEase - Faculty Desk Unit Configuration
- *
- * This file contains configuration settings for the Faculty Desk Unit.
- * Update these values to match your specific setup.
- */
-
 #ifndef CONFIG_H
 #define CONFIG_H
 
-// WiFi Configuration
-#define WIFI_SSID "ConsultEase"
-#define WIFI_PASSWORD "Admin123"
+// ================================
+// FACULTY DESK UNIT CONFIGURATION - WITH GRACE PERIOD BLE
+// ================================
+// Updated: May 29, 2025 23:13 (Philippines Time)
+// Added: Grace Period functionality for reliable BLE presence detection
 
-// MQTT Configuration
-#define MQTT_SERVER "172.20.10.8"  // Updated to match central system's MQTT broker IP
-#define MQTT_PORT 1883             // Default non-TLS port
-#define MQTT_TLS_PORT 8883         // Default TLS port
-#define MQTT_USE_TLS true          // Set to true to enable MQTT over TLS
-#define MQTT_USERNAME ""  // Leave empty if not using authentication
-#define MQTT_PASSWORD ""  // Leave empty if not using authentication
+// === FACULTY INFORMATION ===
+#define FACULTY_ID 1
+#define FACULTY_NAME "Dave Jomillo"
+#define FACULTY_DEPARTMENT "Helpdesk"
 
-// MQTT TLS Certificates (Replace with your actual PEM-formatted certificates)
-// Make sure to escape newlines with \n if defining as a single string literal,
-// or use R"(-----BEGIN CERTIFICATE-----\n...-----END CERTIFICATE-----)" raw string literals.
-const char* mqtt_ca_cert = \
-"-----BEGIN CERTIFICATE-----\n" \
-"MIIDQTCCAimgAwIBAgITBmyfz5m/jAo54vB4ikPmljZbyjANBgkqhkiG9w0BAQsF\n" \
-// ... (rest of your CA certificate)
-"-----END CERTIFICATE-----\n";
+// === IBEACON CONFIGURATION ===
+#define FACULTY_BEACON_MAC "51:00:25:04:02:A2"
+#define FACULTY_BEACON_UUID "FDA50693-A4E2-4FB1-AFCF-C6EB07647825"
+#define FACULTY_BEACON_MAJOR 1
+#define FACULTY_BEACON_MINOR 2
 
-const char* mqtt_client_cert = \
-"-----BEGIN CERTIFICATE-----\n" \
-// ... (your client certificate)
-"-----END CERTIFICATE-----\n";
+// === OPTIMIZED BLE DETECTION SETTINGS ===
+// Legacy settings (kept for compatibility)
+#define BLE_SCAN_INTERVAL 3000        
+#define BLE_SCAN_DURATION 2           
+#define MAC_DETECTION_TIMEOUT 30000   
+#define ENABLE_UUID_VALIDATION true   
+#define ENABLE_MAJOR_MINOR_CHECK false 
 
-const char* mqtt_client_key = \
-"-----BEGIN PRIVATE KEY-----\n" \
-// ... (your client private key)
-"-----END PRIVATE KEY-----\n";
+// === ADAPTIVE BLE SCANNING ===
+// Adaptive scanning intervals
+#define BLE_SCAN_INTERVAL_SEARCHING 2000      // Fast scan when away (detect arrival)
+#define BLE_SCAN_INTERVAL_MONITORING 8000     // Slow scan when present (confirm presence)
+#define BLE_SCAN_INTERVAL_VERIFICATION 1000   // Quick scan during transitions
 
-// Faculty Configuration
-#define FACULTY_ID 3  // This should match the faculty ID in the database
-#define FACULTY_NAME "Jeysibn"  // This should match the faculty name in the database
-#define FACULTY_DEPARTMENT "Computer Science"  // This should match the faculty department in the database
+// Adaptive scan durations
+#define BLE_SCAN_DURATION_QUICK 1             // Short scan when monitoring
+#define BLE_SCAN_DURATION_FULL 3              // Full scan when searching
 
-// BLE Configuration
-// #define SERVICE_UUID "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" // Ensuring no old service UUID is active
-#define TARGET_BLE_MAC_ADDRESS "51:00:25:04:02:A2" // MAC address from your beacon image
+// State confirmation timings
+#define PRESENCE_CONFIRM_TIME 6000            // Time to confirm presence change
+#define ABSENCE_CONFIRM_TIME 15000            // Time to confirm absence
 
-#define BLE_SCAN_INTERVAL 5000  // Scan interval in milliseconds
-#define BLE_SCAN_DURATION 3     // Scan duration in seconds
-#define BLE_RSSI_THRESHOLD -80  // RSSI threshold for presence detection (higher values = closer proximity required)
+// Performance monitoring
+#define BLE_STATS_REPORT_INTERVAL 60000      // Report stats every minute
 
-// Display Configuration
-#define TFT_ROTATION 1  // 0=Portrait, 1=Landscape, 2=Inverted Portrait, 3=Inverted Landscape
+// === GRACE PERIOD SETTINGS (NEW - JEYSIBN'S SUGGESTION) ===
+#define BLE_GRACE_PERIOD_MS 60000              // 1 minute grace period before status change
+#define BLE_RECONNECT_ATTEMPT_INTERVAL 5000    // Try reconnecting every 5 seconds
+#define BLE_RECONNECT_MAX_ATTEMPTS 12          // 12 attempts = 1 minute total
+#define BLE_FAST_RECONNECT_INTERVAL 2000       // Faster attempts in first 20 seconds
+#define BLE_SIGNAL_STRENGTH_THRESHOLD -80      // Minimum RSSI to accept signal
 
-// Color Scheme - National University Philippines
-#define NU_BLUE      0x0015      // Dark blue (navy) - Primary color
-#define NU_GOLD      0xFE60      // Gold/Yellow - Secondary color
-#define NU_DARKBLUE  0x000B      // Darker blue for contrasts
-#define NU_LIGHTGOLD 0xF710      // Lighter gold for highlights
-#define TFT_WHITE    0xFFFF      // White for text
-#define TFT_BLACK    0x0000      // Black for backgrounds
+// === WIFI CONFIGURATION ===
+#define WIFI_SSID "Je"                
+#define WIFI_PASSWORD "qazxcvbnm"     
+#define WIFI_CONNECT_TIMEOUT 20000    
+#define WIFI_RECONNECT_INTERVAL 5000  
 
-// UI Colors
-#define TFT_BG       NU_BLUE         // Background color
-#define TFT_TEXT     TFT_WHITE       // Text color
-#define TFT_HEADER   NU_DARKBLUE     // Header color
-#define TFT_ACCENT   NU_GOLD         // Accent color
-#define TFT_HIGHLIGHT NU_LIGHTGOLD   // Highlight color
+// === MQTT CONFIGURATION ===
+#define MQTT_SERVER "192.168.1.100"   
+#define MQTT_PORT 1883
+#define MQTT_USERNAME "faculty_desk"  
+#define MQTT_PASSWORD "desk_password" 
+#define MQTT_KEEPALIVE 60
+#define MQTT_QOS 1
+#define MQTT_CLIENT_ID "Faculty_Desk_Unit_1"
 
-// MQTT Topics - Standardized format
-#define MQTT_TOPIC_STATUS "consultease/faculty/%d/status"  // %d will be replaced with FACULTY_ID
-#define MQTT_TOPIC_REQUESTS "consultease/faculty/%d/requests"  // %d will be replaced with FACULTY_ID
-#define MQTT_TOPIC_MESSAGES "consultease/faculty/%d/messages"  // %d will be replaced with FACULTY_ID
-#define MQTT_TOPIC_NOTIFICATIONS "consultease/system/notifications"
+// === MQTT TOPICS ===
+// Include mqtt_topics.h for standardized topics
+#include "mqtt_topics.h"
 
-// Legacy MQTT Topics - For backward compatibility
-#define MQTT_LEGACY_STATUS "professor/status"
-#define MQTT_LEGACY_MESSAGES "professor/messages"
+// Faculty ID-specific topics - will be constructed based on FACULTY_ID
+#define TOPIC_ID_STR String(FACULTY_ID)
+#define MQTT_TOPIC_STATUS FACULTY_STATUS_TOPIC(TOPIC_ID_STR.c_str())
+#define MQTT_TOPIC_MESSAGES FACULTY_REQUEST_TOPIC(TOPIC_ID_STR.c_str())
+#define MQTT_TOPIC_HEARTBEAT FACULTY_HEARTBEAT_TOPIC(TOPIC_ID_STR.c_str())
+#define MQTT_TOPIC_RESPONSES FACULTY_RESPONSE_TOPIC(TOPIC_ID_STR.c_str())
 
-// BLE Connection Stability
-#define BLE_CONNECTION_TIMEOUT 30000  // Time in ms to consider BLE disconnected if no signal (30 seconds)
-#define BLE_RECONNECT_ATTEMPTS 3      // Number of reconnection attempts before giving up
-#define BLE_RECONNECT_DELAY 5000      // Delay between reconnection attempts in ms
+// === BUTTON CONFIGURATION ===
+#define BUTTON_A_PIN 15               // Blue button (Acknowledge)
+#define BUTTON_B_PIN 4                // Red button (Busy)
+#define BUTTON_DEBOUNCE_DELAY 50      // Debounce delay in milliseconds
+#define BUTTON_LONG_PRESS_TIME 1000   // Long press detection time
 
-// Debug Configuration
-#define DEBUG_ENABLED true  // Set to false to disable debug output
+// === DISPLAY CONFIGURATION (2.4" 320x240 ST7789) ===
+#define TFT_CS 5      
+#define TFT_RST 22    
+#define TFT_DC 21     
+#define SCREEN_WIDTH 320
+#define SCREEN_HEIGHT 240
 
-#define LED_PIN 2 // Define a default LED pin, adjust if your board uses a different one
+// === SIMPLIFIED UI LAYOUT ===
+#define TOP_PANEL_HEIGHT 30           
+#define TOP_PANEL_Y 0
+#define MAIN_AREA_Y 35                
+#define MAIN_AREA_HEIGHT 140          
+#define STATUS_PANEL_HEIGHT 25        
+#define STATUS_PANEL_Y 180            
+#define BOTTOM_PANEL_HEIGHT 30        
+#define BOTTOM_PANEL_Y 210            
 
-// Button Configuration
-#define BUTTON_PIN 4 // Example pin for a manual status override button (adjust as needed)
-#define ACCEPT_BUTTON_PIN 16 // Example pin for Accept button (adjust as needed)
-#define REJECT_BUTTON_PIN 17 // Example pin for Reject button (adjust as needed)
+// Text positions
+#define PROFESSOR_NAME_X 10
+#define PROFESSOR_NAME_Y 8
+#define DEPARTMENT_X 10
+#define DEPARTMENT_Y 18
+#define STATUS_CENTER_X 160           
+#define STATUS_CENTER_Y 105           
+#define TIME_X 10                     
+#define TIME_Y 220
+#define DATE_X 250                    
+#define DATE_Y 220
+
+// === SIMPLIFIED COLOR SCHEME ===
+// Navy Blue & Gold Theme - Display-specific values (working colors)
+#define NAVY_BLUE        0x001F       // Main navy blue
+#define NAVY_DARK        0x000B       // Darker navy
+#define GOLD_BRIGHT      0xFE60       // Bright gold
+
+// Basic Colors (display-specific - inverted for this hardware)
+#define COLOR_WHITE      0x0000       // Displays as white (inverted)
+#define COLOR_BLACK      0xFFFF       // Displays as black (inverted)
+#define COLOR_GRAY_LIGHT 0x7BEF       // Light gray
+
+// Status Colors with Simple Backgrounds (display-specific)
+#define COLOR_SUCCESS    0xF81F       // Displays as green
+#define COLOR_SUCCESS_BG 0x0E60       // Light green background
+#define COLOR_ERROR      0x07FF       // Displays as red
+#define COLOR_ERROR_BG   0x6000       // Light red background
+#define COLOR_WARNING    GOLD_BRIGHT  // Gold
+#define COLOR_BLUE       0xF800       // Displays as blue for acknowledge button
+#define COLOR_BLUE_BG    0x3000       // Light blue background
+
+// UI Assignments
+#define COLOR_BACKGROUND COLOR_BLACK  // Black background
+#define COLOR_TEXT       COLOR_WHITE  // White text
+#define COLOR_ACCENT     GOLD_BRIGHT  // Gold accents
+#define COLOR_PANEL      NAVY_BLUE    // Navy panels
+#define COLOR_PANEL_DARK NAVY_DARK    // Dark navy
+
+// === TIME CONFIGURATION ===
+#define NTP_SERVER "pool.ntp.org"
+#define TIME_ZONE_OFFSET 8               // GMT+8 for Philippines
+#define NTP_UPDATE_INTERVAL 3600000      
+
+// === SYSTEM TIMING CONSTANTS ===
+#define MESSAGE_DISPLAY_TIMEOUT 30000        // Auto-clear messages after 30s
+#define HEARTBEAT_INTERVAL 300000            // Send heartbeat every 5 minutes
+#define STATUS_UPDATE_INTERVAL 10000         // Update system status every 10s
+#define TIME_UPDATE_INTERVAL 5000            // Update time display every 5s
+#define CONFIRMATION_DISPLAY_TIME 2000       // Show response confirmation for 2s
+#define ANIMATION_INTERVAL 800               // Status indicator animation speed
+
+// === SYSTEM LIMITS ===
+#define MAX_MESSAGE_LENGTH 512               // Prevent buffer overflow
+#define JSON_BUFFER_SIZE 1024                // For MQTT message construction
+#define MAX_WIFI_RETRY_COUNT 10              // Maximum WiFi connection retries
+#define MAX_MQTT_RETRY_COUNT 5               // Maximum MQTT connection retries
+
+// === POWER MANAGEMENT ===
+#define ENABLE_POWER_MANAGEMENT true
+#define CPU_FREQ_NORMAL 240              
+#define CPU_FREQ_POWER_SAVE 80           
+
+// === DEBUG SETTINGS ===
+#define ENABLE_SERIAL_DEBUG true
+#define SERIAL_BAUD_RATE 115200
+#define DEBUG_BLE true
+#define DEBUG_MQTT true
+#define DEBUG_DISPLAY false
+
+// === SYSTEM VALIDATION ===
+#ifndef FACULTY_ID
+#error "FACULTY_ID must be defined"
+#endif
+
+#ifndef FACULTY_BEACON_MAC
+#error "FACULTY_BEACON_MAC must be defined"
+#endif
+
+#ifndef WIFI_SSID
+#error "WIFI_SSID must be defined"
+#endif
+
+#ifndef MQTT_SERVER
+#error "MQTT_SERVER must be defined"
+#endif
+
+// === HELPER MACROS ===
+#define DEBUG_PRINT(x) if(ENABLE_SERIAL_DEBUG) Serial.print(x)
+#define DEBUG_PRINTLN(x) if(ENABLE_SERIAL_DEBUG) Serial.println(x)
+#define DEBUG_PRINTF(format, ...) if(ENABLE_SERIAL_DEBUG) Serial.printf(format, ##__VA_ARGS__)
+
+// === RUNTIME VALIDATION FUNCTION ===
+inline bool validateConfiguration() {
+  bool valid = true;
+  
+  // MAC address validation
+  if (strlen(FACULTY_BEACON_MAC) != 17) {
+    DEBUG_PRINTLN("ERROR: FACULTY_BEACON_MAC must be 17 characters");
+    valid = false;
+  }
+  
+  // WiFi validation
+  if (strlen(WIFI_SSID) == 0) {
+    DEBUG_PRINTLN("ERROR: WIFI_SSID cannot be empty");
+    valid = false;
+  }
+  
+  // UUID validation
+  if (strlen(FACULTY_BEACON_UUID) != 36) {
+    DEBUG_PRINTLN("ERROR: FACULTY_BEACON_UUID must be 36 characters");
+    valid = false;
+  }
+  
+  // MQTT validation
+  if (strlen(MQTT_SERVER) == 0) {
+    DEBUG_PRINTLN("ERROR: MQTT_SERVER cannot be empty");
+    valid = false;
+  }
+  
+  // Port validation
+  if (MQTT_PORT < 1 || MQTT_PORT > 65535) {
+    DEBUG_PRINTLN("ERROR: Invalid MQTT port");
+    valid = false;
+  }
+  
+  // GPIO validation
+  if (BUTTON_A_PIN == BUTTON_B_PIN) {
+    DEBUG_PRINTLN("ERROR: Button pins cannot be the same");
+    valid = false;
+  }
+  
+  // Display pin validation
+  int displayPins[] = {TFT_CS, TFT_RST, TFT_DC};
+  for (int i = 0; i < 3; i++) {
+    if (displayPins[i] == BUTTON_A_PIN || displayPins[i] == BUTTON_B_PIN) {
+      DEBUG_PRINTLN("ERROR: Display pin conflicts with button pin");
+      valid = false;
+    }
+  }
+  
+  // BLE timing validation
+  if (BLE_SCAN_DURATION_FULL >= BLE_SCAN_INTERVAL_SEARCHING/1000) {
+    DEBUG_PRINTLN("WARNING: BLE scan duration too close to interval");
+  }
+  
+  // Grace period validation
+  if (BLE_GRACE_PERIOD_MS < BLE_RECONNECT_ATTEMPT_INTERVAL) {
+    DEBUG_PRINTLN("ERROR: Grace period too short for reconnection attempts");
+    valid = false;
+  }
+  
+  if (valid) {
+    DEBUG_PRINTLN("✅ Configuration validation passed");
+  }
+  
+  return valid;
+}
 
 #endif // CONFIG_H

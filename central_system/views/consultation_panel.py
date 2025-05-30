@@ -4,10 +4,10 @@ Contains the consultation request form and consultation history panel.
 """
 
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-                            QPushButton, QFrame, QLineEdit, QTextEdit,
-                            QComboBox, QMessageBox, QTabWidget, QTableWidget,
-                            QTableWidgetItem, QHeaderView, QDialog, QFormLayout,
-                            QSizePolicy, QProgressBar, QApplication)
+                             QPushButton, QFrame, QLineEdit, QTextEdit,
+                             QComboBox, QMessageBox, QTabWidget, QTableWidget,
+                             QTableWidgetItem, QHeaderView, QDialog, QFormLayout,
+                             QSizePolicy, QProgressBar, QApplication)
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer, QPoint, QSize
 from PyQt5.QtGui import QColor, QIcon
 
@@ -21,6 +21,7 @@ from ..utils.icons import IconProvider, Icons
 
 # Set up logging
 logger = logging.getLogger(__name__)
+
 
 class ConsultationRequestForm(QFrame):
     """
@@ -119,19 +120,20 @@ class ConsultationRequestForm(QFrame):
         """)
 
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(15, 15, 15, 15) # Reduced margins for a tighter look
-        main_layout.setSpacing(12) # Slightly reduced spacing
+        main_layout.setContentsMargins(15, 15, 15, 15)  # Reduced margins for a tighter look
+        main_layout.setSpacing(12)  # Slightly reduced spacing
 
         # Form title
         title_label = QLabel("Request Consultation")
-        title_label.setStyleSheet(f"font-size: {theme.FONT_SIZE_LARGE}pt; font-weight: bold; color: {theme.PRIMARY_COLOR}; margin-bottom: 10px;")
+        title_label.setStyleSheet(
+            f"font-size: {theme.FONT_SIZE_LARGE}pt; font-weight: bold; color: {theme.PRIMARY_COLOR}; margin-bottom: 10px;")
         main_layout.addWidget(title_label)
 
         # Faculty selection
         faculty_label = QLabel("Faculty:")
         # faculty_label.setFixedWidth(120) # Remove fixed width for better flow
         self.faculty_combo = QComboBox()
-        self.faculty_combo.setMinimumWidth(250) # Ensure enough width
+        self.faculty_combo.setMinimumWidth(250)  # Ensure enough width
         # self.faculty_combo.setToolTip("Select the faculty member for consultation.") # Add tooltip
         main_layout.addWidget(faculty_label)
         main_layout.addWidget(self.faculty_combo)
@@ -148,7 +150,7 @@ class ConsultationRequestForm(QFrame):
         message_label = QLabel("Consultation Details:")
         self.message_input = QTextEdit()
         self.message_input.setPlaceholderText("Describe what you'd like to discuss...")
-        self.message_input.setMinimumHeight(120) # Adjusted height
+        self.message_input.setMinimumHeight(120)  # Adjusted height
         # self.message_input.setToolTip("Provide details about your consultation request.")
         main_layout.addWidget(message_label)
         main_layout.addWidget(self.message_input)
@@ -157,13 +159,14 @@ class ConsultationRequestForm(QFrame):
         char_count_layout = QHBoxLayout()
         self.char_count_label = QLabel("0/500")
         self.char_count_label.setAlignment(Qt.AlignRight)
-        self.char_count_label.setStyleSheet(f"color: {theme.TEXT_SECONDARY}; font-size: {theme.FONT_SIZE_SMALL}pt;")
-        
+        self.char_count_label.setStyleSheet(
+            f"color: {theme.TEXT_SECONDARY}; font-size: {theme.FONT_SIZE_SMALL}pt;")
+
         self.char_count_progress = QProgressBar()
         self.char_count_progress.setRange(0, 500)
         self.char_count_progress.setValue(0)
         self.char_count_progress.setTextVisible(False)
-        self.char_count_progress.setFixedHeight(8) # Slimmer progress bar
+        self.char_count_progress.setFixedHeight(8)  # Slimmer progress bar
         self.char_count_progress.setStyleSheet(f"""
             QProgressBar {{
                 background-color: {theme.BORDER_COLOR_LIGHT};
@@ -175,10 +178,10 @@ class ConsultationRequestForm(QFrame):
                 border-radius: 4px;
             }}
         """)
-        char_count_layout.addWidget(self.char_count_progress) # Progress bar first
-        char_count_layout.addWidget(self.char_count_label) # Label next to it
+        char_count_layout.addWidget(self.char_count_progress)  # Progress bar first
+        char_count_layout.addWidget(self.char_count_label)  # Label next to it
         main_layout.addLayout(char_count_layout)
-        
+
         self.message_input.textChanged.connect(self.update_char_count)
 
         # Buttons
@@ -193,14 +196,15 @@ class ConsultationRequestForm(QFrame):
         self.submit_button = QPushButton("Submit Request")
         self.submit_button.setObjectName("submit_button")
         self.submit_button.clicked.connect(self.submit_request)
-        # self.submit_button.setIcon(IconProvider.get_icon(Icons.SEND, QSize(18,18))) # Assuming Icons.SEND exists
+        # self.submit_button.setIcon(IconProvider.get_icon(Icons.SEND,
+        # QSize(18,18))) # Assuming Icons.SEND exists
 
-        button_layout.addStretch() # Push buttons to the right
+        button_layout.addStretch()  # Push buttons to the right
         button_layout.addWidget(self.cancel_button)
         button_layout.addWidget(self.submit_button)
 
         main_layout.addLayout(button_layout)
-        main_layout.addStretch(1) # Add stretch at the end to push form elements up
+        main_layout.addStretch(1)  # Add stretch at the end to push form elements up
 
     def update_char_count(self):
         """
@@ -217,12 +221,13 @@ class ConsultationRequestForm(QFrame):
             progress_color = theme.ERROR_COLOR
             text_color = theme.ERROR_COLOR
             self.char_count_label.setText(f"<font color='{theme.ERROR_COLOR}'>{count}/500</font>")
-        elif count > 450: # Warning state
+        elif count > 450:  # Warning state
             progress_color = theme.WARNING_COLOR
             text_color = theme.WARNING_COLOR
-        
-        self.char_count_label.setStyleSheet(f"color: {text_color}; font-size: {theme.FONT_SIZE_SMALL}pt;")
-        self.char_count_progress.setValue(min(count, 500)) # Cap progress at max
+
+        self.char_count_label.setStyleSheet(
+            f"color: {text_color}; font-size: {theme.FONT_SIZE_SMALL}pt;")
+        self.char_count_progress.setValue(min(count, 500))  # Cap progress at max
         self.char_count_progress.setStyleSheet(f"""
             QProgressBar {{
                 background-color: {theme.BORDER_COLOR_LIGHT};
@@ -302,9 +307,10 @@ class ConsultationRequestForm(QFrame):
         if not message:
             self.show_validation_error("Consultation Request", "Please enter consultation details.")
             return
-        
+
         if len(message) > 500:
-            self.show_validation_error("Consultation Request", "Consultation details cannot exceed 500 characters.")
+            self.show_validation_error("Consultation Request",
+                                       "Consultation details cannot exceed 500 characters.")
             return
 
         course_code = self.course_input.text().strip()
@@ -388,6 +394,7 @@ class ConsultationRequestForm(QFrame):
         self.message_input.clear()
         self.course_input.clear()
         self.setVisible(False)
+
 
 class ConsultationHistoryPanel(QFrame):
     """
@@ -489,21 +496,24 @@ class ConsultationHistoryPanel(QFrame):
         # Consultation table
         self.consultation_table = QTableWidget()
         self.consultation_table.setColumnCount(5)
-        self.consultation_table.setHorizontalHeaderLabels(["Faculty", "Course", "Status", "Date", "Actions"])
-        
+        self.consultation_table.setHorizontalHeaderLabels(
+            ["Faculty", "Course", "Status", "Date", "Actions"])
+
         header = self.consultation_table.horizontalHeader()
         header.setMinimumSectionSize(120)  # Set a minimum width for all columns
-        header.setStretchLastSection(False) # Don't automatically stretch the last section
+        header.setStretchLastSection(False)  # Don't automatically stretch the last section
 
         header.setSectionResizeMode(0, QHeaderView.Interactive)  # Faculty column
         self.consultation_table.setColumnWidth(0, 200)           # Faculty: Set initial width
         header.setSectionResizeMode(1, QHeaderView.Interactive)  # Course
         self.consultation_table.setColumnWidth(1, 120)           # Course: Set initial width
-        header.setSectionResizeMode(2, QHeaderView.ResizeToContents) # Status - to fit the badge
+        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)  # Status - to fit the badge
         header.setSectionResizeMode(3, QHeaderView.Interactive)  # Date
-        self.consultation_table.setColumnWidth(3, 180)           # Date: Set initial width for "YYYY-MM-DD HH:MM"
-        header.setSectionResizeMode(4, QHeaderView.Interactive) # Actions column - Interactive
-        self.consultation_table.setColumnWidth(4, 220)           # Actions: Set fixed width to accommodate buttons
+        # Date: Set initial width for "YYYY-MM-DD HH:MM"
+        self.consultation_table.setColumnWidth(3, 180)
+        header.setSectionResizeMode(4, QHeaderView.Interactive)  # Actions column - Interactive
+        # Actions: Set fixed width to accommodate buttons
+        self.consultation_table.setColumnWidth(4, 220)
 
         self.consultation_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.consultation_table.setSelectionBehavior(QTableWidget.SelectRows)
@@ -552,7 +562,8 @@ class ConsultationHistoryPanel(QFrame):
                 progress_callback(10, "Connecting to database...")
 
                 # Get consultations for this student
-                consultations = self.consultation_controller.get_consultations(student_id=self.student.id)
+                consultations = self.consultation_controller.get_consultations(
+                    student_id=self.student.id)
 
                 # Update progress
                 progress_callback(80, "Processing results...")
@@ -592,7 +603,8 @@ class ConsultationHistoryPanel(QFrame):
                 )
             except ImportError:
                 # Fallback to basic message box
-                QMessageBox.warning(self, "Error", f"Failed to refresh consultation history: {str(e)}")
+                QMessageBox.warning(
+                    self, "Error", f"Failed to refresh consultation history: {str(e)}")
 
     def update_consultation_table(self):
         """
@@ -611,38 +623,44 @@ class ConsultationHistoryPanel(QFrame):
             self.consultation_table.setItem(row_position, 0, faculty_item)
 
             # Course code
-            course_item = QTableWidgetItem(consultation.course_code if consultation.course_code else "N/A")
+            course_item = QTableWidgetItem(
+                consultation.course_code if consultation.course_code else "N/A")
             self.consultation_table.setItem(row_position, 1, course_item)
 
             # Status with enhanced color coding using QLabel for better styling
             status_label_widget = QLabel(consultation.status.value.capitalize())
-            status_label_widget.setAlignment(Qt.AlignCenter) # Center the text
+            status_label_widget.setAlignment(Qt.AlignCenter)  # Center the text
 
             status_value = consultation.status.value
             style_parts = [
                 "font-weight: bold",
-                f"font-size: {self.font().pointSize() + 1}pt", # Match existing font sizing intent
-                "padding: 5px 8px", # Add some padding
-                "border-radius: 4px" # Add border radius
+                f"font-size: {self.font().pointSize() + 1}pt",  # Match existing font sizing intent
+                "padding: 5px 8px",  # Add some padding
+                "border-radius: 4px"  # Add border radius
             ]
 
             # Define status colors with better contrast and accessibility
             # These are the same colors as before
             status_colors = {
-                "pending": {"bg": "#ffc107", "fg": "#000000", "border": "#f08c00"}, # Amber, Black text
-                "accepted": {"bg": "#28a745", "fg": "#ffffff", "border": "#2b8a3e"}, # Green, White text
-                "completed": {"bg": "#007bff", "fg": "#ffffff", "border": "#1864ab"},# Blue, White text
-                "cancelled": {"bg": "#dc3545", "fg": "#ffffff", "border": "#a61e4d"} # Red, White text
+                # Amber, Black text
+                "pending": {"bg": "#ffc107", "fg": "#000000", "border": "#f08c00"},
+                # Green, White text
+                "accepted": {"bg": "#28a745", "fg": "#ffffff", "border": "#2b8a3e"},
+                # Blue, White text
+                "completed": {"bg": "#007bff", "fg": "#ffffff", "border": "#1864ab"},
+                # Red, White text
+                "cancelled": {"bg": "#dc3545", "fg": "#ffffff", "border": "#a61e4d"}
             }
 
             if status_value in status_colors:
                 colors = status_colors[status_value]
                 style_parts.append(f"background-color: {colors['bg']}")
                 style_parts.append(f"color: {colors['fg']}")
-                style_parts.append(f"border: 1px solid {colors['border']}") # Use 1px border for a less chunky look
-            else: # Default fallback style if status not in map
-                style_parts.append("background-color: #e9ecef") # Light gray
-                style_parts.append("color: #495057") # Dark gray text
+                # Use 1px border for a less chunky look
+                style_parts.append(f"border: 1px solid {colors['border']}")
+            else:  # Default fallback style if status not in map
+                style_parts.append("background-color: #e9ecef")  # Light gray
+                style_parts.append("color: #495057")  # Dark gray text
                 style_parts.append("border: 1px solid #ced4da")
 
             status_label_widget.setStyleSheet("; ".join(style_parts) + ";")
@@ -715,10 +733,12 @@ class ConsultationHistoryPanel(QFrame):
                 # Emit signal to cancel the consultation
                 self.consultation_cancelled.emit(consultation.id)
 
+
 class ConsultationDetailsDialog(QDialog):
     """
     Dialog to display consultation details.
     """
+
     def __init__(self, consultation, parent=None):
         super().__init__(parent)
         self.consultation = consultation
@@ -797,7 +817,8 @@ class ConsultationDetailsDialog(QDialog):
 
         # Course
         course_label = QLabel("Course:")
-        course_value = QLabel(self.consultation.course_code if self.consultation.course_code else "N/A")
+        course_value = QLabel(
+            self.consultation.course_code if self.consultation.course_code else "N/A")
         details_layout.addRow(course_label, course_value)
 
         # Status with enhanced visual styling
@@ -890,6 +911,7 @@ class ConsultationDetailsDialog(QDialog):
 
         layout.addLayout(button_layout)
 
+
 class ConsultationPanel(QTabWidget):
     """
     Main consultation panel with request form and history tabs.
@@ -909,7 +931,10 @@ class ConsultationPanel(QTabWidget):
         self.refresh_timer = QTimer(self)
         self.refresh_timer.timeout.connect(self.auto_refresh_history)
         # Increased refresh interval for history, less frequent updates
-        self.refresh_timer.start(self.config.get('ui.history_refresh_interval_ms', 120000)) # Default 2 mins
+        self.refresh_timer.start(
+            self.config.get(
+                'ui.history_refresh_interval_ms',
+                120000))  # Default 2 mins
 
         self.currentChanged.connect(self.on_tab_changed)
 
@@ -918,7 +943,7 @@ class ConsultationPanel(QTabWidget):
         Initialize the consultation panel UI with improved styling and responsiveness.
         """
         theme = ConsultEaseTheme
-        self.setObjectName("consultation_panel_main") # For specific styling if needed
+        self.setObjectName("consultation_panel_main")  # For specific styling if needed
 
         # Tab Bar styling for a more modern look
         self.setStyleSheet(f"""
@@ -928,7 +953,7 @@ class ConsultationPanel(QTabWidget):
                 background-color: {theme.BG_SECONDARY_LIGHT};
                 border-bottom-left-radius: {theme.BORDER_RADIUS_LARGE}px;
                 border-bottom-right-radius: {theme.BORDER_RADIUS_LARGE}px;
-                padding: 10px; 
+                padding: 10px;
             }}
             QTabBar::tab {{
                 background-color: {theme.BG_PRIMARY_MUTED};
@@ -958,18 +983,18 @@ class ConsultationPanel(QTabWidget):
                 left: 5px; /* Small offset from edge */
             }}
         """)
-        
+
         self.request_form = ConsultationRequestForm()
         self.request_form.request_submitted.connect(self.handle_consultation_request)
-        self.addTab(self.request_form, "New Request") # Shorter tab title
+        self.addTab(self.request_form, "New Request")  # Shorter tab title
         # Set tab icon (ensure Icons.EDIT or a suitable icon exists)
-        self.setTabIcon(0, IconProvider.get_icon(Icons.EDIT, QSize(20,20)))
+        self.setTabIcon(0, IconProvider.get_icon(Icons.EDIT, QSize(20, 20)))
 
         self.history_panel = ConsultationHistoryPanel(self.student)
         self.history_panel.consultation_cancelled.connect(self.handle_consultation_cancel)
-        self.addTab(self.history_panel, "History") # Shorter tab title
+        self.addTab(self.history_panel, "History")  # Shorter tab title
         # Set tab icon (ensure Icons.HISTORY or a suitable icon exists)
-        self.setTabIcon(1, IconProvider.get_icon(Icons.REPORTS, QSize(20,20)))
+        self.setTabIcon(1, IconProvider.get_icon(Icons.REPORTS, QSize(20, 20)))
 
         # min_width = min(900, max(500, int(QApplication.desktop().screenGeometry().width() * 0.4)))
         # min_height = min(700, max(400, int(QApplication.desktop().screenGeometry().height() * 0.6)))
@@ -1032,9 +1057,9 @@ class ConsultationPanel(QTabWidget):
 
                 # Directly call the controller to create the consultation
                 created_consultation = consultation_controller.create_consultation(
-                    student_id=self.student.id, 
-                    faculty_id=faculty.id, 
-                    request_message=message, 
+                    student_id=self.student.id,
+                    faculty_id=faculty.id,
+                    request_message=message,
                     course_code=course_code
                 )
 
@@ -1063,8 +1088,8 @@ class ConsultationPanel(QTabWidget):
                 # now with the successfully created consultation object.
                 # This signal becomes more of a "consultation_successfully_created_and_submitted"
                 self.consultation_requested.emit(created_consultation, message, course_code)
-                
-                return True # Indicate success for LoadingDialog
+
+                return True  # Indicate success for LoadingDialog
 
             # Use loading dialog if available
             if use_notification_manager:
@@ -1074,7 +1099,7 @@ class ConsultationPanel(QTabWidget):
                     submit_request,
                     title="Submitting Request",
                     message="Submitting your consultation request...",
-                    cancelable=False # Should not be cancelable once submission starts
+                    cancelable=False  # Should not be cancelable once submission starts
                 )
 
                 # Show success message (this might be redundant if DashboardWindow also shows one)
@@ -1088,7 +1113,7 @@ class ConsultationPanel(QTabWidget):
                 )
             else:
                 # Fallback to basic implementation (without loading dialog)
-                submit_request() # This will raise Exception on failure
+                submit_request()  # This will raise Exception on failure
 
                 # Show success message
                 QMessageBox.information(
@@ -1106,8 +1131,8 @@ class ConsultationPanel(QTabWidget):
             # Show error message
             error_message_detail = str(e)
             if "Failed to create consultation" in error_message_detail:
-                 error_message_detail = "The system could not create your consultation request. Please try again."
-            
+                error_message_detail = "The system could not create your consultation request. Please try again."
+
             try:
                 from ..utils.notification import NotificationManager
                 NotificationManager.show_message(
@@ -1144,10 +1169,12 @@ class ConsultationPanel(QTabWidget):
                     progress_callback(30, "Cancelling request...")
 
                 # Directly call the controller to cancel the consultation
-                cancelled_consultation = consultation_controller.cancel_consultation(consultation_id)
-                
+                cancelled_consultation = consultation_controller.cancel_consultation(
+                    consultation_id)
+
                 if not cancelled_consultation:
-                    raise Exception("Failed to cancel consultation. Controller returned None or error.")
+                    raise Exception(
+                        "Failed to cancel consultation. Controller returned None or error.")
 
                 if progress_callback:
                     progress_callback(70, "Updating records...")
@@ -1157,13 +1184,14 @@ class ConsultationPanel(QTabWidget):
 
                 if progress_callback:
                     progress_callback(100, "Complete!")
-                
+
                 # Emit the original signal, now with the (cancelled) consultation object
                 # if needed by other listeners, though DashboardWindow might not need it anymore
                 # for its primary function of calling the controller.
-                self.consultation_cancelled.emit(consultation_id) # Or emit `cancelled_consultation` if more useful
-                
-                return True # Indicate success for LoadingDialog
+                # Or emit `cancelled_consultation` if more useful
+                self.consultation_cancelled.emit(consultation_id)
+
+                return True  # Indicate success for LoadingDialog
 
             # Use loading dialog if available
             if use_notification_manager:
@@ -1181,7 +1209,7 @@ class ConsultationPanel(QTabWidget):
                         perform_cancel_consultation,
                         title="Cancelling Request",
                         message="Cancelling your consultation request...",
-                        cancelable=False # Cancellation process itself should not be cancelable midway
+                        cancelable=False  # Cancellation process itself should not be cancelable midway
                     )
 
                     # Show success message
@@ -1281,7 +1309,7 @@ class ConsultationPanel(QTabWidget):
 
                 # Reset after a short delay
                 QTimer.singleShot(500, reset_color)
-            except:
+            except BaseException:
                 # If even this fails, just change the tab without animation
                 pass
 

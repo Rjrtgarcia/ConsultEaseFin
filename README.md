@@ -1,184 +1,155 @@
-# ConsultEase
+# ConsultEase System
 
-A comprehensive system for enhanced student-faculty interaction, featuring RFID-based authentication, real-time faculty availability, and streamlined consultation requests.
+## Overview
 
-**This system has recently undergone significant refactoring to improve stability, maintainability, and configurability.**
+ConsultEase is a student-faculty interaction system designed to facilitate consultation scheduling and availability tracking. The system consists of two main components:
 
-## Components
+1. **Central System (Raspberry Pi)**: The core system that manages the database, user interface, and communication with Faculty Desk Units.
+2. **Faculty Desk Unit (ESP32)**: A hardware device placed at faculty desks that displays consultation requests and indicates faculty availability.
 
-### Central System (Raspberry Pi)
-- PyQt5 user interface for student interaction
-- RFID-based authentication (student data cached for performance, VID/PID configurable)
-- Real-time faculty availability display
-- Consultation request management with improved UI
-- Secure admin interface with bcrypt password hashing and account lockout fields
-- Touch-optimized UI with on-screen keyboard support (managed by `KeyboardManager`, configurable)
-- Smooth UI transitions and animations
-- **Centralized configuration** via `config.py` and `config.json`
-- **Singleton controllers** for all major system components
-
-### Faculty Desk Unit (ESP32)
-- 2.4" TFT Display for consultation requests
-- BLE-based presence detection (configurable always-available mode)
-- MQTT communication with Central System (supports TLS)
-- Real-time status updates
-- Improved reliability and error handling
-
-## Requirements
+## System Architecture
 
 ### Central System
-- Raspberry Pi 4 (Bookworm 64-bit)
-- 10.1-inch touchscreen (1024x600 resolution)
-- USB RFID IC Reader (VID/PID must be specified in `config.json`)
-- Python 3.9+
-- PostgreSQL database (for production) or SQLite (for development)
+- **Hardware**: Raspberry Pi
+- **Framework**: PyQt5 for the user interface
+- **Database**: PostgreSQL/SQLite
+- **Communication**: MQTT for real-time messaging
+- **Authentication**: RFID for student and faculty authentication
 
 ### Faculty Desk Unit
-- ESP32 microcontroller
-- 2.4-inch TFT SPI Screen (ST7789)
-- Arduino IDE 2.0+
+- **Hardware**: ESP32 microcontroller with TFT display
+- **Connectivity**: WiFi for MQTT communication, BLE for presence detection
+- **Interface**: TFT display, buttons for user interaction
+- **Power Management**: Power saving modes to extend battery life
 
-## Recent Major Refactoring
+## Implementation Phases
 
-The system has recently undergone substantial architectural improvements:
+The implementation of the ConsultEase system has been divided into four phases:
 
-- **Centralized Configuration**: All settings are now managed through `config.py` loading from `config.json` and environment variables
-- **Singleton Controllers**: All controllers (`AdminController`, `FacultyController`, `ConsultationController`, `RFIDController`, and `StudentController`) are now singletons
-- **Improved Database Session Management**: Using `@db_operation_with_retry` decorator and consistent `try/finally close_db()` patterns
-- **RFID Performance**: Added student data caching in `RFIDService` to reduce database queries
-- **Enhanced Security**: Added bcrypt password hashing and account lockout fields for admin users
-- **Unified Keyboard Management**: Consolidated into `KeyboardManager`, removing `direct_keyboard.py`
-- **MQTT TLS Support**: Added structure for secure MQTT communication
-- **Standardized Error Handling and Logging**: Removed redundant initialization, centralized logging setup
-- **Better Maintainability**: Removed legacy code and made development/testing features configurable
+1. **Phase 1** (High Priority): Core functionality implementation (hardware integration, basic UI, MQTT, BLE)
+2. **Phase 2** (High Priority): Security enhancements (MQTT TLS, secure configuration)
+3. **Phase 3** (Medium Priority): Code organization improvements (modular design, manager classes)
+4. **Phase 4** (Low Priority): Testing and simulation (unit tests, integration tests, simulation mode)
 
-## Installation
+## Project Structure
 
-### Central System
-
-1. **Create configuration file**:
-   Copy the example configuration and adjust it for your environment:
-   ```bash
-   cp central_system/config.example.json central_system/config.json
-   # Edit config.json with your specific settings
-   ```
-
-2. Install dependencies:
-```bash
-pip install -r requirements.txt
 ```
-
-3. Set up database (PostgreSQL example - adjust based on your `config.json`):
-```bash
-# Create database and user (names should match your config.json)
-sudo -u postgres psql -c "CREATE DATABASE consultease_db;"
-sudo -u postgres psql -c "CREATE USER consultease_user WITH PASSWORD 'your_password';"
-sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE consultease_db TO consultease_user;"
-```
-
-4. Install and configure virtual keyboard:
-```bash
-# Either squeekboard (preferred) or matchbox-keyboard
-sudo apt install squeekboard -y
-# OR
-sudo apt install matchbox-keyboard -y
-
-# Update the keyboard preferences in config.json after installation
-```
-
-5. Run the application:
-```bash
-python central_system/main.py
-```
-
-The system will initialize the database on first run and create default records if needed.
-
-### Faculty Desk Unit
-
-1. Install the Arduino IDE and required libraries:
-   - TFT_eSPI
-   - NimBLE-Arduino
-   - PubSubClient
-   - ArduinoJson
-
-2. Configure TFT_eSPI for your display
-
-3. Update the configuration in faculty_desk_unit/faculty_desk_unit.ino:
-   - Set the faculty ID and name
-   - Configure WiFi credentials
-   - Set MQTT broker IP address
-   - Configure BLE settings
-
-4. Upload the sketch to your ESP32
-
-5. Test the faculty desk unit using the unified test utility
-
-## Development
-
-### Project Structure
-```
-consultease/
-├── central_system/           # Raspberry Pi application
-│   ├── config.json           # Main configuration file (must be created)
-│   ├── config.example.json   # Example configuration template
-│   ├── config.py             # Configuration loading logic
-│   ├── models/               # Database models (SQLAlchemy)
-│   ├── views/                # PyQt UI components
-│   ├── controllers/          # Application logic (all Singletons)
-│   ├── services/             # External services (MQTT, RFID)
-│   ├── resources/            # UI resources (icons, stylesheets)
-│   └── utils/                # Utility functions (incl. KeyboardManager)
-├── faculty_desk_unit/        # ESP32 firmware
-│   └── faculty_desk_unit.ino # Main firmware file with configuration
-├── scripts/                  # Utility scripts
-├── tests/                    # Test suite
-├── memory-bank/              # Project documentation for AI development
+ConsultEaseProMax/
+├── central_system/           # Central System components
+│   ├── controllers/          # Business logic
+│   ├── models/               # Database models
+│   ├── views/                # UI components
+│   ├── services/             # Service components (MQTT, RFID)
+│   └── utils/                # Utility functions
+├── faculty_desk_unit/        # Faculty Desk Unit firmware
+│   ├── faculty_desk_unit.ino # Main Arduino sketch
+│   ├── display_manager.h     # Display management
+│   ├── network_manager.h     # WiFi and MQTT management
+│   ├── ble_manager.h         # BLE scanning and presence detection
+│   ├── consultation_manager.h # Consultation request handling
+│   ├── button_manager.h      # Button interaction
+│   ├── power_manager.h       # Power management
+│   ├── config.h              # Configuration parameters
+│   ├── faculty_constants.h   # Faculty-specific constants
+│   └── test/                 # Testing framework
+│       ├── framework/        # Core testing utilities
+│       ├── mocks/            # Mock objects for hardware components
+│       ├── unit/             # Unit tests
+│       ├── integration/      # Integration tests
+│       └── simulation/       # Simulation mode
 └── docs/                     # Documentation
 ```
 
-## Configuration (`config.json`)
+## Testing Framework
 
-The system is now driven by a centralized configuration system. The main settings include:
+### Overview
+The ConsultEase Faculty Desk Unit includes a comprehensive testing framework to ensure reliable operation. The framework includes:
 
-- **Database**: Type (sqlite/postgresql), connection details
-- **MQTT**: Broker details, credentials, TLS settings, client ID
-- **RFID**: VID/PID for USB reader, simulation mode
-- **UI**: Theme, transition durations, fullscreen mode
-- **Keyboard**: Preferred/fallback virtual keyboards
-- **Logging**: Levels, file paths, rotation settings
-- **System**: Feature flags like `ensure_test_faculty_available`
+- **Unit Tests**: Individual tests for each manager class
+- **Integration Tests**: Tests for interactions between components
+- **Mock Objects**: Mock implementations of hardware-dependent components
+- **Assertion Macros**: Rich set of test assertions for various conditions
+- **Memory Testing**: Detection of memory leaks and performance issues
 
-## Touchscreen Features
+### Running Tests
+To run the unit tests:
 
-ConsultEase includes several features to enhance usability on touchscreen devices:
+1. Connect the ESP32 to your computer
+2. Flash the test runner: `faculty_desk_unit/test/test_runner.cpp`
+3. Monitor the serial output at 115200 baud
+4. Results will be displayed with pass/fail status and timing information
 
-- **Auto-popup keyboard**: Virtual keyboard appears automatically when text fields receive focus, managed by `KeyboardManager`
-- **Fullscreen mode**: Configurable via `config.json` or toggled with F11 key
-- **Touch-friendly UI**: Larger buttons and input elements optimized for touch interaction
-- **Smooth transitions**: Enhanced UI transitions between screens for better user experience
-- **Improved consultation panel**: Better readability and user feedback in the consultation interface
+## Simulation Mode
 
-## RFID Configuration
+### Overview
+The simulation mode allows testing the Faculty Desk Unit without actual hardware. It simulates various scenarios to validate system behavior under different conditions.
 
-RFID configuration now happens in `config.json`:
+### Features
+- Complete system simulation without hardware
+- Scenario-based testing (normal operation, WiFi disconnection, etc.)
+- Time-based progression through scenarios
+- Manual scenario triggering via serial commands
+- Visual representation of display content
 
-```json
-{
-  "rfid_reader": {
-    "vid": "0xVID_HERE",  // e.g., "0xFFFF"
-    "pid": "0xPID_HERE",  // e.g., "0x0035"
-    "simulation_mode": false
-  }
-}
-```
+### Running Simulation
+To run the simulation mode:
 
-For automatic detection or troubleshooting, you can still use:
+1. Connect the ESP32 to your computer
+2. Flash the simulation runner: `faculty_desk_unit/test/simulation/simulation_runner.cpp`
+3. Monitor the serial output at 115200 baud
+4. Simulation will progress automatically through scenarios
+5. Send commands 1-5 via serial to manually trigger specific scenarios
+6. Send 'q' to quit the simulation
 
-```bash
-sudo ./scripts/fix_rfid.sh
-```
+## Configuration
 
-The script will help you determine the correct VID/PID values to set in your configuration.
+The Faculty Desk Unit is configured through the `config.h` and `faculty_constants.h` files. Key configuration parameters include:
+
+- WiFi credentials
+- MQTT broker settings
+- TLS security options
+- Faculty information
+- BLE scanning parameters
+- Display settings
+- Power management options
+
+## Development Setup
+
+### Prerequisites
+- Arduino IDE 1.8.x or higher
+- ESP32 board support
+- Required libraries:
+  - Adafruit GFX
+  - Adafruit ST7789
+  - NimBLE-Arduino
+  - PubSubClient
+  - ArduinoJson
+
+### Installing Dependencies
+Use the Arduino Library Manager to install the required libraries:
+
+1. Open Arduino IDE
+2. Go to Sketch -> Include Library -> Manage Libraries
+3. Search for and install the required libraries
+
+### Building and Flashing
+To build and flash the Faculty Desk Unit firmware:
+
+1. Open `faculty_desk_unit.ino` in Arduino IDE
+2. Select your ESP32 board from Tools -> Board
+3. Select the correct port from Tools -> Port
+4. Click Upload
+
+## Contributing
+
+Contributions to the ConsultEase project are welcome. Please follow these steps:
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Run tests to ensure functionality
+5. Submit a pull request
 
 ## License
-[MIT](LICENSE)
+
+This project is licensed under the MIT License - see the LICENSE file for details.

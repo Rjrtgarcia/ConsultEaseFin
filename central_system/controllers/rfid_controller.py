@@ -9,6 +9,7 @@ from ..config import get_config
 # Set up logging
 logger = logging.getLogger(__name__)
 
+
 class RFIDController:
     """
     Controller for handling RFID card scanning and student verification.
@@ -29,10 +30,10 @@ class RFIDController:
         if RFIDController._instance is not None:
             # Ensure singleton pattern is respected
             raise RuntimeError("RFIDController is a singleton, use RFIDController.instance()")
-        
+
         self.rfid_service = get_rfid_service()
         self.callbacks = []
-        RFIDController._instance = self # Set the instance after checks
+        RFIDController._instance = self  # Set the instance after checks
 
     def start(self):
         """
@@ -76,11 +77,14 @@ class RFIDController:
         try:
             if callback in self.callbacks:
                 self.callbacks.remove(callback)
-                logger.info(f"Unregistered RFID controller callback: {getattr(callback, '__name__', 'unknown')}")
+                logger.info(
+                    f"Unregistered RFID controller callback: {getattr(callback, '__name__', 'unknown')}")
             else:
-                logger.warning(f"Attempted to unregister a callback that was not found: {getattr(callback, '__name__', 'unknown')}")
+                logger.warning(
+                    f"Attempted to unregister a callback that was not found: {getattr(callback, '__name__', 'unknown')}")
         except Exception as e:
-            logger.error(f"Error unregistering RFID controller callback {getattr(callback, '__name__', 'unknown')}: {str(e)}")
+            logger.error(
+                f"Error unregistering RFID controller callback {getattr(callback, '__name__', 'unknown')}: {str(e)}")
 
     def _notify_callbacks(self, student, rfid_uid, error_message=None):
         """
@@ -95,7 +99,8 @@ class RFIDController:
             try:
                 callback(student, rfid_uid, error_message)
             except Exception as e:
-                logger.error(f"Error in RFID callback {getattr(callback, '__name__', 'unknown')}: {str(e)}")
+                logger.error(
+                    f"Error in RFID callback {getattr(callback, '__name__', 'unknown')}: {str(e)}")
 
     def on_rfid_read(self, student, rfid_uid):
         """
@@ -106,7 +111,8 @@ class RFIDController:
             student: Student object if validated by RFIDService, None otherwise.
             rfid_uid (str): The RFID UID that was read.
         """
-        logger.info(f"RFID Controller received scan: UID='{rfid_uid}', Student from service: '{student.name if student else None}'")
+        logger.info(
+            f"RFID Controller received scan: UID='{rfid_uid}', Student from service: '{student.name if student else None}'")
 
         if student:
             self.handle_authenticated_student(student)
@@ -139,12 +145,12 @@ class RFIDController:
         """
         if not rfid_uid or not rfid_uid.strip():
             logger.warning("Manual RFID entry: UID is empty.")
-            self.on_rfid_read(None, rfid_uid) # Trigger failure notification
+            self.on_rfid_read(None, rfid_uid)  # Trigger failure notification
             return
 
         logger.info(f"Processing manually entered RFID UID: {rfid_uid}")
-        student = self.rfid_service.get_student_by_rfid(rfid_uid) # Use service to get student
-        self.on_rfid_read(student, rfid_uid) # Call own handler to unify event flow
+        student = self.rfid_service.get_student_by_rfid(rfid_uid)  # Use service to get student
+        self.on_rfid_read(student, rfid_uid)  # Call own handler to unify event flow
 
     def handle_authenticated_student(self, student):
         """

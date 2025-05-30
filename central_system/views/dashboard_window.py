@@ -1,13 +1,13 @@
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-                               QPushButton, QGridLayout, QScrollArea, QFrame,
-                               QLineEdit, QTextEdit, QComboBox, QMessageBox,
-                               QSplitter, QApplication, QSizePolicy, QGraphicsDropShadowEffect)
+                             QPushButton, QGridLayout, QScrollArea, QFrame,
+                             QLineEdit, QTextEdit, QComboBox, QMessageBox,
+                             QSplitter, QApplication, QSizePolicy, QGraphicsDropShadowEffect)
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer, QSize, QSettings
 from PyQt5.QtGui import QIcon, QColor, QPixmap
 
 import os
 import logging
-import time # Moved import time here
+import time  # Moved import time here
 from .base_window import BaseWindow
 from .consultation_panel import ConsultationPanel
 from ..controllers import FacultyController, ConsultationController
@@ -17,10 +17,11 @@ from ..models.consultation import Consultation
 from ..config import get_config
 from ..services import get_rfid_service, get_mqtt_service
 from ..utils.notification_manager import NotificationManager
-from ..utils.theme import ConsultEaseTheme # Added Theme import
+from ..utils.theme import ConsultEaseTheme  # Added Theme import
 
 # Set up logging
 logger = logging.getLogger(__name__)
+
 
 class FacultyCard(QFrame):
     """
@@ -31,7 +32,7 @@ class FacultyCard(QFrame):
     def __init__(self, faculty, parent=None):
         super().__init__(parent)
         self.faculty = faculty
-        self.theme = ConsultEaseTheme() # Store theme instance
+        self.theme = ConsultEaseTheme()  # Store theme instance
         self.init_ui()
 
     def init_ui(self):
@@ -39,11 +40,11 @@ class FacultyCard(QFrame):
         Initialize the faculty card UI.
         """
         self.setFrameShape(QFrame.StyledPanel)
-        self.setObjectName("facultyCard") # For specific card styling
+        self.setObjectName("facultyCard")  # For specific card styling
 
         # Card dimensions and policy
-        self.setFixedWidth(260) # Slightly wider for more content space
-        self.setMinimumHeight(180) # Adjusted height
+        self.setFixedWidth(260)  # Slightly wider for more content space
+        self.setMinimumHeight(180)  # Adjusted height
         self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
 
         # Main layout for the card
@@ -106,19 +107,23 @@ class FacultyCard(QFrame):
         # Middle part: Status
         status_layout = QHBoxLayout()
         status_layout.setSpacing(6)
-        self.status_icon_label = QLabel("●") # Unicode circle
+        self.status_icon_label = QLabel("●")  # Unicode circle
         self.status_text_label = QLabel()
         status_layout.addWidget(self.status_icon_label)
         status_layout.addWidget(self.status_text_label)
         status_layout.addStretch()
         main_layout.addLayout(status_layout)
 
-        main_layout.addStretch(1) # Pushes button to bottom if space allows
+        main_layout.addStretch(1)  # Pushes button to bottom if space allows
 
         # Bottom part: Request Button
         self.request_button = QPushButton("Request Consultation")
         self.request_button.setObjectName("requestButton")
-        self.request_button.setIcon(IconProvider.get_icon(Icons.CALENDAR_ADD if hasattr(Icons, 'CALENDAR_ADD') else Icons.ADD, QSize(18,18)))
+        self.request_button.setIcon(
+            IconProvider.get_icon(
+                Icons.CALENDAR_ADD if hasattr(
+                    Icons, 'CALENDAR_ADD') else Icons.ADD, QSize(
+                    18, 18)))
         self.request_button.setStyleSheet(f"""
             QPushButton#requestButton {{
                 font-size: {self.theme.FONT_SIZE_NORMAL}pt;
@@ -139,7 +144,7 @@ class FacultyCard(QFrame):
         self.request_button.clicked.connect(self.request_consultation)
         main_layout.addWidget(self.request_button)
 
-        self.update_style_and_status() # Initial style and status update
+        self.update_style_and_status()  # Initial style and status update
 
         # Add shadow effect
         shadow = QGraphicsDropShadowEffect(self)
@@ -157,13 +162,13 @@ class FacultyCard(QFrame):
             status_text = "Available"
             status_icon_color = self.theme.SUCCESS_COLOR
             self.request_button.setEnabled(True)
-            card_bg = self.theme.BG_PRIMARY # White background for available
+            card_bg = self.theme.BG_PRIMARY  # White background for available
         else:
             border_color = self.theme.ERROR_COLOR
             status_text = "Unavailable"
             status_icon_color = self.theme.ERROR_COLOR
             self.request_button.setEnabled(False)
-            card_bg = "#fff0f0" # Very light red for unavailable, distinct but not harsh
+            card_bg = "#fff0f0"  # Very light red for unavailable, distinct but not harsh
 
         self.setStyleSheet(f"""
             QFrame#facultyCard {{
@@ -175,41 +180,48 @@ class FacultyCard(QFrame):
             /* Other specific styles for elements inside this card if needed */
         """)
 
-        self.status_icon_label.setStyleSheet(f"font-size: 18pt; color: {status_icon_color}; border: none;")
+        self.status_icon_label.setStyleSheet(
+            f"font-size: 18pt; color: {status_icon_color}; border: none;")
         self.status_text_label.setText(status_text)
-        self.status_text_label.setStyleSheet(f"font-size: {self.theme.FONT_SIZE_NORMAL}pt; color: {status_icon_color}; font-weight: bold; border: none;")
+        self.status_text_label.setStyleSheet(
+            f"font-size: {self.theme.FONT_SIZE_NORMAL}pt; color: {status_icon_color}; font-weight: bold; border: none;")
 
     def _load_faculty_image(self):
         pixmap_loaded = False
         # Assume self.faculty.get_image_path() returns an absolute, verified path or None
         image_path = self.faculty.get_image_path() if hasattr(self.faculty, 'get_image_path') else None
 
-        if image_path: # If model provides a valid path
+        if image_path:  # If model provides a valid path
             try:
                 pixmap = QPixmap(image_path)
                 if not pixmap.isNull():
                     self.image_label.setPixmap(pixmap)
                     pixmap_loaded = True
                 else:
-                    logger.warning(f"Could not load image for faculty {self.faculty.name} from provided path: {image_path} (pixmap isNull)")
+                    logger.warning(
+                        f"Could not load image for faculty {self.faculty.name} from provided path: {image_path} (pixmap isNull)")
             except Exception as e:
-                logger.error(f"Error loading faculty image for {self.faculty.name} from {image_path}: {str(e)}")
-        
+                logger.error(
+                    f"Error loading faculty image for {self.faculty.name} from {image_path}: {str(e)}")
+
         if not pixmap_loaded:
             # Fallback to default icon
             try:
                 # Assuming IconProvider.get_icon returns a QIcon object
-                default_qicon = IconProvider.get_icon(Icons.USER) 
+                default_qicon = IconProvider.get_icon(Icons.USER)
                 if default_qicon and not default_qicon.isNull():
-                    self.image_label.setPixmap(default_qicon.pixmap(QSize(60, 60))) # Specify size for pixmap
+                    self.image_label.setPixmap(default_qicon.pixmap(
+                        QSize(60, 60)))  # Specify size for pixmap
                     # pixmap_loaded = True # Not strictly needed to set true here as it's a fallback
                 else:
-                    logger.warning(f"Default user icon (Icons.USER) could not be loaded or is null. Using theme placeholder for {self.faculty.name}.")
+                    logger.warning(
+                        f"Default user icon (Icons.USER) could not be loaded or is null. Using theme placeholder for {self.faculty.name}.")
                     fallback_pixmap = QPixmap(QSize(60, 60))
-                    fallback_pixmap.fill(QColor(self.theme.BG_SECONDARY)) 
+                    fallback_pixmap.fill(QColor(self.theme.BG_SECONDARY))
                     self.image_label.setPixmap(fallback_pixmap)
             except Exception as e:
-                logger.error(f"Exception while trying to load default user icon for {self.faculty.name}: {str(e)}")
+                logger.error(
+                    f"Exception while trying to load default user icon for {self.faculty.name}: {str(e)}")
                 fallback_pixmap = QPixmap(QSize(60, 60))
                 fallback_pixmap.fill(QColor(self.theme.BG_SECONDARY))
                 self.image_label.setPixmap(fallback_pixmap)
@@ -230,6 +242,7 @@ class FacultyCard(QFrame):
         """
         self.consultation_requested.emit(self.faculty)
 
+
 class DashboardWindow(BaseWindow):
     """
     Main dashboard window with faculty availability display and consultation request functionality.
@@ -238,9 +251,9 @@ class DashboardWindow(BaseWindow):
     consultation_requested = pyqtSignal(object, str, str)
 
     def __init__(self, student=None, parent=None):
-        self.student = student # Set self.student BEFORE calling super().__init__
-        self.theme = ConsultEaseTheme() # Add theme instance
-        super().__init__(parent) # Now BaseWindow.__init__ can call init_ui, which can access self.student
+        self.student = student  # Set self.student BEFORE calling super().__init__
+        self.theme = ConsultEaseTheme()  # Add theme instance
+        super().__init__(parent)  # Now BaseWindow.__init__ can call init_ui, which can access self.student
         # self.student = student # No longer needed here
 
         # Get controller instances (now singletons)
@@ -249,17 +262,19 @@ class DashboardWindow(BaseWindow):
 
         # UI elements for faculty grid feedback
         self.loading_label = QLabel("Loading faculty data...")
-        self.loading_label.setStyleSheet(f"font-size: {self.theme.FONT_SIZE_LARGE}pt; color: {self.theme.TEXT_SECONDARY}; padding: 30px;")
+        self.loading_label.setStyleSheet(
+            f"font-size: {self.theme.FONT_SIZE_LARGE}pt; color: {self.theme.TEXT_SECONDARY}; padding: 30px;")
         self.loading_label.setAlignment(Qt.AlignCenter)
         self.loading_label.setVisible(False)
 
         self.no_results_label = QLabel("No faculty members found matching your criteria.")
-        self.no_results_label.setStyleSheet(f"font-size: {self.theme.FONT_SIZE_LARGE}pt; color: {self.theme.TEXT_SECONDARY}; padding: 30px; background-color: {self.theme.BG_SECONDARY}; border-radius: {self.theme.BORDER_RADIUS_LARGE}px;")
+        self.no_results_label.setStyleSheet(
+            f"font-size: {self.theme.FONT_SIZE_LARGE}pt; color: {self.theme.TEXT_SECONDARY}; padding: 30px; background-color: {self.theme.BG_SECONDARY}; border-radius: {self.theme.BORDER_RADIUS_LARGE}px;")
         self.no_results_label.setAlignment(Qt.AlignCenter)
         self.no_results_label.setVisible(False)
-        
+
         # Store faculty cards to manage them directly
-        self._faculty_card_map = {} # Changed from _faculty_cards_widgets list to a map
+        self._faculty_card_map = {}  # Changed from _faculty_cards_widgets list to a map
 
         # Initialize UI components - REMOVED as super().__init__ calls init_ui polymorphicly
         # self.init_ui()
@@ -278,7 +293,7 @@ class DashboardWindow(BaseWindow):
             logger.info(f"Dashboard initialized for student: ID={student.id}, Name={student.name}")
         else:
             logger.warning("Dashboard initialized without student information")
-        
+
         # Initial population of faculty grid
         self.refresh_faculty_status()
 
@@ -290,7 +305,7 @@ class DashboardWindow(BaseWindow):
         main_widget = QWidget()
         self.setCentralWidget(main_widget)
         main_layout = QVBoxLayout(main_widget)
-        main_layout.setContentsMargins(20, 20, 20, 20) # Overall padding
+        main_layout.setContentsMargins(20, 20, 20, 20)  # Overall padding
         main_layout.setSpacing(15)
 
         # --- Header Area ---
@@ -305,25 +320,30 @@ class DashboardWindow(BaseWindow):
             }}
         """)
         header_layout = QHBoxLayout(header_frame)
-        header_layout.setContentsMargins(0,0,0,0)
+        header_layout.setContentsMargins(0, 0, 0, 0)
 
         self.logo_label = QLabel()
         # Assuming IconProvider.get_icon("logo_light") for a logo suitable for dark background
-        logo_icon = IconProvider.get_icon(Icons.LOGO_LIGHT if hasattr(Icons, 'LOGO_LIGHT') else Icons.APP_ICON, QSize(50,50))
+        logo_icon = IconProvider.get_icon(
+            Icons.LOGO_LIGHT if hasattr(
+                Icons, 'LOGO_LIGHT') else Icons.APP_ICON, QSize(
+                50, 50))
         if logo_icon and not logo_icon.isNull():
-             self.logo_label.setPixmap(logo_icon.pixmap(QSize(50,50)))
+            self.logo_label.setPixmap(logo_icon.pixmap(QSize(50, 50)))
         else:
-            self._set_fallback_logo(QSize(50,50), self.theme.TEXT_LIGHT) # Light fallback for dark bg
+            # Light fallback for dark bg
+            self._set_fallback_logo(QSize(50, 50), self.theme.TEXT_LIGHT)
         header_layout.addWidget(self.logo_label)
 
         title_label = QLabel("ConsultEase Dashboard")
-        title_label.setStyleSheet(f"font-size: {self.theme.FONT_SIZE_XXLARGE}pt; font-weight: bold; color: {self.theme.TEXT_LIGHT};")
+        title_label.setStyleSheet(
+            f"font-size: {self.theme.FONT_SIZE_XXLARGE}pt; font-weight: bold; color: {self.theme.TEXT_LIGHT};")
         header_layout.addWidget(title_label)
         header_layout.addStretch(1)
 
         # Logout Button in Header
         self.logout_button = QPushButton("Logout")
-        self.logout_button.setIcon(IconProvider.get_icon(Icons.LOGOUT, QSize(20,20)))
+        self.logout_button.setIcon(IconProvider.get_icon(Icons.LOGOUT, QSize(20, 20)))
         self.logout_button.setFixedWidth(120)
         self.logout_button.setStyleSheet(f"""
             QPushButton {{
@@ -346,12 +366,12 @@ class DashboardWindow(BaseWindow):
         search_filter_frame = QFrame()
         search_filter_frame.setObjectName("searchFilterFrame")
         search_filter_layout = QHBoxLayout(search_filter_frame)
-        search_filter_layout.setContentsMargins(0, 10, 0, 5) # Top/bottom margin for this section
+        search_filter_layout.setContentsMargins(0, 10, 0, 5)  # Top/bottom margin for this section
         search_filter_layout.setSpacing(10)
 
         self.search_bar = QLineEdit()
         self.search_bar.setPlaceholderText("Search faculty by name or department...")
-        self.search_bar.setFixedHeight(self.theme.TOUCH_MIN_HEIGHT + 5) # Slightly taller
+        self.search_bar.setFixedHeight(self.theme.TOUCH_MIN_HEIGHT + 5)  # Slightly taller
         self.search_bar.setStyleSheet(f"""
             QLineEdit {{
                 border: 1px solid {self.theme.BORDER_COLOR};
@@ -365,7 +385,7 @@ class DashboardWindow(BaseWindow):
             }}
         """)
         self.search_bar.textChanged.connect(self.filter_faculty)
-        search_filter_layout.addWidget(self.search_bar, 2) # Search bar takes more space
+        search_filter_layout.addWidget(self.search_bar, 2)  # Search bar takes more space
 
         self.filter_combo = QComboBox()
         self.filter_combo.addItems(["All Faculty", "Available Only", "Unavailable Only"])
@@ -404,7 +424,8 @@ class DashboardWindow(BaseWindow):
                 padding: 5px;
             }}
         """)
-        self.filter_combo.currentIndexChanged.connect(self.filter_faculty) # Use currentIndexChanged for QComboBox
+        self.filter_combo.currentIndexChanged.connect(
+            self.filter_faculty)  # Use currentIndexChanged for QComboBox
         search_filter_layout.addWidget(self.filter_combo, 1)
         main_layout.addWidget(search_filter_frame)
 
@@ -432,17 +453,17 @@ class DashboardWindow(BaseWindow):
             }}
             QScrollBar:vertical {{
                 border: none;
-                background: {self.theme.SCROLLBAR_BG_COLOR if hasattr(self.theme, 'SCROLLBAR_BG_COLOR') else '#f0f0f0'}; 
+                background: {self.theme.SCROLLBAR_BG_COLOR if hasattr(self.theme, 'SCROLLBAR_BG_COLOR') else '#f0f0f0'};
                 width: 15px;
                 margin: 0px;
             }}
             QScrollBar::handle:vertical {{
-                background: {self.theme.SCROLLBAR_HANDLE_COLOR if hasattr(self.theme, 'SCROLLBAR_HANDLE_COLOR') else '#adb5bd'}; 
+                background: {self.theme.SCROLLBAR_HANDLE_COLOR if hasattr(self.theme, 'SCROLLBAR_HANDLE_COLOR') else '#adb5bd'};
                 min-height: 30px;
                 border-radius: {self.theme.BORDER_RADIUS_NORMAL if hasattr(self.theme, 'BORDER_RADIUS_NORMAL') else '7px'};
             }}
             QScrollBar::handle:vertical:hover {{
-                background: {self.theme.SCROLLBAR_HANDLE_HOVER_COLOR if hasattr(self.theme, 'SCROLLBAR_HANDLE_HOVER_COLOR') else '#868e96'}; 
+                background: {self.theme.SCROLLBAR_HANDLE_HOVER_COLOR if hasattr(self.theme, 'SCROLLBAR_HANDLE_HOVER_COLOR') else '#868e96'};
             }}
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
                 height: 0px;
@@ -451,7 +472,7 @@ class DashboardWindow(BaseWindow):
             QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
                 background: none;
             }}
-            QScrollBar:horizontal {{ 
+            QScrollBar:horizontal {{
                 border: none;
                 background: {self.theme.SCROLLBAR_BG_COLOR if hasattr(self.theme, 'SCROLLBAR_BG_COLOR') else '#f0f0f0'};
                 height: 15px;
@@ -476,19 +497,22 @@ class DashboardWindow(BaseWindow):
 
         self.faculty_cards_widget = QWidget()
         self.faculty_grid_layout = QGridLayout(self.faculty_cards_widget)
-        self.faculty_grid_layout.setSpacing(20) # Spacing between cards
-        self.faculty_grid_layout.setContentsMargins(15,15,15,15) # Padding within the scroll area content
+        self.faculty_grid_layout.setSpacing(20)  # Spacing between cards
+        self.faculty_grid_layout.setContentsMargins(
+            15, 15, 15, 15)  # Padding within the scroll area content
         self.faculty_grid_layout.setAlignment(Qt.AlignTop | Qt.AlignLeft)
         self.scroll_area.setWidget(self.faculty_cards_widget)
         self.content_splitter.addWidget(self.scroll_area)
 
         # Right side: Consultation Panel
-        self.consultation_panel = ConsultationPanel(self.student) # Already styled in its own class
-        self.consultation_panel.consultation_requested.connect(self.handle_consultation_request_feedback)
-        self.consultation_panel.consultation_cancelled.connect(self.handle_consultation_cancel_feedback)
+        self.consultation_panel = ConsultationPanel(self.student)  # Already styled in its own class
+        self.consultation_panel.consultation_requested.connect(
+            self.handle_consultation_request_feedback)
+        self.consultation_panel.consultation_cancelled.connect(
+            self.handle_consultation_cancel_feedback)
         self.content_splitter.addWidget(self.consultation_panel)
-        
-        main_layout.addWidget(self.content_splitter, 1) # Splitter takes remaining space
+
+        main_layout.addWidget(self.content_splitter, 1)  # Splitter takes remaining space
 
         # Restore splitter state or set defaults
         screen_width = QApplication.primaryScreen().geometry().width() if QApplication.primaryScreen() else 1280
@@ -510,7 +534,7 @@ class DashboardWindow(BaseWindow):
         Args:
             faculties (list): List of faculty objects
         """
-        self.setUpdatesEnabled(False) # Temporarily disable updates for performance
+        self.setUpdatesEnabled(False)  # Temporarily disable updates for performance
 
         try:
             self.loading_label.setVisible(False)
@@ -523,10 +547,10 @@ class DashboardWindow(BaseWindow):
             ids_to_remove = current_map_ids - new_faculty_ids
             for faculty_id in ids_to_remove:
                 card_to_delete = self._faculty_card_map.pop(faculty_id)
-                if card_to_delete: # Ensure it exists
+                if card_to_delete:  # Ensure it exists
                     self.faculty_grid_layout.removeWidget(card_to_delete)
                     card_to_delete.deleteLater()
-            
+
             # Update existing cards and create new ones
             ordered_cards_for_layout = []
             for faculty in faculties:
@@ -540,7 +564,8 @@ class DashboardWindow(BaseWindow):
                 ordered_cards_for_layout.append(card)
 
             # Clear current layout (widgets are managed by _faculty_card_map now)
-            # Detach widgets from layout without deleting them if they are in ordered_cards_for_layout
+            # Detach widgets from layout without deleting them if they are in
+            # ordered_cards_for_layout
             current_widgets_in_layout = []
             for i in reversed(range(self.faculty_grid_layout.count())):
                 item = self.faculty_grid_layout.itemAt(i)
@@ -549,43 +574,46 @@ class DashboardWindow(BaseWindow):
                     current_widgets_in_layout.append(widget)
                     # Detach by setting parent to None, or removeWidget.
                     # removeWidget also sets parent to None if widget is child of layout's parent.
-                    self.faculty_grid_layout.removeWidget(widget) 
+                    self.faculty_grid_layout.removeWidget(widget)
                     # widget.setParent(None) # Alternative, if removeWidget isn't enough
                     # Do not deleteLater here if it's an FacultyCard we might re-add
 
             # Re-populate the grid with the ordered cards
             if not ordered_cards_for_layout:
-                self.faculty_grid_layout.addWidget(self.no_results_label, 0, 0, 1, 1, Qt.AlignCenter) # Span if max_cols known
+                self.faculty_grid_layout.addWidget(
+                    self.no_results_label, 0, 0, 1, 1, Qt.AlignCenter)  # Span if max_cols known
                 self.no_results_label.setVisible(True)
             else:
                 scroll_area_width = self.scroll_area.viewport().width() if self.scroll_area.viewport() else 600
                 card_plus_spacing = 260 + self.faculty_grid_layout.spacing()
                 max_cols = max(1, int(scroll_area_width / card_plus_spacing))
-                
+
                 row, col = 0, 0
                 for card in ordered_cards_for_layout:
                     # Ensure widget is not already in a layout if removeWidget didn't reparent it fully.
                     # Or, ensure it's properly parented to self.faculty_cards_widget
-                    if card.parent() != self.faculty_cards_widget: # Check if it needs reparenting
-                        card.setParent(self.faculty_cards_widget) # Ensure correct parent for layout
-                    
+                    if card.parent() != self.faculty_cards_widget:  # Check if it needs reparenting
+                        # Ensure correct parent for layout
+                        card.setParent(self.faculty_cards_widget)
+
                     self.faculty_grid_layout.addWidget(card, row, col)
-                    card.setVisible(True) # Ensure it's visible if it was hidden
+                    card.setVisible(True)  # Ensure it's visible if it was hidden
                     col += 1
                     if col >= max_cols:
                         col = 0
                         row += 1
-                
+
                 # Add stretch to fill remaining space
                 if ordered_cards_for_layout:
                     self.faculty_grid_layout.setRowStretch(row + 1, 1)
-                    self.faculty_grid_layout.setColumnStretch(max_cols, 1) # Stretch column beyond last item if not full
-
+                    self.faculty_grid_layout.setColumnStretch(
+                        max_cols, 1)  # Stretch column beyond last item if not full
 
         finally:
             self.setUpdatesEnabled(True)
-            self.faculty_cards_widget.adjustSize() # Adjust size of the container for the grid
-            # QApplication.processEvents() # Usually not needed if updatesEnabled(True) is handled correctly
+            self.faculty_cards_widget.adjustSize()  # Adjust size of the container for the grid
+            # QApplication.processEvents() # Usually not needed if
+            # updatesEnabled(True) is handled correctly
 
     def filter_faculty(self):
         """
@@ -611,13 +639,15 @@ class DashboardWindow(BaseWindow):
         """
         try:
             search_text = self.search_bar.text().strip().lower()
-            filter_value = self.filter_combo.currentData() # Using currentData set earlier
+            filter_value = self.filter_combo.currentData()  # Using currentData set earlier
 
             # Determine availability filter based on combo box selection
             filter_available_bool = None
-            if filter_value == "available": filter_available_bool = True
-            elif filter_value == "unavailable": filter_available_bool = False
-            
+            if filter_value == "available":
+                filter_available_bool = True
+            elif filter_value == "unavailable":
+                filter_available_bool = False
+
             faculties = self.faculty_controller.get_all_faculty(
                 filter_available=filter_available_bool,
                 search_term=search_text
@@ -635,13 +665,16 @@ class DashboardWindow(BaseWindow):
         """
         try:
             # Show loading label if it's the first load or a significant delay is expected
-            # For now, relying on fast updates, but could add self.loading_label.setVisible(True) here
+            # For now, relying on fast updates, but could add
+            # self.loading_label.setVisible(True) here
 
             search_text = self.search_bar.text().strip().lower()
             filter_value = self.filter_combo.currentData()
             filter_available_bool = None
-            if filter_value == "available": filter_available_bool = True
-            elif filter_value == "unavailable": filter_available_bool = False
+            if filter_value == "available":
+                filter_available_bool = True
+            elif filter_value == "unavailable":
+                filter_available_bool = False
 
             faculties = self.faculty_controller.get_all_faculty(
                 filter_available=filter_available_bool,
@@ -649,16 +682,20 @@ class DashboardWindow(BaseWindow):
             )
 
             current_data_snapshot = self._extract_faculty_data(faculties)
-            if hasattr(self, '_current_faculty_data') and set(self._current_faculty_data) == set(current_data_snapshot):
+            if hasattr(self, '_current_faculty_data') and set(
+                    self._current_faculty_data) == set(current_data_snapshot):
                 self._consecutive_no_changes += 1
-                logger.debug(f"No faculty status changes detected ({self._consecutive_no_changes} consecutive).")
+                logger.debug(
+                    f"No faculty status changes detected ({self._consecutive_no_changes} consecutive).")
                 if self._consecutive_no_changes >= 3 and self.refresh_timer.interval() < self._max_refresh_interval:
-                    new_interval = min(self.refresh_timer.interval() + 60000, self._max_refresh_interval)
+                    new_interval = min(
+                        self.refresh_timer.interval() + 60000,
+                        self._max_refresh_interval)
                     self.refresh_timer.setInterval(new_interval)
                     logger.debug(f"Reduced refresh frequency to {new_interval/1000}s.")
                 # self.loading_label.setVisible(False) # Hide loading if it was shown
                 return
-            
+
             self._consecutive_no_changes = 0
             if self.refresh_timer.interval() > get_config().get('ui.dashboard_refresh_ms', 120000):
                 self.refresh_timer.setInterval(get_config().get('ui.dashboard_refresh_ms', 120000))
@@ -673,7 +710,8 @@ class DashboardWindow(BaseWindow):
             logger.error(f"Error refreshing faculty status: {str(e)}")
             # self.loading_label.setVisible(False)
             if "Connection refused" in str(e) or "Database error" in str(e):
-                 self.show_notification("Error refreshing faculty status. Check connection.", "error")
+                self.show_notification(
+                    "Error refreshing faculty status. Check connection.", "error")
             self._consecutive_no_changes = 0
 
     def _extract_faculty_data(self, faculties):
@@ -727,24 +765,27 @@ class DashboardWindow(BaseWindow):
         # Also populate the dropdown with all available faculty
         try:
             logger.info(f"Showing consultation form for faculty: {faculty.name}")
-            
+
             # Load available faculty for the dropdown
-            available_faculty = self.faculty_controller.get_all_faculty(filter_available=True) # Or get all faculty if selection should be wider
+            available_faculty = self.faculty_controller.get_all_faculty(
+                filter_available=True)  # Or get all faculty if selection should be wider
             if not available_faculty:
                 logger.warning("No faculty available for consultation form dropdown.")
                 # Keep a list of all faculty as a fallback, even if unavailable, they can be selected
                 # but the form itself should prevent submission if they are not truly available.
                 all_faculty = self.faculty_controller.get_all_faculty()
-                if not all_faculty: # Should not happen if DB has faculty
-                    NotificationManager.show_message(self, "Error", "No faculty found in the system.", NotificationManager.ERROR)
+                if not all_faculty:  # Should not happen if DB has faculty
+                    NotificationManager.show_message(
+                        self, "Error", "No faculty found in the system.", NotificationManager.ERROR)
                     return
-                available_faculty = all_faculty # Use all as fallback, form will handle availability check.
+                # Use all as fallback, form will handle availability check.
+                available_faculty = all_faculty
 
             # Pass the specific faculty and the list of available faculty to the panel
             self.consultation_panel.set_faculty_options(available_faculty)
             self.consultation_panel.set_faculty(faculty)
-            self.consultation_panel.animate_tab_change(0) # Switch to the request form tab
-            
+            self.consultation_panel.animate_tab_change(0)  # Switch to the request form tab
+
             # Ensure the consultation panel is visible and focused
             self.consultation_panel.setVisible(True)
         except Exception as e:
@@ -754,7 +795,7 @@ class DashboardWindow(BaseWindow):
     def handle_consultation_request_feedback(self, consultation, message, course_code):
         """
         Handle consultation request submission.
-        This method is now primarily for showing user feedback after the ConsultationPanel 
+        This method is now primarily for showing user feedback after the ConsultationPanel
         has handled the actual creation logic.
 
         Args:
@@ -778,11 +819,13 @@ class DashboardWindow(BaseWindow):
             # This might be redundant if ConsultationPanel already refreshes its history tab
             # after successful submission, but ensures consistency.
             self.consultation_panel.refresh_history()
-            
+
         except Exception as e:
             # This exception handling might be for cases where faculty object is malformed for the message string,
-            # or if refresh_history itself fails, though create_consultation errors are handled in ConsultationPanel.
-            logger.error(f"Error in DashboardWindow.handle_consultation_request (post-submission feedback): {str(e)}")
+            # or if refresh_history itself fails, though create_consultation errors
+            # are handled in ConsultationPanel.
+            logger.error(
+                f"Error in DashboardWindow.handle_consultation_request (post-submission feedback): {str(e)}")
             QMessageBox.warning(
                 self,
                 "Consultation Request",
@@ -814,20 +857,24 @@ class DashboardWindow(BaseWindow):
         """
         Restore the splitter state from settings.
         """
-        if default_sizes is None: default_sizes = [600, 400]
+        if default_sizes is None:
+            default_sizes = [600, 400]
         settings = QSettings("ConsultEase", "DashboardWindow")
         sizes = settings.value("splitterSizes", default_sizes, type=list)
         # Ensure sizes are integers
         try:
             sizes = [int(s) for s in sizes]
-            if len(sizes) == 2 and all(isinstance(s, int) for s in sizes) and sum(sizes) > 100: # Basic sanity check
-                 self.content_splitter.setSizes(sizes)
-                 logger.debug(f"Restored splitter sizes: {sizes}")
+            if len(sizes) == 2 and all(isinstance(s, int)
+                                       for s in sizes) and sum(sizes) > 100:  # Basic sanity check
+                self.content_splitter.setSizes(sizes)
+                logger.debug(f"Restored splitter sizes: {sizes}")
             else:
-                logger.warning(f"Invalid splitter sizes from settings: {sizes}. Using defaults: {default_sizes}")
+                logger.warning(
+                    f"Invalid splitter sizes from settings: {sizes}. Using defaults: {default_sizes}")
                 self.content_splitter.setSizes(default_sizes)
         except Exception as e:
-            logger.error(f"Error restoring splitter state (sizes: {sizes}): {e}. Using defaults: {default_sizes}")
+            logger.error(
+                f"Error restoring splitter state (sizes: {sizes}): {e}. Using defaults: {default_sizes}")
             self.content_splitter.setSizes(default_sizes)
 
     def logout(self):
@@ -903,13 +950,15 @@ class DashboardWindow(BaseWindow):
                 self.show_consultation_form_for_faculty(faculty)
             else:
                 logger.warning("No available faculty found for simulation")
-                self.show_notification("No available faculty found. Please try again later.", "error")
+                self.show_notification(
+                    "No available faculty found. Please try again later.", "error")
         except Exception as e:
             logger.error(f"Error simulating consultation request: {str(e)}")
             self.show_notification("Error simulating consultation request", "error")
 
-    def _set_fallback_logo(self, size=QSize(64,64), color=None):
-        if color is None: color = QColor(self.theme.PRIMARY_COLOR)
+    def _set_fallback_logo(self, size=QSize(64, 64), color=None):
+        if color is None:
+            color = QColor(self.theme.PRIMARY_COLOR)
         fallback_pixmap = QPixmap(size)
         fallback_pixmap.fill(color)
         # Potentially draw initials or a generic icon on the pixmap here

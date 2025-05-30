@@ -1,3 +1,5 @@
+from central_system.utils.theme import ConsultEaseTheme  # Added import
+from central_system.utils.icons import IconProvider, Icons  # Import IconProvider and Icons
 from PyQt5.QtWidgets import (QMainWindow, QDesktopWidget, QShortcut, QPushButton,
                              QStatusBar, QApplication, QLineEdit, QTextEdit,
                              QPlainTextEdit, QComboBox)
@@ -11,10 +13,9 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))))
 
 # Import utilities
-from central_system.utils.icons import IconProvider, Icons  # Import IconProvider and Icons
-from central_system.utils.theme import ConsultEaseTheme # Added import
 
 logger = logging.getLogger(__name__)
+
 
 class BaseWindow(QMainWindow):
     """
@@ -29,7 +30,7 @@ class BaseWindow(QMainWindow):
 
         # Basic window setup
         self.setWindowTitle("ConsultEase")
-        self.setGeometry(100, 100, 1024, 768) # Default size
+        self.setGeometry(100, 100, 1024, 768)  # Default size
 
         # Set application icon (use helper from icons module)
         # If Icons.APP_ICON is not defined, use a generic name like "app_icon"
@@ -60,7 +61,8 @@ class BaseWindow(QMainWindow):
         self.apply_touch_friendly_style()
 
         # Add keyboard toggle button to the status bar
-        self.statusBar().setStyleSheet(f"QStatusBar {{ border-top: 1px solid {ConsultEaseTheme.BORDER_COLOR_LIGHT}; }}")
+        self.statusBar().setStyleSheet(
+            f"QStatusBar {{ border-top: 1px solid {ConsultEaseTheme.BORDER_COLOR_LIGHT}; }}")
 
         # Create keyboard toggle button with icon if available
         self.keyboard_toggle_button = QPushButton("⌨ Keyboard")
@@ -88,7 +90,7 @@ class BaseWindow(QMainWindow):
             keyboard_icon = IconProvider.get_icon("keyboard")
             if keyboard_icon and not keyboard_icon.isNull():
                 self.keyboard_toggle_button.setIcon(keyboard_icon)
-        except:
+        except BaseException:
             # If icon not available, just use text
             pass
 
@@ -196,7 +198,7 @@ class BaseWindow(QMainWindow):
             self._toggle_keyboard()
         # Let F11 handle fullscreen toggle via QShortcut
         elif event.key() == Qt.Key_F11:
-            pass # Handled by self.fullscreen_shortcut
+            pass  # Handled by self.fullscreen_shortcut
         else:
             super().keyPressEvent(event)
 
@@ -210,9 +212,11 @@ class BaseWindow(QMainWindow):
             app.keyboard_manager.toggle()
             # Update button text based on new state
             is_now_visible = app.keyboard_manager.is_visible()
-            self.keyboard_toggle_button.setText(f"⌨ {'Hide' if is_now_visible else 'Show'} Keyboard")
+            self.keyboard_toggle_button.setText(
+                f"⌨ {'Hide' if is_now_visible else 'Show'} Keyboard")
         else:
-            logger.warning("KeyboardManager not found on QApplication instance. Cannot toggle keyboard.")
+            logger.warning(
+                "KeyboardManager not found on QApplication instance. Cannot toggle keyboard.")
 
     def toggle_fullscreen(self):
         """
@@ -236,7 +240,7 @@ class BaseWindow(QMainWindow):
         # This ensures the window respects the initial fullscreen setting
         # The `fullscreen` flag is set by ConsultEaseApp
         if hasattr(self, 'fullscreen') and self.fullscreen:
-            if not self.isFullScreen(): # Avoid toggling if already fullscreen
+            if not self.isFullScreen():  # Avoid toggling if already fullscreen
                 self.showFullScreen()
 
         # The old _initialize_keyboard() call is removed from here.

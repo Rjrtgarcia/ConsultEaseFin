@@ -9,10 +9,10 @@
  * Faculty Desk Unit detects to determine presence.
  */
 
-#include <Arduino.h>
-#include <NimBLEDevice.h>
-#include <NimBLEServer.h>
-#include <NimBLEUtils.h>
+#include <BLEDevice.h>
+#include <BLEUtils.h>
+#include <BLEBeacon.h>
+#include "config.h"
 
 // ===== Configuration =====
 const char* DEVICE_NAME = "ConsultEase-Faculty";  // BLE device name
@@ -28,84 +28,88 @@ const float ADC_REFERENCE = 3.3;                  // ADC reference voltage
 const int ADC_RESOLUTION = 4095;                  // ADC resolution
 
 // ===== Global Variables =====
-NimBLEServer* pServer = nullptr;
 bool deviceConnected = false;
 unsigned long lastBatteryCheck = 0;
 int batteryLevel = 100;
+bool lowBatteryWarning = false;
 
 // UUID used for ConsultEase faculty identification
 #define SERVICE_UUID        "91BAD35B-F3CB-4FC1-8603-88D5137892A6"
 #define CHARACTERISTIC_UUID "D9473AA3-E6F4-424B-B6E7-A5F94FDDA285"
 
-class ServerCallbacks: public NimBLEServerCallbacks {
-    void onConnect(NimBLEServer* pServer) {
-        deviceConnected = true;
-        digitalWrite(LED_PIN, HIGH);  // Turn on LED when connected
-        Serial.println("Device connected");
-    };
-
-    void onDisconnect(NimBLEServer* pServer) {
-        deviceConnected = false;
-        digitalWrite(LED_PIN, LOW);   // Turn off LED when disconnected
-        Serial.println("Device disconnected");
-        // Start advertising again
-        NimBLEAdvertising* pAdvertising = pServer->getAdvertising();
-        pAdvertising->start();
-    }
-};
+// UUID conversion helper
+static BLEUUID convertStringToUUID(const char* uuid_str) {
+  uint8_t uuid_bytes[16];
+  
+  // Parse UUID string (8-4-4-4-12 format) to bytes
+  sscanf(uuid_str, 
+         "%2hhx%2hhx%2hhx%2hhx-%2hhx%2hhx-%2hhx%2hhx-%2hhx%2hhx-%2hhx%2hhx%2hhx%2hhx%2hhx%2hhx",
+         &uuid_bytes[0], &uuid_bytes[1], &uuid_bytes[2], &uuid_bytes[3],
+         &uuid_bytes[4], &uuid_bytes[5], &uuid_bytes[6], &uuid_bytes[7],
+         &uuid_bytes[8], &uuid_bytes[9], &uuid_bytes[10], &uuid_bytes[11],
+         &uuid_bytes[12], &uuid_bytes[13], &uuid_bytes[14], &uuid_bytes[15]);
+         
+  return BLEUUID(uuid_bytes);
+}
 
 void setup() {
     // Initialize serial
-    Serial.begin(115200);
-    Serial.println("ConsultEase Faculty BLE Beacon Starting...");
+    if (ENABLE_SERIAL_DEBUG) {
+        Serial.begin(SERIAL_BAUD_RATE);
+        delay(1000);
+    }
+    
+    DEBUG_PRINTLN("===== ConsultEase Faculty BLE Beacon =====");
+    DEBUG_PRINTF("Faculty: %s (ID: %d)\n", FACULTY_NAME, FACULTY_ID);
+    DEBUG_PRINTF("Department: %s\n", FACULTY_DEPARTMENT);
+    DEBUG_PRINTF("UUID: %s\n", BEACON_UUID);
+    DEBUG_PRINTF("Major: %d, Minor: %d\n", BEACON_MAJOR, BEACON_MINOR);
     
     // Initialize LED
     pinMode(LED_PIN, OUTPUT);
     
     // Initialize BLE device
-    NimBLEDevice::init(DEVICE_NAME);
+    BLEDevice::init(DEVICE_NAME);
     
-    // Set transmit power (can be one of: ESP_PWR_LVL_N12, ESP_PWR_LVL_N9, ESP_PWR_LVL_N6,
-    // ESP_PWR_LVL_N3, ESP_PWR_LVL_N0, ESP_PWR_LVL_P3, ESP_PWR_LVL_P6, ESP_PWR_LVL_P9)
-    NimBLEDevice::setPower(ESP_PWR_LVL_P9); // Maximum power
+    // Create advertising object
+    BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
     
-    // Create the BLE Server
-    pServer = NimBLEDevice::createServer();
-    pServer->setCallbacks(new ServerCallbacks());
+    // Create an iBeacon
+    BLEBeacon oBeacon = BLEBeacon();
+    oBeacon.setManufacturerId(MANUFACTURER_ID);
+    oBeacon.setProximityUUID(convertStringToUUID(BEACON_UUID));
+    oBeacon.setMajor(BEACON_MAJOR);
+    oBeacon.setMinor(BEACON_MINOR);
+    oBeacon.setSignalPower(TX_POWER);
     
-    // Create the BLE Service
-    NimBLEService* pService = pServer->createService(SERVICE_UUID);
+    // Set the beacon data
+    BLEAdvertisementData oAdvertisementData = BLEAdvertisementData();
+    BLEAdvertisementData oScanResponseData = BLEAdvertisementData();
     
-    // Create a BLE Characteristic
-    NimBLECharacteristic* pCharacteristic = pService->createCharacteristic(
-        CHARACTERISTIC_UUID,
-        NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY
-    );
+    std::string strServiceData = "";
+    strServiceData += (char)26;     // Length
+    strServiceData += (char)0xFF;   // Type (Manufacturer Specific Data)
+    strServiceData += (char)0x4C;   // Company ID (Apple) - LSB
+    strServiceData += (char)0x00;   // Company ID (Apple) - MSB
+    strServiceData += (char)0x02;   // Beacon Type
+    strServiceData += (char)0x15;   // Length of Beacon Data
     
-    // Initial value
-    uint8_t initialValue[4] = {0x46, 0x41, 0x43, 0x31}; // "FAC1" in hex
-    pCharacteristic->setValue(initialValue, 4);
+    strServiceData += oBeacon.getData(); 
+    oAdvertisementData.addData(strServiceData);
     
-    // Start the service
-    pService->start();
-    
-    // Start advertising
-    NimBLEAdvertising* pAdvertising = pServer->getAdvertising();
-    pAdvertising->setName(DEVICE_NAME);
-    pAdvertising->setManufacturerData("CE01"); // ConsultEase identifier
-    pAdvertising->setScanResponse(true);
-    
-    // Set advertising interval (lower values = more frequent advertising, but more power consumption)
-    pAdvertising->setMinInterval(ADVERTISE_INTERVAL / 0.625);  // min interval in 0.625ms units
-    pAdvertising->setMaxInterval(ADVERTISE_INTERVAL / 0.625);  // max interval in 0.625ms units
+    // Set advertising parameters
+    pAdvertising->setAdvertisementData(oAdvertisementData);
+    pAdvertising->setScanResponseData(oScanResponseData);
+    pAdvertising->setAdvertisementType(ADV_TYPE_NONCONN_IND);
+    pAdvertising->setMinInterval(ADVERTISING_INTERVAL / 0.625);  // 0.625ms units
+    pAdvertising->setMaxInterval(ADVERTISING_INTERVAL / 0.625);
     
     // Start advertising
     pAdvertising->start();
     
-    Serial.println("BLE Advertising started");
-    Serial.print("Device MAC Address: ");
-    Serial.println(NimBLEDevice::getAddress().toString().c_str());
-    Serial.println("Setup complete! Beacon is now broadcasting.");
+    DEBUG_PRINTLN("Beacon started broadcasting!");
+    DEBUG_PRINTF("Device name: %s\n", DEVICE_NAME);
+    DEBUG_PRINTF("Advertising interval: %dms\n", ADVERTISING_INTERVAL);
     
     // Blink LED to indicate ready
     for (int i = 0; i < 5; i++) {
@@ -117,10 +121,20 @@ void setup() {
 }
 
 void loop() {
-    // Check battery level every minute
-    if (millis() - lastBatteryCheck > 60000) {
+    // Check battery level periodically if enabled
+    if (ENABLE_BATTERY_MANAGEMENT && millis() - lastBatteryCheck > BATTERY_CHECK_INTERVAL) {
+        checkBatteryLevel();
         lastBatteryCheck = millis();
-        checkBattery();
+    }
+    
+    // Print a status message every 30 seconds
+    static unsigned long lastStatusTime = 0;
+    if (millis() - lastStatusTime > 30000) {
+        DEBUG_PRINTLN("Beacon running...");
+        if (ENABLE_BATTERY_MANAGEMENT) {
+            DEBUG_PRINTF("Battery level: %d%%\n", batteryLevel);
+        }
+        lastStatusTime = millis();
     }
     
     // Blink LED occasionally to show it's working
@@ -137,32 +151,26 @@ void loop() {
     delay(100);
 }
 
-void checkBattery() {
-    // Read battery voltage (if connected)
-    if (BATTERY_PIN > 0) {
-        int adcValue = analogRead(BATTERY_PIN);
-        float voltage = (adcValue / (float)ADC_RESOLUTION) * ADC_REFERENCE * BATTERY_DIVIDER_RATIO;
-        
-        // Calculate percentage
-        float percentage = (voltage - BATTERY_MIN_VOLTAGE) / (BATTERY_MAX_VOLTAGE - BATTERY_MIN_VOLTAGE) * 100.0;
-        
-        // Constrain to 0-100%
-        batteryLevel = constrain(percentage, 0, 100);
-        
-        Serial.print("Battery: ");
-        Serial.print(voltage);
-        Serial.print("V (");
-        Serial.print(batteryLevel);
-        Serial.println("%)");
-        
-        // If battery is too low, blink rapidly to indicate charging needed
-        if (batteryLevel < 10) {
-            for (int i = 0; i < 10; i++) {
-                digitalWrite(LED_PIN, HIGH);
-                delay(100);
-                digitalWrite(LED_PIN, LOW);
-                delay(100);
-            }
-        }
+void checkBatteryLevel() {
+    // This is a simulated battery check
+    // In a real implementation, this would read from an ADC pin
+    
+    // Simulate battery drain (very slow)
+    static unsigned long lastDrain = 0;
+    if (millis() - lastDrain > 3600000) {  // Every hour
+        batteryLevel--;
+        if (batteryLevel < 0) batteryLevel = 0;
+        lastDrain = millis();
     }
+    
+    // Check for low battery warning
+    if (batteryLevel < 20 && !lowBatteryWarning) {
+        DEBUG_PRINTLN("WARNING: Low battery!");
+        lowBatteryWarning = true;
+    } else if (batteryLevel >= 20 && lowBatteryWarning) {
+        lowBatteryWarning = false;
+    }
+    
+    // In a real implementation, this would calculate battery percentage
+    // based on voltage reading from an ADC pin
 } 

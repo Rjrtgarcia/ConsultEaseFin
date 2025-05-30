@@ -1,5 +1,5 @@
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-                               QPushButton, QLineEdit, QFrame, QMessageBox, QFormLayout)
+                             QPushButton, QLineEdit, QFrame, QMessageBox, QFormLayout)
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 from PyQt5.QtGui import QIcon
 
@@ -12,6 +12,7 @@ from ..config import get_config
 from ..utils.theme import ConsultEaseTheme
 
 logger = logging.getLogger(__name__)
+
 
 class AdminLoginWindow(BaseWindow):
     """
@@ -41,13 +42,15 @@ class AdminLoginWindow(BaseWindow):
 
         # Dark header background
         header_frame = QFrame()
-        header_frame.setStyleSheet(f"background-color: {ConsultEaseTheme.BG_DARK}; color: {ConsultEaseTheme.TEXT_LIGHT};")
+        header_frame.setStyleSheet(
+            f"background-color: {ConsultEaseTheme.BG_DARK}; color: {ConsultEaseTheme.TEXT_LIGHT};")
         header_layout = QVBoxLayout(header_frame)
         header_layout.setContentsMargins(20, 20, 20, 20)
 
         # Title
         title_label = QLabel('Admin Login')
-        title_label.setStyleSheet(f'font-size: 36pt; font-weight: bold; color: {ConsultEaseTheme.TEXT_LIGHT};')
+        title_label.setStyleSheet(
+            f'font-size: 36pt; font-weight: bold; color: {ConsultEaseTheme.TEXT_LIGHT};')
         title_label.setAlignment(Qt.AlignCenter)
         header_layout.addWidget(title_label)
 
@@ -110,7 +113,8 @@ class AdminLoginWindow(BaseWindow):
 
         # Add error message label (hidden by default)
         self.error_label = QLabel('')
-        self.error_label.setStyleSheet(f'color: {ConsultEaseTheme.ERROR_COLOR}; font-weight: bold; font-size: 14pt;')
+        self.error_label.setStyleSheet(
+            f'color: {ConsultEaseTheme.ERROR_COLOR}; font-weight: bold; font-size: 14pt;')
         self.error_label.setAlignment(Qt.AlignCenter)
         self.error_label.setVisible(False)
         content_frame_layout.addWidget(self.error_label)
@@ -207,7 +211,7 @@ class AdminLoginWindow(BaseWindow):
         Handle the login attempt.
         """
         username = self.username_input.text().strip()
-        password = self.password_input.text() # No strip for password
+        password = self.password_input.text()  # No strip for password
 
         if not username or not password:
             self.show_login_error("Username and password cannot be empty.")
@@ -219,22 +223,26 @@ class AdminLoginWindow(BaseWindow):
 
             if admin_user:
                 logger.info(f"Admin login successful for user: {admin_user.username}")
-                self.error_label.setVisible(False) # Clear any previous errors
+                self.error_label.setVisible(False)  # Clear any previous errors
                 # Emit signal with admin user object (or username/ID as needed by receiver)
-                self.admin_authenticated.emit(admin_user) 
+                self.admin_authenticated.emit(admin_user)
                 # The parent or main application will handle switching to the admin dashboard
                 # For example, by connecting a slot to admin_authenticated signal.
                 # self.close() # Or let the main app manage window visibility
             else:
-                logger.warning(f"Admin login failed for user: {username}. Controller returned no user.")
-                # AdminController.authenticate should handle logging of specific failure reasons (lockout, wrong pass)
+                logger.warning(
+                    f"Admin login failed for user: {username}. Controller returned no user.")
+                # AdminController.authenticate should handle logging of specific failure
+                # reasons (lockout, wrong pass)
                 self.show_login_error("Invalid username or password, or account locked.")
                 self.password_input.clear()
                 self.username_input.selectAll()
                 self.username_input.setFocus()
 
         except Exception as e:
-            logger.error(f"Exception during admin login attempt for {username}: {str(e)}", exc_info=True)
+            logger.error(
+                f"Exception during admin login attempt for {username}: {str(e)}",
+                exc_info=True)
             self.show_login_error(f"An unexpected error occurred. Please try again.")
             self.password_input.clear()
 
@@ -257,4 +265,4 @@ class AdminLoginWindow(BaseWindow):
         # self.password_input.setProperty("keyboardOnFocus", True)
 
     # def _force_show_keyboard_for_admin(self): # Example of a removed complex keyboard method
-    #    pass 
+    #    pass

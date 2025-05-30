@@ -1,5 +1,5 @@
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-                               QPushButton, QFrame, QMessageBox, QLineEdit)
+                             QPushButton, QFrame, QMessageBox, QLineEdit)
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 from PyQt5.QtGui import QPixmap, QIcon
 import os
@@ -7,10 +7,11 @@ import logging
 
 from .base_window import BaseWindow
 from central_system.utils.theme import ConsultEaseTheme
-from ..controllers import RFIDController, StudentController # Import the controllers
-from ..config import get_config # Added import for get_config
-from ..services import get_rfid_service # Added import
-from ..utils.keyboard_manager import get_keyboard_manager # Added import
+from ..controllers import RFIDController, StudentController  # Import the controllers
+from ..config import get_config  # Added import for get_config
+from ..services import get_rfid_service  # Added import
+from ..utils.keyboard_manager import get_keyboard_manager  # Added import
+
 
 class LoginWindow(BaseWindow):
     """
@@ -22,8 +23,8 @@ class LoginWindow(BaseWindow):
     def __init__(self, parent=None):
         self.config = get_config()
         super().__init__(parent)
-        self.rfid_controller = RFIDController.instance() # Use singleton
-        self.student_controller = StudentController.instance() # Assuming it's needed
+        self.rfid_controller = RFIDController.instance()  # Use singleton
+        self.student_controller = StudentController.instance()  # Assuming it's needed
         self.rfid_service = get_rfid_service()
         self.keyboard_manager = get_keyboard_manager()
 
@@ -36,7 +37,7 @@ class LoginWindow(BaseWindow):
         self.scanning_timer = QTimer(self)
         self.scanning_timer.timeout.connect(self.update_scanning_animation)
         self.scanning_animation_frame = 0
-        self.scan_active = False # To control animation and status updates
+        self.scan_active = False  # To control animation and status updates
 
     def init_ui(self):
         """
@@ -55,19 +56,22 @@ class LoginWindow(BaseWindow):
 
         # Dark header background
         header_frame = QFrame()
-        header_frame.setStyleSheet(f"background-color: {ConsultEaseTheme.PRIMARY_COLOR}; color: {ConsultEaseTheme.TEXT_LIGHT};")
+        header_frame.setStyleSheet(
+            f"background-color: {ConsultEaseTheme.PRIMARY_COLOR}; color: {ConsultEaseTheme.TEXT_LIGHT};")
         header_layout = QVBoxLayout(header_frame)
         header_layout.setContentsMargins(20, 20, 20, 20)
 
         # Title
         title_label = QLabel("ConsultEase")
-        title_label.setStyleSheet(f"font-size: {ConsultEaseTheme.FONT_SIZE_XXLARGE}pt; font-weight: bold; color: {ConsultEaseTheme.TEXT_LIGHT};")
+        title_label.setStyleSheet(
+            f"font-size: {ConsultEaseTheme.FONT_SIZE_XXLARGE}pt; font-weight: bold; color: {ConsultEaseTheme.TEXT_LIGHT};")
         title_label.setAlignment(Qt.AlignCenter)
         header_layout.addWidget(title_label)
 
         # Instruction label
         instruction_label = QLabel("Please scan your RFID card to authenticate")
-        instruction_label.setStyleSheet(f"font-size: {ConsultEaseTheme.FONT_SIZE_LARGE}pt; color: {ConsultEaseTheme.TEXT_LIGHT};")
+        instruction_label.setStyleSheet(
+            f"font-size: {ConsultEaseTheme.FONT_SIZE_LARGE}pt; color: {ConsultEaseTheme.TEXT_LIGHT};")
         instruction_label.setAlignment(Qt.AlignCenter)
         header_layout.addWidget(instruction_label)
 
@@ -94,14 +98,16 @@ class LoginWindow(BaseWindow):
         scanning_layout.setSpacing(20)
 
         self.scanning_status_label = QLabel("Ready to Scan")
-        self.scanning_status_label.setStyleSheet(f"font-size: {ConsultEaseTheme.FONT_SIZE_XLARGE}pt; color: {ConsultEaseTheme.SECONDARY_COLOR};")
+        self.scanning_status_label.setStyleSheet(
+            f"font-size: {ConsultEaseTheme.FONT_SIZE_XLARGE}pt; color: {ConsultEaseTheme.SECONDARY_COLOR};")
         self.scanning_status_label.setAlignment(Qt.AlignCenter)
         scanning_layout.addWidget(self.scanning_status_label)
 
         self.rfid_icon_label = QLabel()
         # Ideally, we would have an RFID icon image here
         self.rfid_icon_label.setText("🔄")
-        self.rfid_icon_label.setStyleSheet(f"font-size: 48pt; color: {ConsultEaseTheme.SECONDARY_COLOR};")
+        self.rfid_icon_label.setStyleSheet(
+            f"font-size: 48pt; color: {ConsultEaseTheme.SECONDARY_COLOR};")
         self.rfid_icon_label.setAlignment(Qt.AlignCenter)
         scanning_layout.addWidget(self.rfid_icon_label)
 
@@ -213,12 +219,12 @@ class LoginWindow(BaseWindow):
         Called when the window is shown.
         Focus RFID input and register for RFID scans.
         """
-        super().showEvent(event) # Call base class method
+        super().showEvent(event)  # Call base class method
         self.rfid_input.setFocus()
         self.logger.info("LoginWindow shown, registering RFID callback.")
         self.rfid_controller.register_callback(self.handle_rfid_read)
-        self.reset_scan_ui() # Reset UI to initial scanning state
-        self.scanning_timer.start(500) # Start animation
+        self.reset_scan_ui()  # Reset UI to initial scanning state
+        self.scanning_timer.start(500)  # Start animation
         self.scan_active = True
         # Removed any direct keyboard invocation logic (e.g., process management, environment variable setting)
         # Keyboard focus is handled by the global FocusEventFilter
@@ -230,22 +236,24 @@ class LoginWindow(BaseWindow):
         """
         self.logger.info("LoginWindow hidden, unregistering RFID callback.")
         self.rfid_controller.unregister_callback(self.handle_rfid_read)
-        self.scanning_timer.stop() # Stop animation
+        self.scanning_timer.stop()  # Stop animation
         self.scan_active = False
-        super().hideEvent(event) # Call base class method
+        super().hideEvent(event)  # Call base class method
 
     def resizeEvent(self, event):
         """
         Adjust UI elements on window resize.
         """
-        super().resizeEvent(event) # Call base class method for global handling
+        super().resizeEvent(event)  # Call base class method for global handling
 
     def reset_scan_ui(self):
         """Resets the scanning UI to its initial state."""
         self.scanning_status_label.setText("Ready to Scan")
-        self.scanning_status_label.setStyleSheet(f"font-size: {ConsultEaseTheme.FONT_SIZE_XLARGE}pt; color: {ConsultEaseTheme.SECONDARY_COLOR};")
+        self.scanning_status_label.setStyleSheet(
+            f"font-size: {ConsultEaseTheme.FONT_SIZE_XLARGE}pt; color: {ConsultEaseTheme.SECONDARY_COLOR};")
         self.rfid_icon_label.setText("🔄")
-        self.rfid_icon_label.setStyleSheet(f"font-size: 48pt; color: {ConsultEaseTheme.SECONDARY_COLOR};")
+        self.rfid_icon_label.setStyleSheet(
+            f"font-size: 48pt; color: {ConsultEaseTheme.SECONDARY_COLOR};")
         self.rfid_input.clear()
         self.rfid_input.setFocus()
         self.scan_active = True
@@ -256,22 +264,23 @@ class LoginWindow(BaseWindow):
         """
         Update the scanning animation frame.
         """
-        if not self.scan_active: # Only animate if scanning is supposed to be active
-            self.rfid_icon_label.setText("➖") # Idle state
+        if not self.scan_active:  # Only animate if scanning is supposed to be active
+            self.rfid_icon_label.setText("➖")  # Idle state
             self.rfid_icon_label.setStyleSheet(f"font-size: 48pt; color: #ccc;")
             return
 
         animation_frames = ["🔄", "🔁", "🔃", "🔂"]
         self.scanning_animation_frame = (self.scanning_animation_frame + 1) % len(animation_frames)
         self.rfid_icon_label.setText(animation_frames[self.scanning_animation_frame])
-        self.rfid_icon_label.setStyleSheet(f"font-size: 48pt; color: {ConsultEaseTheme.SECONDARY_COLOR};")
+        self.rfid_icon_label.setStyleSheet(
+            f"font-size: 48pt; color: {ConsultEaseTheme.SECONDARY_COLOR};")
 
     def handle_rfid_read(self, student, rfid_uid, error_message=None):
         """
         Handle RFID read events from the RFIDController.
         The 'student' object is now directly provided by RFIDController.
         """
-        self.scanning_timer.stop() # Stop animation
+        self.scanning_timer.stop()  # Stop animation
         self.scan_active = False
 
         if error_message:
@@ -285,11 +294,13 @@ class LoginWindow(BaseWindow):
             self.logger.info(f"Student {student.name} authenticated via RFID UID: {rfid_uid}")
             self.student_authenticated.emit(student)
             self.show_success(f"Welcome, {student.name}!")
-            # No need for further DB lookup here, student object is already validated by RFIDController
+            # No need for further DB lookup here, student object is already validated
+            # by RFIDController
         else:
             # This case should ideally be handled by RFIDController returning an error_message
             # if the UID is unknown or invalid, but we'll keep a fallback.
-            self.logger.warning(f"Unknown RFID UID scanned: {rfid_uid}. Student not found by RFIDController.")
+            self.logger.warning(
+                f"Unknown RFID UID scanned: {rfid_uid}. Student not found by RFIDController.")
             self.show_error("RFID card not recognized. Please register your card or try again.")
             # Optionally, restart scanning after a delay
             QTimer.singleShot(3000, self.reset_scan_ui)
@@ -318,7 +329,8 @@ class LoginWindow(BaseWindow):
         """
         self.logger.error(f"Login UI Error: {message}")
         self.scanning_status_label.setText(message)
-        self.scanning_status_label.setStyleSheet(f"font-size: {ConsultEaseTheme.FONT_SIZE_LARGE}pt; color: {ConsultEaseTheme.ERROR_COLOR};")
+        self.scanning_status_label.setStyleSheet(
+            f"font-size: {ConsultEaseTheme.FONT_SIZE_LARGE}pt; color: {ConsultEaseTheme.ERROR_COLOR};")
         # self.rfid_icon_label.setText("❌") # Icon set by handle_rfid_read
         # self.rfid_icon_label.setStyleSheet(f"font-size: 48pt; color: {ConsultEaseTheme.ERROR_COLOR};")
 
@@ -333,13 +345,14 @@ class LoginWindow(BaseWindow):
         Simulate an RFID scan for testing purposes.
         """
         if not self.scan_active:
-            self.reset_scan_ui() # Ensure UI is ready for a new scan
+            self.reset_scan_ui()  # Ensure UI is ready for a new scan
 
         self.logger.info("Simulating RFID scan...")
         self.scanning_status_label.setText("Simulating Scan...")
         self.rfid_icon_label.setText("⏳")
-        self.rfid_icon_label.setStyleSheet(f"font-size: 48pt; color: {ConsultEaseTheme.SECONDARY_COLOR};")
-        
+        self.rfid_icon_label.setStyleSheet(
+            f"font-size: 48pt; color: {ConsultEaseTheme.SECONDARY_COLOR};")
+
         # Call the controller's simulation method
         # The controller will then invoke the registered callback (handle_rfid_read)
         self.rfid_controller.simulate_scan()
@@ -355,16 +368,17 @@ class LoginWindow(BaseWindow):
             return
 
         if not self.scan_active:
-            self.reset_scan_ui() # Ensure UI is ready for a new scan
+            self.reset_scan_ui()  # Ensure UI is ready for a new scan
 
         self.logger.info(f"Manual RFID entry submitted: {uid}")
         self.scanning_status_label.setText(f"Processing UID: {uid}...")
         self.rfid_icon_label.setText("⏳")
-        self.rfid_icon_label.setStyleSheet(f"font-size: 48pt; color: {ConsultEaseTheme.SECONDARY_COLOR};")
-        
+        self.rfid_icon_label.setStyleSheet(
+            f"font-size: 48pt; color: {ConsultEaseTheme.SECONDARY_COLOR};")
+
         # Clear the input field after submission
         self.rfid_input.clear()
-        
+
         # Let the RFIDController process this UID.
         # The controller will invoke the registered callback (handle_rfid_read)
         # with the student object or an error.

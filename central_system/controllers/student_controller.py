@@ -7,6 +7,7 @@ import re
 
 logger = logging.getLogger(__name__)
 
+
 class StudentController:
     """
     Controller for managing student data.
@@ -47,19 +48,20 @@ class StudentController:
         # Validate inputs
         if not name or not student_id or not email:
             raise ValueError("Name, student ID, and email are required")
-            
+
         # Basic email validation
         if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
             raise ValueError("Invalid email format")
-            
+
         # Validate student ID format (assuming alphanumeric with possible dashes/dots)
         if not re.match(r"^[A-Za-z0-9.\-_]{3,20}$", student_id):
-            raise ValueError("Student ID must be 3-20 alphanumeric characters (dots, dashes, underscores allowed)")
-            
+            raise ValueError(
+                "Student ID must be 3-20 alphanumeric characters (dots, dashes, underscores allowed)")
+
         # Validate name (no extremely long names, no special characters except spaces)
         if not re.match(r"^[A-Za-z0-9 ]{2,100}$", name):
             raise ValueError("Name must be 2-100 characters (letters, numbers, spaces only)")
-            
+
         # Validate RFID UID format if provided
         if rfid_uid and not re.match(r"^[A-Fa-f0-9]{4,32}$", rfid_uid):
             raise ValueError("RFID UID must be a valid hexadecimal string (4-32 characters)")
@@ -86,7 +88,8 @@ class StudentController:
         db.add(student)
         # db.commit() # Decorator handles commit on success
 
-        logger.info(f"Created new student: {student.name} (ID: {student.id}, Student ID: {student.student_id})")
+        logger.info(
+            f"Created new student: {student.name} (ID: {student.id}, Student ID: {student.student_id})")
         return student
 
     @db_operation_with_retry()
@@ -105,29 +108,32 @@ class StudentController:
 
         Returns:
             Student: The updated student object, or None if error.
-            
+
         Raises:
             ValueError: If student not found or RFID UID conflict.
         """
-        logger.info(f"Attempting to update student ID '{student_id}': Name='{name}', Department='{department}', RFID='{rfid_uid}'")
+        logger.info(
+            f"Attempting to update student ID '{student_id}': Name='{name}', Department='{department}', RFID='{rfid_uid}'")
         student = db.query(Student).filter(Student.id == student_id).first()
         if not student:
             logger.warning(f"Failed to update student. Student with ID '{student_id}' not found.")
             raise ValueError(f"Student with ID '{student_id}' not found.")
 
         # Check if the new RFID UID is already used by *another* student (case-insensitive)
-        if student.rfid_uid.lower() != rfid_uid.lower(): # Compare lowercased versions for change detection
-            existing_rfid_student = db.query(Student).filter(Student.rfid_uid.ilike(rfid_uid), Student.id != student_id).first()
+        if student.rfid_uid.lower() != rfid_uid.lower():  # Compare lowercased versions for change detection
+            existing_rfid_student = db.query(Student).filter(
+                Student.rfid_uid.ilike(rfid_uid), Student.id != student_id).first()
             if existing_rfid_student:
-                logger.warning(f"Failed to update student ID '{student_id}'. New RFID UID '{rfid_uid}' already exists for student '{existing_rfid_student.name}'.")
+                logger.warning(
+                    f"Failed to update student ID '{student_id}'. New RFID UID '{rfid_uid}' already exists for student '{existing_rfid_student.name}'.")
                 raise ValueError(f"RFID UID '{rfid_uid}' is already registered to another student.")
-        
+
         student.name = name
         student.department = department
         student.rfid_uid = rfid_uid
         # db.commit() and db.refresh() handled by decorator
         logger.info(f"DB: Successfully updated student '{student.name}' (ID: {student.id}).")
-        
+
         return student
 
     @db_operation_with_retry()
@@ -142,7 +148,7 @@ class StudentController:
 
         Returns:
             bool: True if deletion was successful, False otherwise.
-        
+
         Raises:
             ValueError: If student not found.
         """
@@ -151,12 +157,13 @@ class StudentController:
         if not student:
             logger.warning(f"Failed to delete student. Student with ID '{student_id}' not found.")
             raise ValueError(f"Student with ID '{student_id}' not found.")
-        
+
         student_name_for_log = student.name
         db.delete(student)
         # db.commit() handled by decorator
-        logger.info(f"DB: Successfully deleted student '{student_name_for_log}' (ID: {student_id}).")
-        
+        logger.info(
+            f"DB: Successfully deleted student '{student_name_for_log}' (ID: {student_id}).")
+
         return True
 
     def get_student_by_id(self, student_id: int):
@@ -216,8 +223,9 @@ class StudentController:
         finally:
             close_db()
 
+
 def get_student_controller():
     """
     Factory function to get the singleton instance of StudentController.
     """
-    return StudentController.instance() 
+    return StudentController.instance()

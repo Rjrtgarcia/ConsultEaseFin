@@ -11,4 +11,4 @@ __all__ = [
     'AdminController',
     'StudentController',
     'get_student_controller'
-] 
+]

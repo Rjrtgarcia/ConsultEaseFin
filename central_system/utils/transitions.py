@@ -13,6 +13,7 @@ from PyQt5.QtWidgets import QWidget, QGraphicsOpacityEffect, QApplication
 
 logger = logging.getLogger(__name__)
 
+
 class WindowTransitionManager:
     """
     Manages transitions between windows with compatible effects.
@@ -59,7 +60,8 @@ class WindowTransitionManager:
         else:
             # Use duration from performance preset
             self.duration = self.DURATION_PRESETS[self.performance_mode]
-            logger.info(f"Using transition duration from performance mode {self.performance_mode}: {self.duration}ms")
+            logger.info(
+                f"Using transition duration from performance mode {self.performance_mode}: {self.duration}ms")
 
         # Get transition type from environment or use default
         env_type = os.environ.get("CONSULTEASE_TRANSITION_TYPE")
@@ -96,81 +98,13 @@ class WindowTransitionManager:
             logger.info(f"Using transition setting from environment: {use_transitions}")
             return use_simple
 
-        # Check if we're on Linux and possibly using Wayland
+        # Platform-specific checks
         if sys.platform.startswith('linux'):
-            # Check for Wayland environment variables
-            for env_var in ['WAYLAND_DISPLAY', 'XDG_SESSION_TYPE']:
-                if env_var in os.environ and 'wayland' in os.environ[env_var].lower():
-                    logger.info("Detected Wayland session, using simple transitions")
-                    return True
-
-            # Check QT_QPA_PLATFORM
-            if 'QT_QPA_PLATFORM' in os.environ and 'wayland' in os.environ['QT_QPA_PLATFORM'].lower():
-                logger.info("Detected Wayland QPA platform, using simple transitions")
-                return True
-
-            # Check for low-end hardware on Linux
-            try:
-                # Check CPU info
-                with open('/proc/cpuinfo', 'r') as f:
-                    cpuinfo = f.read().lower()
-
-                    # Check for Raspberry Pi
-                    if 'raspberry pi' in cpuinfo or 'bcm2708' in cpuinfo or 'bcm2709' in cpuinfo or 'bcm2835' in cpuinfo:
-                        logger.info("Detected Raspberry Pi, using simple transitions")
-                        return True
-
-                    # Check for low-end CPUs
-                    if 'atom' in cpuinfo or 'celeron' in cpuinfo:
-                        logger.info("Detected low-end CPU, using simple transitions")
-                        return True
-
-                # Check memory (if less than 2GB, use simple transitions)
-                with open('/proc/meminfo', 'r') as f:
-                    meminfo = f.read()
-                    mem_total_line = [line for line in meminfo.split('\n') if 'MemTotal' in line]
-                    if mem_total_line:
-                        mem_kb = int(mem_total_line[0].split()[1])
-                        if mem_kb < 2000000:  # Less than 2GB
-                            logger.info(f"Detected low memory ({mem_kb/1000:.0f}MB), using simple transitions")
-                            return True
-            except Exception as e:
-                logger.debug(f"Error checking hardware capabilities: {e}")
-
-            # Check for X11 compositor
-            try:
-                result = subprocess.run(['xprop', '-root', '_NET_SUPPORTING_WM_CHECK'],
-                                      stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                if result.returncode == 0:
-                    # We have a compositor, should be safe to use advanced transitions
-                    logger.info("Detected X11 with compositor, using advanced transitions")
-                    return False
-            except:
-                # If xprop fails, we can't determine compositor status
-                pass
-
-        # Check if we're on Windows
-        if sys.platform.startswith('win'):
-            # Check Windows version
-            try:
-                win_ver = sys.getwindowsversion()
-                # Windows 10 or higher should support transitions well
-                if win_ver.major >= 10:
-                    logger.info(f"Detected Windows {win_ver.major}.{win_ver.minor}, using advanced transitions")
-                    return False
-                else:
-                    logger.info(f"Detected older Windows {win_ver.major}.{win_ver.minor}, using simple transitions")
-                    return True
-            except:
-                # If we can't determine Windows version, assume it's modern enough
-                logger.info("Detected Windows platform, using advanced transitions")
-                return False
-
-        # Check if we're on macOS
-        if sys.platform.startswith('darwin'):
-            # macOS generally supports opacity animations well
-            logger.info("Detected macOS platform, using advanced transitions")
-            return False
+            return self._check_linux_platform()
+        elif sys.platform.startswith('win'):
+            return self._check_windows_platform()
+        elif sys.platform.startswith('darwin'):
+            return self._check_macos_platform()
 
         # Check for mobile platforms
         if hasattr(sys, 'platform'):
@@ -182,6 +116,96 @@ class WindowTransitionManager:
         logger.info("Unknown platform, defaulting to simple transitions for safety")
         return True
 
+    def _check_linux_platform(self):
+        """Check Linux-specific conditions for transition support."""
+        # Check for Wayland environment variables
+        for env_var in ['WAYLAND_DISPLAY', 'XDG_SESSION_TYPE']:
+            if env_var in os.environ and 'wayland' in os.environ[env_var].lower():
+                logger.info("Detected Wayland session, using simple transitions")
+                return True
+
+        # Check QT_QPA_PLATFORM
+        if 'QT_QPA_PLATFORM' in os.environ and 'wayland' in os.environ['QT_QPA_PLATFORM'].lower():
+            logger.info("Detected Wayland QPA platform, using simple transitions")
+            return True
+
+        # Check for low-end hardware on Linux
+        if self._is_low_end_linux_hardware():
+            return True
+
+        # Check for X11 compositor
+        try:
+            result = subprocess.run(['xprop', '-root', '_NET_SUPPORTING_WM_CHECK'],
+                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            if result.returncode == 0:
+                # We have a compositor, should be safe to use advanced transitions
+                logger.info("Detected X11 with compositor, using advanced transitions")
+                return False
+        except Exception as e:
+            # If xprop fails, we can't determine compositor status
+            logger.debug(f"Error checking X11 compositor: {e}")
+
+        # Default to simple transitions on Linux if we can't determine
+        return True
+
+    def _is_low_end_linux_hardware(self):
+        """Check if running on low-end Linux hardware."""
+        try:
+            # Check CPU info
+            with open('/proc/cpuinfo', 'r') as f:
+                cpuinfo = f.read().lower()
+
+                # Check for Raspberry Pi
+                if ('raspberry pi' in cpuinfo or 'bcm2708' in cpuinfo or
+                        'bcm2709' in cpuinfo or 'bcm2835' in cpuinfo):
+                    logger.info("Detected Raspberry Pi, using simple transitions")
+                    return True
+
+                # Check for low-end CPUs
+                if 'atom' in cpuinfo or 'celeron' in cpuinfo:
+                    logger.info("Detected low-end CPU, using simple transitions")
+                    return True
+
+            # Check memory (if less than 2GB, use simple transitions)
+            with open('/proc/meminfo', 'r') as f:
+                meminfo = f.read()
+                mem_total_line = [line for line in meminfo.split('\n') if 'MemTotal' in line]
+                if mem_total_line:
+                    mem_kb = int(mem_total_line[0].split()[1])
+                    if mem_kb < 2000000:  # Less than 2GB
+                        logger.info(
+                            f"Detected low memory ({mem_kb/1000:.0f}MB), using simple transitions")
+                        return True
+        except Exception as e:
+            logger.debug(f"Error checking hardware capabilities: {e}")
+
+        return False
+
+    def _check_windows_platform(self):
+        """Check Windows-specific conditions for transition support."""
+        try:
+            win_ver = sys.getwindowsversion()
+            # Windows 10 or higher should support transitions well
+            if win_ver.major >= 10:
+                logger.info(
+                    f"Detected Windows {win_ver.major}.{win_ver.minor}, using advanced transitions")
+                return False
+            else:
+                logger.info(
+                    f"Detected older Windows {win_ver.major}.{win_ver.minor}, using simple transitions")
+                return True
+        except Exception as e:
+            # If we can't determine Windows version, assume it's modern enough
+            logger.debug(f"Error checking Windows version: {e}")
+            logger.info("Detected Windows platform, using advanced transitions")
+            return False
+
+    def _check_macos_platform(self):
+        """Check macOS-specific conditions for transition support."""
+        # macOS generally supports opacity animations well
+        logger.info("Detected macOS platform, using advanced transitions")
+        return False
+
     def fade_out_in(self, current_window, next_window, on_finished=None):
         """
         Perform a transition from current window to next window.
@@ -191,7 +215,8 @@ class WindowTransitionManager:
             next_window (QWidget): The window to transition to
             on_finished (callable, optional): Callback to execute when transition completes
         """
-        logger.info(f"Starting transition from {current_window.__class__.__name__} to {next_window.__class__.__name__}")
+        logger.info(
+            f"Starting transition from {current_window.__class__.__name__} to {next_window.__class__.__name__}")
 
         self.current_window = current_window
         self.next_window = next_window
@@ -248,8 +273,14 @@ class WindowTransitionManager:
             # Call on_finished after a short delay
             if on_finished:
                 QTimer.singleShot(100, on_finished)
+        except RuntimeError as e:
+            logger.error(f"Simple transition failed with RuntimeError: {e}")
+            # Immediate fallback
+            current_window.hide()
+            if on_finished:
+                on_finished()
         except Exception as e:
-            logger.error(f"Simple transition failed: {e}")
+            logger.error(f"Simple transition failed with unexpected error: {e}")
             # Immediate fallback
             current_window.hide()
             if on_finished:

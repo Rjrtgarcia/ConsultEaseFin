@@ -6,4 +6,4 @@ __all__ = [
     'get_mqtt_service',
     'RFIDService',
     'get_rfid_service'
-] 
+]

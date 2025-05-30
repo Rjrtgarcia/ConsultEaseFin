@@ -16,6 +16,7 @@ from central_system.config import get_config
 
 logger = logging.getLogger(__name__)
 
+
 class KeyboardManager(QObject):
     """
     Unified keyboard manager for on-screen keyboards.
@@ -85,7 +86,8 @@ class KeyboardManager(QObject):
             self.squeekboard_available = False
             self.onboard_available = False
             self.active_keyboard = None
-            logger.warning("Using fallback mode with no on-screen keyboard due to initialization error")
+            logger.warning(
+                "Using fallback mode with no on-screen keyboard due to initialization error")
 
     def _check_keyboard_available(self, keyboard_type):
         """Check if a specific keyboard is available on the system."""
@@ -93,14 +95,14 @@ class KeyboardManager(QObject):
             if keyboard_type == 'squeekboard':
                 # Check if squeekboard is installed
                 result = subprocess.run(['which', 'squeekboard'],
-                                      stdout=subprocess.PIPE,
-                                      stderr=subprocess.PIPE)
+                                        stdout=subprocess.PIPE,
+                                        stderr=subprocess.PIPE)
                 return result.returncode == 0
             elif keyboard_type == 'onboard':
                 # Check if onboard is installed
                 result = subprocess.run(['which', 'onboard'],
-                                      stdout=subprocess.PIPE,
-                                      stderr=subprocess.PIPE)
+                                        stdout=subprocess.PIPE,
+                                        stderr=subprocess.PIPE)
                 return result.returncode == 0
             else:
                 return False
@@ -119,18 +121,22 @@ class KeyboardManager(QObject):
         # Then try fallback keyboard if specified and different from preferred
         if self.fallback_keyboard and self.fallback_keyboard != self.preferred_keyboard:
             if self.fallback_keyboard == 'squeekboard' and self.squeekboard_available:
-                logger.info(f"Preferred keyboard '{self.preferred_keyboard}' not available or misconfigured, using fallback '{self.fallback_keyboard}'.")
+                logger.info(
+                    f"Preferred keyboard '{self.preferred_keyboard}' not available or misconfigured, using fallback '{self.fallback_keyboard}'.")
                 return 'squeekboard'
             elif self.fallback_keyboard == 'onboard' and self.onboard_available:
-                logger.info(f"Preferred keyboard '{self.preferred_keyboard}' not available or misconfigured, using fallback '{self.fallback_keyboard}'.")
+                logger.info(
+                    f"Preferred keyboard '{self.preferred_keyboard}' not available or misconfigured, using fallback '{self.fallback_keyboard}'.")
                 return 'onboard'
 
         # If fallback also not available or not specified, try any available
         if self.squeekboard_available:
-            logger.info(f"Preferred keyboard '{self.preferred_keyboard}' and fallback '{self.fallback_keyboard}' not available/configured, using available 'squeekboard'.")
+            logger.info(
+                f"Preferred keyboard '{self.preferred_keyboard}' and fallback '{self.fallback_keyboard}' not available/configured, using available 'squeekboard'.")
             return 'squeekboard'
         elif self.onboard_available:
-            logger.info(f"Preferred keyboard '{self.preferred_keyboard}' and fallback '{self.fallback_keyboard}' not available/configured, using available 'onboard'.")
+            logger.info(
+                f"Preferred keyboard '{self.preferred_keyboard}' and fallback '{self.fallback_keyboard}' not available/configured, using available 'onboard'.")
             return 'onboard'
 
         # No keyboard available
@@ -141,8 +147,8 @@ class KeyboardManager(QObject):
         """Check if DBus is available for controlling squeekboard."""
         try:
             result = subprocess.run(['which', 'dbus-send'],
-                                  stdout=subprocess.PIPE,
-                                  stderr=subprocess.PIPE)
+                                    stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE)
             return result.returncode == 0
         except Exception:
             return False
@@ -207,8 +213,8 @@ class KeyboardManager(QObject):
             try:
                 # Kill any existing zombie processes first
                 subprocess.run(['pkill', '-f', 'squeekboard'],
-                             stdout=subprocess.DEVNULL,
-                             stderr=subprocess.DEVNULL)
+                               stdout=subprocess.DEVNULL,
+                               stderr=subprocess.DEVNULL)
 
                 # Set up environment variables
                 env = dict(os.environ)
@@ -218,10 +224,10 @@ class KeyboardManager(QObject):
 
                 # Start squeekboard with appropriate options
                 subprocess.Popen(['squeekboard'],
-                               stdout=subprocess.DEVNULL,
-                               stderr=subprocess.DEVNULL,
-                               env=env,
-                               start_new_session=True)
+                                 stdout=subprocess.DEVNULL,
+                                 stderr=subprocess.DEVNULL,
+                                 env=env,
+                                 start_new_session=True)
 
                 # Give it a moment to start
                 time.sleep(0.5)
@@ -244,7 +250,11 @@ class KeyboardManager(QObject):
                         "dbus-send", "--type=method_call", "--dest=sm.puri.OSK0",
                         "/sm/puri/OSK0", "sm.puri.OSK0.SetVisible", "boolean:true"
                     ]
-                    result = subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    result = subprocess.run(
+                        cmd,
+                        check=True,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL)
                     if result.returncode == 0:
                         success = True
                         logger.info("Showed squeekboard via standard DBus call")
@@ -258,7 +268,8 @@ class KeyboardManager(QObject):
                             "dbus-send", "--session", "--type=method_call", "--dest=sm.puri.OSK0",
                             "/sm/puri/OSK0", "sm.puri.OSK0.SetVisible", "boolean:true"
                         ]
-                        result = subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                        result = subprocess.run(
+                            cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                         if result.returncode == 0:
                             success = True
                             logger.info("Showed squeekboard via session DBus call")
@@ -273,7 +284,8 @@ class KeyboardManager(QObject):
                             "/sm/puri/OSK0", "sm.puri.OSK0.SetVisible", "boolean:true"
                         ]
                         result = subprocess.run(cmd, capture_output=True, text=True)
-                        logger.info(f"DBus print-reply result: {result.stdout}, errors: {result.stderr}")
+                        logger.info(
+                            f"DBus print-reply result: {result.stdout}, errors: {result.stderr}")
                         success = True
                     except Exception as e:
                         logger.warning(f"Print-reply DBus call failed: {e}")
@@ -300,8 +312,8 @@ class KeyboardManager(QObject):
             if os.path.exists(script_path):
                 logger.info(f"Using keyboard script at {script_path}")
                 subprocess.Popen([script_path],
-                               stdout=subprocess.DEVNULL,
-                               stderr=subprocess.DEVNULL)
+                                 stdout=subprocess.DEVNULL,
+                                 stderr=subprocess.DEVNULL)
                 return True
             else:
                 logger.warning(f"Keyboard script not found at {script_path}")
@@ -318,7 +330,11 @@ class KeyboardManager(QObject):
                     "dbus-send", "--type=method_call", "--dest=sm.puri.OSK0",
                     "/sm/puri/OSK0", "sm.puri.OSK0.SetVisible", "boolean:false"
                 ]
-                subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                subprocess.run(
+                    cmd,
+                    check=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL)
                 logger.info("Hid squeekboard via DBus")
             except Exception as e:
                 logger.error(f"Error hiding squeekboard via DBus: {e}")
@@ -329,8 +345,8 @@ class KeyboardManager(QObject):
         """Check if squeekboard is running."""
         try:
             result = subprocess.run(['pgrep', '-f', 'squeekboard'],
-                                  stdout=subprocess.PIPE,
-                                  stderr=subprocess.PIPE)
+                                    stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE)
             return result.returncode == 0
         except Exception:
             return False
@@ -356,8 +372,8 @@ class KeyboardManager(QObject):
         try:
             # Just kill the process
             subprocess.run(['pkill', '-f', 'onboard'],
-                         stdout=subprocess.DEVNULL,
-                         stderr=subprocess.DEVNULL)
+                           stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL)
             logger.info("Killed onboard process")
         except Exception as e:
             logger.error(f"Error hiding onboard: {e}")
@@ -366,8 +382,8 @@ class KeyboardManager(QObject):
         """Check if onboard is running."""
         try:
             result = subprocess.run(['pgrep', '-f', 'onboard'],
-                                  stdout=subprocess.PIPE,
-                                  stderr=subprocess.PIPE)
+                                    stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE)
             return result.returncode == 0
         except Exception:
             return False
@@ -376,37 +392,41 @@ class KeyboardManager(QObject):
         """Force show the keyboard, ensuring it attempts to become visible."""
         logger.info(f"Force showing keyboard: {self.active_keyboard}")
         # Reset visibility flag to ensure show_keyboard logic runs
-        self.keyboard_visible = False 
+        self.keyboard_visible = False
         self.show_keyboard()
-        # The show_keyboard method itself contains fallbacks (e.g., script for squeekboard if DBus fails)
+        # The show_keyboard method itself contains fallbacks (e.g., script for
+        # squeekboard if DBus fails)
 
     def _is_squeekboard_available(self):
         """Check if squeekboard is available on the system."""
         if not self._is_linux():
             return False
-            
+
         try:
             # Define full path to which command
             WHICH_PATH = "/usr/bin/which"
-            
+
             # Check if which command exists
             if not os.path.exists(WHICH_PATH):
                 logger.warning(f"which command not found at {WHICH_PATH}")
                 return False
-                
+
             # Check if squeekboard is installed
             result = subprocess.run([WHICH_PATH, 'squeekboard'],
-                                  stdout=subprocess.PIPE,
-                                  stderr=subprocess.PIPE)
+                                    stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE)
             return result.returncode == 0
         except Exception as e:
             logger.error(f"Error checking for squeekboard: {e}")
             return False
 
 # Convenience function to get the keyboard manager instance
+
+
 def get_keyboard_manager():
     """Get the keyboard manager instance."""
     return KeyboardManager.instance()
+
 
 def install_keyboard_manager(app):
     """

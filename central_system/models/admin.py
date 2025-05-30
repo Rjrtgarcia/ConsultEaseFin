@@ -16,7 +16,10 @@ config = get_config()
 # Constants for password security - now from config with fallbacks
 MIN_PASSWORD_LENGTH = config.get('security.min_password_length', 8)
 PASSWORD_LOCKOUT_THRESHOLD = config.get('security.password_lockout_threshold', 5)
-PASSWORD_LOCKOUT_DURATION = config.get('security.password_lockout_duration', 15 * 60)  # 15 minutes in seconds
+PASSWORD_LOCKOUT_DURATION = config.get(
+    'security.password_lockout_duration',
+    15 * 60)  # 15 minutes in seconds
+
 
 class Admin(Base):
     """
@@ -28,7 +31,7 @@ class Admin(Base):
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     username = Column(String, unique=True, index=True, nullable=False)
     password_hash = Column(String, nullable=False)
-    salt = Column(String, nullable=False) # Kept for SHA256 fallback, bcrypt includes its own
+    salt = Column(String, nullable=False)  # Kept for SHA256 fallback, bcrypt includes its own
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
@@ -94,7 +97,7 @@ class Admin(Base):
             # Get work factor from config (higher is more secure but slower)
             config = get_config()
             bcrypt_rounds = config.get('security.bcrypt_rounds', 12)
-            
+
             # Generate a random salt with the configured work factor
             salt = bcrypt.gensalt(rounds=bcrypt_rounds)
             # Hash the password
@@ -147,38 +150,41 @@ class Admin(Base):
             admin = db.query(cls).filter(cls.username == username).first()
             if not admin:
                 logger.warning(f"Attempt to record login for non-existent admin: {username}")
-                return False, 0 # Or handle as per security policy
+                return False, 0  # Or handle as per security policy
 
-            current_time = datetime.datetime.utcnow() # Use datetime for comparison with DB
+            current_time = datetime.datetime.utcnow()  # Use datetime for comparison with DB
 
             # Check if currently locked
             if admin.account_locked_until and admin.account_locked_until > current_time:
                 remaining_lockout = (admin.account_locked_until - current_time).total_seconds()
-                logger.warning(f"Login attempt for already locked account {username}. Locked for {remaining_lockout:.0f} more seconds.")
+                logger.warning(
+                    f"Login attempt for already locked account {username}. Locked for {remaining_lockout:.0f} more seconds.")
                 # Do not update failed attempts if already locked and lock is still valid
                 return True, remaining_lockout
-            
+
             # Reset lock if duration has passed
             if admin.account_locked_until and admin.account_locked_until <= current_time:
-                admin.failed_login_attempts = 0 # Renamed from failed_attempts_count
+                admin.failed_login_attempts = 0  # Renamed from failed_attempts_count
                 admin.account_locked_until = None
 
             if success:
-                admin.failed_login_attempts = 0 # Renamed
+                admin.failed_login_attempts = 0  # Renamed
                 admin.account_locked_until = None
                 db.commit()
                 logger.info(f"Successful login for admin {username}. Lockout reset.")
                 return False, 0
-            else: # Failed login
-                admin.failed_login_attempts = (admin.failed_login_attempts or 0) + 1 # Renamed
-                admin.last_failed_login_at = current_time # Use the new column
-                logger.warning(f"Failed login attempt for admin {username}. Attempt #{admin.failed_login_attempts}")
+            else:  # Failed login
+                admin.failed_login_attempts = (admin.failed_login_attempts or 0) + 1  # Renamed
+                admin.last_failed_login_at = current_time  # Use the new column
+                logger.warning(
+                    f"Failed login attempt for admin {username}. Attempt #{admin.failed_login_attempts}")
 
                 if admin.failed_login_attempts >= PASSWORD_LOCKOUT_THRESHOLD:
                     lock_duration = datetime.timedelta(seconds=PASSWORD_LOCKOUT_DURATION)
                     admin.account_locked_until = current_time + lock_duration
-                    logger.warning(f"Account {username} locked due to {admin.failed_login_attempts} failed attempts. Locked until {admin.account_locked_until}.")
-                
+                    logger.warning(
+                        f"Account {username} locked due to {admin.failed_login_attempts} failed attempts. Locked until {admin.account_locked_until}.")
+
                 db.commit()
 
                 # Re-check lock status after commit
@@ -189,10 +195,12 @@ class Admin(Base):
 
         except Exception as e:
             logger.error(f"Error recording login attempt for {username}: {e}")
-            if db: db.rollback()
-            return False, 0 # Default to not locked on error to avoid unintended permanent lock
+            if db:
+                db.rollback()
+            return False, 0  # Default to not locked on error to avoid unintended permanent lock
         finally:
-            if db: close_db()
+            if db:
+                close_db()
 
     @classmethod
     def is_account_locked(cls, username):
@@ -209,7 +217,8 @@ class Admin(Base):
             current_time = datetime.datetime.utcnow()
             if admin.account_locked_until > current_time:
                 remaining_seconds = (admin.account_locked_until - current_time).total_seconds()
-                logger.info(f"Account {username} is currently locked. {remaining_seconds:.0f}s remaining.")
+                logger.info(
+                    f"Account {username} is currently locked. {remaining_seconds:.0f}s remaining.")
                 return True, remaining_seconds
             else:
                 # Lock has expired, reset it (optional, could be done on next login attempt)
@@ -221,9 +230,10 @@ class Admin(Base):
                 return False, 0
         except Exception as e:
             logger.error(f"Error checking account lock status for {username}: {e}")
-            return False, 0 # Default to not locked on error
+            return False, 0  # Default to not locked on error
         finally:
-            if db: close_db()
+            if db:
+                close_db()
 
     def to_dict(self):
         """

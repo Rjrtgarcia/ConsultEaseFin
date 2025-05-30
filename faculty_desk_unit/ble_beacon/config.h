@@ -5,33 +5,45 @@
  * Update these values to match your specific setup.
  */
 
-#ifndef CONFIG_H
-#define CONFIG_H
+#ifndef BLE_BEACON_CONFIG_H
+#define BLE_BEACON_CONFIG_H
 
-// Faculty Configuration
-#define FACULTY_ID 1  // This should match the faculty ID in the database
-#define FACULTY_NAME "Dr. John Smith"  // This should match the faculty name in the database
+// ================================
+// FACULTY BLE BEACON CONFIGURATION
+// ================================
+// This beacon is carried by the faculty member and broadcasts 
+// a unique identifier that the desk unit can recognize
 
-// BLE Configuration
-#define DEVICE_NAME "ConsultEase-Faculty"  // BLE device name
-#define ADVERTISE_INTERVAL 200  // Advertising interval in ms (lower values = more frequent advertising, but more power consumption)
+// Faculty information
+#define FACULTY_ID 1
+#define FACULTY_NAME "Dave Jomillo"
+#define FACULTY_DEPARTMENT "Helpdesk"
 
-// Battery Configuration
-#define BATTERY_PIN 34  // Analog pin for battery monitoring (set to -1 to disable)
-#define BATTERY_MIN_VOLTAGE 3.2  // Minimum battery voltage
-#define BATTERY_MAX_VOLTAGE 4.2  // Maximum battery voltage
-#define BATTERY_DIVIDER_RATIO 2.0  // Voltage divider ratio (if used)
-#define ADC_RESOLUTION 4095  // ADC resolution (12-bit for ESP32)
-#define ADC_REFERENCE 3.3  // ADC reference voltage
+// BLE iBeacon parameters
+#define BEACON_UUID "FDA50693-A4E2-4FB1-AFCF-C6EB07647825" // Keep this consistent with desk unit
+#define BEACON_MAJOR 1  // Should match faculty ID
+#define BEACON_MINOR 1  // Can be used for multiple beacons per faculty
 
-// LED Configuration
-#define LED_PIN 2  // Built-in LED pin (for status indication)
+// Broadcast parameters
+#define TX_POWER -59  // Calibrated TX power at 1m in dBm
+#define ADVERTISING_INTERVAL 200  // Advertising interval in ms (200ms = good battery life)
+#define MANUFACTURER_ID 0x4C00  // Apple's ID (standard for iBeacon)
 
-// UUID Configuration
-#define SERVICE_UUID "91BAD35B-F3CB-4FC1-8603-88D5137892A6"  // UUID for ConsultEase faculty identification
-#define CHARACTERISTIC_UUID "D9473AA3-E6F4-424B-B6E7-A5F94FDDA285"  // UUID for ConsultEase faculty characteristic
+// Battery management
+#define ENABLE_BATTERY_MANAGEMENT true
+#define SLEEP_AFTER_MINUTES 240  // Sleep after 4 hours of no movement to save battery
+#define BATTERY_CHECK_INTERVAL 60000  // Check battery level every minute
 
-// Debug Configuration
-#define DEBUG_ENABLED true  // Set to false to disable debug output
+// Device configuration
+#define DEVICE_NAME "Faculty1_Beacon"  // Bluetooth device name
 
-#endif // CONFIG_H
+// Debug settings
+#define ENABLE_SERIAL_DEBUG true
+#define SERIAL_BAUD_RATE 115200
+
+// Helper macros
+#define DEBUG_PRINT(x) if(ENABLE_SERIAL_DEBUG) Serial.print(x)
+#define DEBUG_PRINTLN(x) if(ENABLE_SERIAL_DEBUG) Serial.println(x)
+#define DEBUG_PRINTF(format, ...) if(ENABLE_SERIAL_DEBUG) Serial.printf(format, ##__VA_ARGS__)
+
+#endif // BLE_BEACON_CONFIG_H

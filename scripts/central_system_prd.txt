@@ -1,0 +1,159 @@
+# ConsultEase Central System Development and UI Design PRD
+
+## Project Overview
+ConsultEase is a student-faculty interaction system designed to streamline the consultation process in educational institutions. The central system, built on a Raspberry Pi with PyQt5, serves as the core platform for student-faculty interactions, featuring RFID authentication, real-time faculty availability tracking, consultation management, and administrative controls.
+
+This PRD focuses specifically on the central system development and UI design requirements to ensure the system is fully functional and ready for deployment.
+
+## Core Requirements
+
+### 1. System Architecture
+- Implement a layered MVC-like architecture:
+  - UI (Views) → Controllers → Services → Models/Utilities
+- Apply the Singleton pattern for core controllers (AdminController, FacultyController, ConsultationController, RFIDController, StudentController)
+- Develop a robust service layer (MQTTService, RFIDService) to encapsulate specific functionalities
+- Implement the Observer pattern using MQTT handlers and PyQt signals/slots for UI updates
+- Create a centralized configuration system using config.py and config.json
+
+### 2. Database Design & Management
+- Implement SQLAlchemy models for Admin, Faculty, Student, and Consultation entities
+- Create a database session management system with retry mechanisms
+- Develop database operation decorators for consistent error handling
+- Implement proper connection pooling and session cleanup
+- Design migration scripts for database schema updates
+
+### 3. Authentication & Security
+- Implement RFID-based authentication for students
+- Create secure username/password authentication for faculty and admins
+- Apply bcrypt for password hashing and verification
+- Implement account lockout mechanisms for failed login attempts
+- Establish secure session management
+- Configure proper file permissions and access controls
+
+### 4. User Interface Design
+- Design a consistent, intuitive UI with a light theme (#ffffff background, #0d3b66 primary, #ffc233 secondary)
+- Implement touch-optimized controls with minimum 48x48px touch targets
+- Create an auto-appearing on-screen keyboard (KeyboardManager)
+- Design clear status indicators using color coding (green for available/success, red for unavailable/error)
+- Implement confirmation dialogs for destructive actions
+- Design responsive table layouts with proper column sizing strategies
+
+### 5. Core Functionalities
+
+#### 5.1 Student Interface
+- Implement RFID authentication screen
+- Create faculty listing with real-time availability status
+- Design consultation request workflow
+- Develop consultation history view for students
+- Implement consultation cancellation functionality
+
+#### 5.2 Faculty Interface
+- Create login screen with username/password authentication
+- Implement availability status management (manual override)
+- Design consultation request notification and response system
+- Develop active consultation management (start/end)
+- Create consultation history view for faculty
+
+#### 5.3 Admin Interface
+- Implement secure admin login
+- Design user management screens (create, edit, delete for students, faculty, admins)
+- Create RFID card registration functionality
+- Develop system configuration management
+- Implement consultation logs and reporting
+- Design backup and restore functionality
+- Create Faculty Desk Unit management interface
+
+### 6. Integration Components
+- Implement MQTT service with TLS support
+- Create RFID service with hardware integration
+- Develop keyboard management service
+- Implement real-time UI update mechanisms
+- Design thread-safe state management
+
+### 7. Performance & Reliability
+- Implement proper error handling and logging (with rotation)
+- Create reconnection mechanisms for MQTT and hardware services
+- Design thread management for non-blocking operations
+- Implement resource cleanup (close_db(), RFIDService.stop(), KeyboardManager.cleanup())
+- Create caching mechanisms for frequently accessed data
+
+### 8. Deployment Readiness
+- Develop installation and setup scripts
+- Create systemd service configurations
+- Implement logging configuration with rotation
+- Design proper file permission setup
+- Create deployment documentation
+- Implement configuration validation
+- Develop backup and restore utilities
+
+### 9. UI Components & Standards
+- Create a consistent component library (buttons, inputs, tables, dialogs)
+- Implement standard table layouts with consistent column handling
+- Design modal dialogs for confirmations and actions
+- Create status indicators and notification components
+- Implement form validation with clear error messaging
+- Design responsive layouts for different screen sizes
+
+### 10. Testing & Quality Assurance
+- Implement unit tests for core components
+- Create integration tests for key workflows
+- Design simulation modes for hardware dependencies
+- Implement configuration-driven testing flags
+- Create test cases for edge conditions and error handling
+
+## Technical Specifications
+
+### Central System Technologies
+- **Platform**: Raspberry Pi 3B+ or newer
+- **OS**: Raspberry Pi OS (Debian-based)
+- **Programming Language**: Python 3.9+
+- **UI Framework**: PyQt5
+- **Database**: PostgreSQL (production), SQLite (development)
+- **ORM**: SQLAlchemy
+- **MQTT Client**: Paho MQTT
+- **RFID Integration**: evdev
+- **Configuration**: JSON-based with environment variable overrides
+- **Logging**: Python's logging module with RotatingFileHandler
+
+### UI Design Specifications
+- **Primary Color**: #0d3b66 (Dark Blue)
+- **Secondary Color**: #ffc233 (Gold)
+- **Background Color**: #ffffff (White)
+- **Error Color**: #e63946 (Red)
+- **Success Color**: #2a9d8f (Green)
+- **Font**: System default (optimized for readability)
+- **Touch Targets**: Minimum 48x48px
+- **Layout**: Responsive grid-based layout
+- **Tables**: Mixed column sizing with minimum width constraints
+- **Forms**: Consistent validation and feedback
+
+### Performance Requirements
+- System startup time: < 30 seconds
+- UI response time: < 300ms for most operations
+- RFID authentication: < 1 second
+- MQTT communication latency: < 500ms
+- Database query performance: < 200ms for standard operations
+
+## Deployment Checklist
+- Database configuration and initialization
+- MQTT broker setup with TLS certificates
+- RFID reader configuration and testing
+- Network and firewall configuration
+- Service auto-start configuration
+- Proper file permissions
+- Backup system verification
+- Performance testing under load
+- Security verification
+- User acceptance testing
+
+## Appendix: Configuration Reference
+The central system relies on a comprehensive configuration file (config.json) with the following key sections:
+- Database connection details
+- MQTT broker settings and TLS configuration
+- RFID device identifiers
+- Logging settings (level, file, max_size, backup_count)
+- UI theme preferences
+- Keyboard configuration
+- Testing and development flags
+
+This configuration system should be well-documented to ensure proper deployment and maintenance. 

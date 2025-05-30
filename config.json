@@ -1,0 +1,77 @@
+{
+  "database": {
+    "type": "sqlite",
+    "host": "localhost",
+    "port": 5432,
+    "name": "consultease.db",
+    "user": "",
+    "password": "",
+    "pool_size": 5,
+    "max_overflow": 10,
+    "pool_timeout": 30,
+    "pool_recycle": 1800,
+    "debug": false
+  },
+  "mqtt": {
+    "broker_host": "192.168.1.100",
+    "broker_port": 1883,
+    "client_id": "consultease_central",
+    "username": "faculty_desk",
+    "password": "desk_password",
+    "use_tls": false,
+    "tls_ca_certs": null,
+    "tls_certfile": null,
+    "tls_keyfile": null,
+    "tls_insecure": false,
+    "tls_version": "CLIENT_DEFAULT",
+    "tls_cert_reqs": "CERT_REQUIRED"
+  },
+  "rfid": {
+    "device_path": null,
+    "simulation_mode": false,
+    "target_vid": "ffff",
+    "target_pid": "0035"
+  },
+  "ui": {
+    "fullscreen": true,
+    "transition_type": "fade",
+    "transition_duration": 300,
+    "theme": "light"
+  },
+  "keyboard": {
+    "type": "squeekboard",
+    "fallback": "onboard"
+  },
+  "security": {
+    "min_password_length": 8,
+    "password_lockout_threshold": 5,
+    "password_lockout_duration": 900,
+    "session_timeout": 1800,
+    "default_admin_password": null,
+    "bcrypt_rounds": 12,
+    "enforce_password_complexity": true
+  },
+  "logging": {
+    "level": "INFO",
+    "file": "consultease.log",
+    "max_size": 10485760,
+    "backup_count": 5,
+    "rfid_level": "INFO"
+  },
+  "system": {
+    "auto_start": true,
+    "faculty_image_dir": "images/faculty",
+    "ensure_test_faculty_available": false
+  },
+  "faculty_desk": {
+    "grace_period_enabled": true,
+    "grace_period_duration_ms": 60000,
+    "ble_reconnect_attempts": 12,
+    "ble_scan_interval_searching": 2000,
+    "ble_scan_interval_monitoring": 8000,
+    "ble_scan_interval_verification": 1000,
+    "ble_scan_duration_quick": 1,
+    "ble_scan_duration_full": 3,
+    "ble_signal_strength_threshold": -80
+  }
+} 

@@ -58,17 +58,21 @@ consultation_controller = ConsultationController()
 faculty_controller.start()
 
 # Register for faculty status updates
+
+
 @faculty_controller.register_callback
 def handle_faculty_status_update(faculty):
     """
     Handle faculty status updates and broadcast to connected clients.
     """
-    logger.info(f"Faculty status update: {faculty.name} (ID: {faculty.id}) - Status: {faculty.status}")
+    logger.info(
+        f"Faculty status update: {faculty.name} (ID: {faculty.id}) - Status: {faculty.status}")
     socketio.emit('faculty_status_update', {
         'id': faculty.id,
         'name': faculty.name,
         'status': faculty.status
     })
+
 
 @app.route('/')
 def index():
@@ -78,18 +82,19 @@ def index():
     # Check if user is logged in
     if 'student_id' not in session:
         return redirect(url_for('login'))
-    
+
     # Get student information
     student_id = session['student_id']
     student = Student.get_by_id(student_id)
-    
+
     if not student:
         return redirect(url_for('login'))
-    
+
     # Get all faculty
     faculties = faculty_controller.get_all_faculty()
-    
+
     return render_template('index.html', student=student, faculties=faculties)
+
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -100,18 +105,19 @@ def login():
         # In a real implementation, this would validate against the database
         # For now, we'll use a simple mock login
         student_id = request.form.get('student_id')
-        
+
         # Get student by ID
         student = Student.get_by_id(student_id)
-        
+
         if student:
             session['student_id'] = student.id
             session['student_name'] = student.name
             return redirect(url_for('index'))
         else:
             return render_template('login.html', error="Invalid student ID")
-    
+
     return render_template('login.html')
+
 
 @app.route('/logout')
 def logout():
@@ -121,13 +127,14 @@ def logout():
     session.clear()
     return redirect(url_for('login'))
 
+
 @app.route('/api/faculty')
 def get_faculty():
     """
     API endpoint to get all faculty.
     """
     faculties = faculty_controller.get_all_faculty()
-    
+
     # Convert to JSON-serializable format
     faculty_list = []
     for faculty in faculties:
@@ -137,8 +144,9 @@ def get_faculty():
             'department': faculty.department,
             'status': faculty.status
         })
-    
+
     return jsonify(faculty_list)
+
 
 @app.route('/api/faculty/<int:faculty_id>')
 def get_faculty_by_id(faculty_id):
@@ -146,16 +154,17 @@ def get_faculty_by_id(faculty_id):
     API endpoint to get faculty by ID.
     """
     faculty = Faculty.get_by_id(faculty_id)
-    
+
     if not faculty:
         return jsonify({'error': 'Faculty not found'}), 404
-    
+
     return jsonify({
         'id': faculty.id,
         'name': faculty.name,
         'department': faculty.department,
         'status': faculty.status
     })
+
 
 @app.route('/api/consultations', methods=['POST'])
 def create_consultation():
@@ -164,22 +173,22 @@ def create_consultation():
     """
     if 'student_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
-    
+
     data = request.json
     faculty_id = data.get('faculty_id')
     message = data.get('message')
     course_code = data.get('course_code', '')
-    
+
     if not faculty_id or not message:
         return jsonify({'error': 'Missing required fields'}), 400
-    
+
     # Get faculty and student
     faculty = Faculty.get_by_id(faculty_id)
     student = Student.get_by_id(session['student_id'])
-    
+
     if not faculty or not student:
         return jsonify({'error': 'Invalid faculty or student ID'}), 400
-    
+
     # Create consultation request
     consultation = consultation_controller.create_consultation(
         student_id=student.id,
@@ -187,11 +196,11 @@ def create_consultation():
         message=message,
         course_code=course_code
     )
-    
+
     if consultation:
         # Notify faculty desk unit via MQTT
         consultation_controller.notify_faculty_desk_unit(consultation)
-        
+
         return jsonify({
             'id': consultation.id,
             'student_id': consultation.student_id,
@@ -204,6 +213,7 @@ def create_consultation():
     else:
         return jsonify({'error': 'Failed to create consultation request'}), 500
 
+
 @app.route('/api/consultations')
 def get_consultations():
     """
@@ -211,10 +221,10 @@ def get_consultations():
     """
     if 'student_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
-    
+
     student_id = session['student_id']
     consultations = consultation_controller.get_consultations(student_id=student_id)
-    
+
     # Convert to JSON-serializable format
     consultation_list = []
     for consultation in consultations:
@@ -228,8 +238,9 @@ def get_consultations():
             'status': consultation.status,
             'created_at': consultation.created_at.isoformat()
         })
-    
+
     return jsonify(consultation_list)
+
 
 if __name__ == '__main__':
     # Run the Flask app

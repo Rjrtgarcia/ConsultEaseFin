@@ -1,3 +1,26 @@
+from central_system.config import get_config  # , initialize_config, log_config_load_status
+from central_system.utils.theme import ConsultEaseTheme
+from central_system.utils import (
+    apply_stylesheet,
+    WindowTransitionManager,
+    get_keyboard_manager,
+    install_keyboard_manager,
+    KeyboardManager,
+    initialize_icons
+)
+from central_system.views import (
+    LoginWindow,
+    DashboardWindow,
+    AdminLoginWindow,
+    AdminDashboardWindow
+)
+from central_system.controllers import (
+    RFIDController,
+    FacultyController,
+    ConsultationController,
+    AdminController
+)
+from central_system.models import init_db
 import sys
 import os
 import logging
@@ -12,7 +35,6 @@ from logging.handlers import RotatingFileHandler
 sys.path.insert(0, os.path.abspath(os.path.dirname(os.path.dirname(__file__))))
 
 # Import configuration system
-from central_system.config import get_config #, initialize_config, log_config_load_status
 
 # Initialize configuration early
 # initialize_config() # This was causing the error
@@ -31,7 +53,7 @@ logger = logging.getLogger(__name__)
 
 # Ensure logs directory exists
 log_dir = os.path.dirname(log_file)
-if log_dir: # Only call makedirs if log_dir is not an empty string
+if log_dir:  # Only call makedirs if log_dir is not an empty string
     try:
         os.makedirs(log_dir, exist_ok=True)
         logger.info(f"Ensured log directory exists: {log_dir}")
@@ -46,30 +68,30 @@ if log_dir: # Only call makedirs if log_dir is not an empty string
 try:
     # Create a rotating file handler for logging
     handler = RotatingFileHandler(
-        log_file, 
+        log_file,
         maxBytes=log_max_size,
         backupCount=log_backup_count
     )
     handler.setFormatter(logging.Formatter(log_format))
-    
+
     # Add the handler to the root logger
     root_logger = logging.getLogger()
     root_logger.setLevel(log_level)
-    
+
     # Remove existing handlers if any
     for existing_handler in list(root_logger.handlers):
         root_logger.removeHandler(existing_handler)
-    
+
     # Add the new rotating handler
     root_logger.addHandler(handler)
-    
+
     # Optional: Add a console handler as well
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(logging.Formatter(log_format))
     root_logger.addHandler(console_handler)
-    
+
     logger.info(f"Logging configured with level {log_level}, rotating file handler to {log_file} " +
-               f"(max size: {log_max_size/1024/1024:.1f}MB, backups: {log_backup_count})")
+                f"(max size: {log_max_size/1024/1024:.1f}MB, backups: {log_backup_count})")
 except Exception as e:
     print(f"ERROR: Failed to configure logging: {e}")
     # Set up basic console logging as fallback
@@ -77,35 +99,15 @@ except Exception as e:
     logger.warning(f"Using basic console logging due to error: {e}")
 
 # Import models and controllers
-from central_system.models import init_db
-from central_system.controllers import (
-    RFIDController,
-    FacultyController,
-    ConsultationController,
-    AdminController
-)
 
 # Import views
-from central_system.views import (
-    LoginWindow,
-    DashboardWindow,
-    AdminLoginWindow,
-    AdminDashboardWindow
-)
 
 # Import utilities
-from central_system.utils import (
-    apply_stylesheet,
-    WindowTransitionManager,
-    get_keyboard_manager,
-    install_keyboard_manager,
-    KeyboardManager,
-    initialize_icons
-)
 # Import theme system
-from central_system.utils.theme import ConsultEaseTheme
 
 # Event filter for auto-showing keyboard
+
+
 class FocusEventFilter(QObject):
     def __init__(self, keyboard_manager, parent=None):
         super().__init__(parent)
@@ -117,7 +119,8 @@ class FocusEventFilter(QObject):
             if isinstance(obj, (QLineEdit, QTextEdit)):
                 # Check if the widget wants keyboard on focus (optional, for more control)
                 # For now, always show for QLineEdit and QTextEdit
-                self.logger.debug(f"FocusIn event on {obj.__class__.__name__} ({obj.objectName()}). Showing keyboard.")
+                self.logger.debug(
+                    f"FocusIn event on {obj.__class__.__name__} ({obj.objectName()}). Showing keyboard.")
                 self.keyboard_manager.show_keyboard()
         # elif event.type() == QEvent.FocusOut:
         #     if isinstance(obj, (QLineEdit, QTextEdit)):
@@ -126,6 +129,7 @@ class FocusEventFilter(QObject):
         #         self.logger.debug(f"FocusOut event on {obj.__class__.__name__}. Considering hiding keyboard.")
         #         pass # Logic to hide keyboard if no other input has focus would go here
         return super().eventFilter(obj, event)
+
 
 class ConsultEaseApp:
     """
@@ -137,7 +141,7 @@ class ConsultEaseApp:
         Initialize the ConsultEase application.
         """
         logger.info("Initializing ConsultEase application")
-        self.config = get_config() # Store config instance
+        self.config = get_config()  # Store config instance
 
         # Create QApplication instance
         self.app = QApplication(sys.argv)
@@ -167,7 +171,8 @@ class ConsultEaseApp:
             self.keyboard_handler = get_keyboard_manager()
             # Install keyboard manager to handle focus events
             install_keyboard_manager(self.app)
-            logger.info(f"Initialized keyboard manager with {self.keyboard_handler.active_keyboard} keyboard")
+            logger.info(
+                f"Initialized keyboard manager with {self.keyboard_handler.active_keyboard} keyboard")
         except Exception as e:
             logger.error(f"Failed to initialize keyboard manager: {e}")
             self.keyboard_handler = None
@@ -185,10 +190,10 @@ class ConsultEaseApp:
         self.admin_controller.ensure_default_admin()
 
         # Initialize windows
-        self.login_window = None # Main RFID/Login window
-        self.dashboard_window = None # Main student/faculty dashboard
-        self.admin_login_window = None # Instance for AdminLoginWindow
-        self.admin_dashboard_window = None # Instance for AdminDashboardWindow
+        self.login_window = None  # Main RFID/Login window
+        self.dashboard_window = None  # Main student/faculty dashboard
+        self.admin_login_window = None  # Instance for AdminLoginWindow
+        self.admin_dashboard_window = None  # Instance for AdminDashboardWindow
 
         # Start controllers
         logger.info("Starting RFID controller")
@@ -220,7 +225,8 @@ class ConsultEaseApp:
         try:
             from .services import get_rfid_service
             rfid_service = get_rfid_service()
-            logger.info(f"RFID service initialized: {rfid_service}, simulation mode: {rfid_service.simulation_mode}")
+            logger.info(
+                f"RFID service initialized: {rfid_service}, simulation mode: {rfid_service.simulation_mode}")
 
             # Log registered callbacks
             logger.info(f"RFID service callbacks: {len(rfid_service.callbacks)}")
@@ -243,7 +249,7 @@ class ConsultEaseApp:
 
         # Initialize KeyboardManager
         self.keyboard_manager = get_keyboard_manager()
-        self.app.keyboard_manager = self.keyboard_manager # Make it accessible globally if needed
+        self.app.keyboard_manager = self.keyboard_manager  # Make it accessible globally if needed
 
         # Install focus event filter for auto keyboard display
         self.focus_filter = FocusEventFilter(self.keyboard_manager)
@@ -274,7 +280,8 @@ class ConsultEaseApp:
             available_faculty = self.faculty_controller.ensure_available_faculty()
 
             if available_faculty:
-                logger.info(f"Ensured faculty availability: {available_faculty.name} (ID: {available_faculty.id}) is now available")
+                logger.info(
+                    f"Ensured faculty availability: {available_faculty.name} (ID: {available_faculty.id}) is now available")
             else:
                 logger.warning("Could not ensure faculty availability")
         except Exception as e:
@@ -294,10 +301,10 @@ class ConsultEaseApp:
         Clean up resources before exiting.
         """
         logger.info("Cleaning up resources before exit...")
-        
+
         # Set cleanup flag to prevent new operations during shutdown
         self.is_shutting_down = True
-        
+
         # Gracefully close all database connections
         try:
             from .models.base import close_db
@@ -403,7 +410,8 @@ class ConsultEaseApp:
             self.dashboard_window.consultation_requested.connect(self.handle_consultation_request)
         else:
             # Update student info and reinitialize the UI
-            logger.info(f"Updating dashboard with new student: {student.name if student else 'None'}")
+            logger.info(
+                f"Updating dashboard with new student: {student.name if student else 'None'}")
 
             # Store the new student reference
             self.dashboard_window.student = student
@@ -439,7 +447,8 @@ class ConsultEaseApp:
 
         # Apply transition if there's a visible window to transition from
         if current_window:
-            logger.info(f"Transitioning from {current_window.__class__.__name__} to DashboardWindow")
+            logger.info(
+                f"Transitioning from {current_window.__class__.__name__} to DashboardWindow")
             # Ensure dashboard window is ready for fullscreen
             self.dashboard_window.showFullScreen()
             # Apply transition
@@ -465,14 +474,13 @@ class ConsultEaseApp:
             # The AdminLoginWindow has a 'Back' button that emits change_window('login', None)
             # This should ideally go back to the main login/RFID screen, or a selection screen.
             # For now, let's assume 'login' in change_window means the main RFID login.
-            if hasattr(self.admin_login_window, 'change_window'): # Check if signal exists
-                 self.admin_login_window.change_window.connect(self.handle_window_change)
+            if hasattr(self.admin_login_window, 'change_window'):  # Check if signal exists
+                self.admin_login_window.change_window.connect(self.handle_window_change)
             else:
-                 logger.warning("AdminLoginWindow does not have a 'change_window' signal.")
+                logger.warning("AdminLoginWindow does not have a 'change_window' signal.")
 
+        current_active_window = self.app.activeWindow() or self.login_window  # Fallback if no active window
 
-        current_active_window = self.app.activeWindow() or self.login_window # Fallback if no active window
-        
         # Ensure the window is properly sized and centered or fullscreen
         if self.config.get('ui.fullscreen', False):
             self.admin_login_window.showFullScreen()
@@ -484,11 +492,11 @@ class ConsultEaseApp:
         if current_active_window and current_active_window != self.admin_login_window and current_active_window.isVisible():
             self.transition_manager.fade_out_in(current_active_window, self.admin_login_window)
         else:
-            self.admin_login_window.show() # Directly show if no prior window or it's the same
+            self.admin_login_window.show()  # Directly show if no prior window or it's the same
             if self.config.get('ui.fullscreen', False):
-                 self.admin_login_window.showFullScreen()
+                self.admin_login_window.showFullScreen()
             else:
-                 self.admin_login_window.show_normal_centered()
+                self.admin_login_window.show_normal_centered()
 
         # Optional: If keyboard manager is used and focus isn't set automatically by AdminLoginWindow.showEvent
         # QTimer.singleShot(100, lambda: self.admin_login_window.username_input.setFocus() if self.admin_login_window and hasattr(self.admin_login_window, 'username_input') else None)
@@ -522,7 +530,8 @@ class ConsultEaseApp:
 
         # Apply transition if there's a visible window to transition from
         if current_window:
-            logger.info(f"Transitioning from {current_window.__class__.__name__} to AdminDashboardWindow")
+            logger.info(
+                f"Transitioning from {current_window.__class__.__name__} to AdminDashboardWindow")
             # Ensure admin dashboard window is ready for fullscreen
             self.admin_dashboard_window.showFullScreen()
             # Apply transition
@@ -545,7 +554,8 @@ class ConsultEaseApp:
             logger.info(f"RFID scan successful: Student {student.name} (UID: {rfid_uid})")
             self.current_student = student
             self.show_dashboard_window(student)
-            # Sound/UI feedback for success should be handled within show_dashboard_window or by DashboardWindow itself
+            # Sound/UI feedback for success should be handled within
+            # show_dashboard_window or by DashboardWindow itself
         else:
             logger.warning(f"RFID scan failed: UID '{rfid_uid}'. Error: {error_message}")
             # Display error message on the current relevant window (e.g., LoginWindow)
@@ -553,12 +563,14 @@ class ConsultEaseApp:
                 display_error = error_message if error_message else f"Invalid RFID card ('{rfid_uid}')."
                 self.login_window.show_error(display_error)
             elif self.dashboard_window and self.dashboard_window.isVisible():
-                # If already on dashboard (e.g. admin scanned an unknown card), show a temporary notification
+                # If already on dashboard (e.g. admin scanned an unknown card), show a
+                # temporary notification
                 display_error = error_message if error_message else f"Unknown RFID card ('{rfid_uid}')."
                 self.dashboard_window.show_notification(display_error, 'error')
             else:
                 # Fallback if no specific window is active to show the error
-                logger.error(f"RFID Authentication failed for UID '{rfid_uid}': {error_message}. No active window to display error.")
+                logger.error(
+                    f"RFID Authentication failed for UID '{rfid_uid}': {error_message}. No active window to display error.")
             # Sound/UI feedback for error should be handled by the window showing the error
 
     def handle_student_authenticated(self, student):
@@ -581,12 +593,13 @@ class ConsultEaseApp:
         Handle successful admin authentication.
         The admin_user_object is expected to be the authenticated admin model instance.
         """
-        logger.info(f"Admin authenticated: {getattr(admin_user_object, 'username', 'Unknown Admin')}")
-        self.current_admin = admin_user_object # Store admin session
+        logger.info(
+            f"Admin authenticated: {getattr(admin_user_object, 'username', 'Unknown Admin')}")
+        self.current_admin = admin_user_object  # Store admin session
         # Potentially hide the admin login window if it's still visible or manage via transitions
         if self.admin_login_window and self.admin_login_window.isVisible():
             # self.admin_login_window.hide() # Hide will be handled by transition manager
-            pass # Transition manager will handle hiding
+            pass  # Transition manager will handle hiding
 
         self.show_admin_dashboard_window(admin=admin_user_object)
 
@@ -649,12 +662,14 @@ class ConsultEaseApp:
         """
         logger.info("Student data updated, attempting to refresh RFID service cache.")
         try:
-            from .services import get_rfid_service # Import here to avoid circular dependency at top level
+            from .services import get_rfid_service  # Import here to avoid circular dependency at top level
             rfid_service = get_rfid_service()
             rfid_service.refresh_student_data()
             logger.info("RFID service cache refreshed successfully via main app handler.")
         except Exception as e:
-            logger.error(f"Error refreshing RFID service cache from main app: {str(e)}", exc_info=True)
+            logger.error(
+                f"Error refreshing RFID service cache from main app: {str(e)}",
+                exc_info=True)
 
         # Potentially refresh other UI elements if needed
         # For example, if a student list is displayed on the main dashboard (not currently the case)
@@ -668,31 +683,35 @@ class ConsultEaseApp:
 
         if window_name == "login":
             # This typically means the main RFID/student login
-            self.current_student = None # Clear student session
-            self.current_admin = None # Clear admin session
+            self.current_student = None  # Clear student session
+            self.current_admin = None  # Clear admin session
             self.show_login_window()
         elif window_name == "dashboard":
             if isinstance(data, dict) and "student" in data:
                 self.show_dashboard_window(student=data["student"])
-            elif self.current_student: # Fallback to current student if any
+            elif self.current_student:  # Fallback to current student if any
                 self.show_dashboard_window(student=self.current_student)
             else:
-                logger.warning("Dashboard change requested without student data and no current student session. Showing main login.")
+                logger.warning(
+                    "Dashboard change requested without student data and no current student session. Showing main login.")
                 self.show_login_window()
-        elif window_name == "admin_login" or window_name == "admin_login_requested": # Added condition
-            self.current_admin = None # Clear admin session before showing login
+        elif window_name == "admin_login" or window_name == "admin_login_requested":  # Added condition
+            self.current_admin = None  # Clear admin session before showing login
             self.show_admin_login_window()
         elif window_name == "admin_dashboard":
-            if self.current_admin: # Check if an admin session exists
-                 self.show_admin_dashboard_window(admin=self.current_admin)
-            elif isinstance(data, AdminController.instance().get_admin_model_class()): # Check if data is an admin object
-                 self.current_admin = data
-                 self.show_admin_dashboard_window(admin=self.current_admin)
+            if self.current_admin:  # Check if an admin session exists
+                self.show_admin_dashboard_window(admin=self.current_admin)
+            # Check if data is an admin object
+            elif isinstance(data, AdminController.instance().get_admin_model_class()):
+                self.current_admin = data
+                self.show_admin_dashboard_window(admin=self.current_admin)
             else:
-                 logger.warning("Admin dashboard change requested without admin data or session. Showing admin login.")
-                 self.show_admin_login_window()
+                logger.warning(
+                    "Admin dashboard change requested without admin data or session. Showing admin login.")
+                self.show_admin_login_window()
         else:
             logger.warning(f"Unknown window name '{window_name}' requested.")
+
 
 if __name__ == "__main__":
     # Config object is already initialized globally when config is imported
@@ -702,7 +721,7 @@ if __name__ == "__main__":
     rfid_log_level_str = config.get('logging.rfid_level', 'INFO').upper()
     rfid_log_level = getattr(logging, rfid_log_level_str, logging.INFO)
     rfid_logger = logging.getLogger('central_system.services.rfid_service')
-    rfid_logger.setLevel(rfid_log_level) # Use configured level
+    rfid_logger.setLevel(rfid_log_level)  # Use configured level
 
     # Set environment variables if needed - REMOVED, should be set externally or in config.json
     # import os
@@ -716,10 +735,11 @@ if __name__ == "__main__":
     # os.environ['DB_PATH'] = 'consultease.db'  # REMOVED
 
     # Check if we're running in fullscreen mode
-    # fullscreen = os.environ.get('CONSULTEASE_FULLSCREEN', 'false').lower() == 'true' # Now handled by self.fullscreen in __init__
+    # fullscreen = os.environ.get('CONSULTEASE_FULLSCREEN', 'false').lower()
+    # == 'true' # Now handled by self.fullscreen in __init__
     fullscreen_from_config = config.get('ui.fullscreen', False)
 
     # Start the application
-    app = ConsultEaseApp(fullscreen=fullscreen_from_config) # Pass config value
-    signal.signal(signal.SIGINT, lambda sig, frame: app.cleanup()) # Ensure cleanup on Ctrl+C
+    app = ConsultEaseApp(fullscreen=fullscreen_from_config)  # Pass config value
+    signal.signal(signal.SIGINT, lambda sig, frame: app.cleanup())  # Ensure cleanup on Ctrl+C
     sys.exit(app.run())

@@ -9,11 +9,13 @@ from PyQt5.QtCore import QObject, pyqtSignal
 
 # Import database utilities and Student model
 from ..models.base import get_db, close_db
-from ..models import Student # Assuming Student model is in __init__.py or directly accessible
+from ..models import Student  # Assuming Student model is in __init__.py or directly accessible
 
 # Set up logging
-# logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s') # REMOVED - Rely on central config
+# logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s -
+# %(levelname)s - %(message)s') # REMOVED - Rely on central config
 logger = logging.getLogger(__name__)
+
 
 class RFIDService(QObject):
     """
@@ -31,11 +33,11 @@ class RFIDService(QObject):
         super(RFIDService, self).__init__()
         self.os_platform = sys.platform
         # Get central config instance first
-        from ..config import get_config # Ensure get_config is imported
+        from ..config import get_config  # Ensure get_config is imported
         self.config = get_config()
 
-        self.device_path = self.config.get('rfid.device_path', None) # Use config
-        self.simulation_mode = self.config.get('rfid.simulation_mode', False) # Use config
+        self.device_path = self.config.get('rfid.device_path', None)  # Use config
+        self.simulation_mode = self.config.get('rfid.simulation_mode', False)  # Use config
 
         # Target RFID reader VID/PID from config.py
         self.target_vid = self.config.get('rfid.target_vid', 'ffff')
@@ -45,10 +47,10 @@ class RFIDService(QObject):
         self.callbacks = []
         self.running = False
         self.read_thread = None
-        
+
         # In-memory cache for student RFID UIDs
-        self.student_rfid_cache = {} # Dict to store {rfid_uid: student_object}
-        self.cache_lock = threading.Lock() # To protect access to the cache
+        self.student_rfid_cache = {}  # Dict to store {rfid_uid: student_object}
+        self.cache_lock = threading.Lock()  # To protect access to the cache
 
         # Connect the signal to the notification method to ensure thread safety
         self.card_read_signal.connect(self._notify_callbacks_safe)
@@ -60,7 +62,8 @@ class RFIDService(QObject):
                 # If not found by VID/PID, try generic detection
                 self._detect_rfid_device()
 
-        logger.info(f"RFID Service initialized (OS: {self.os_platform}, Simulation: {self.simulation_mode}, Device: {self.device_path})")
+        logger.info(
+            f"RFID Service initialized (OS: {self.os_platform}, Simulation: {self.simulation_mode}, Device: {self.device_path})")
 
     def _find_device_by_vid_pid(self):
         """
@@ -69,10 +72,10 @@ class RFIDService(QObject):
         try:
             # Define full path to lsusb binary
             LSUSB_PATH = "/usr/bin/lsusb"  # Standard path on most Linux systems
-            
+
             # Use lsusb to find the device
             logger.info(f"Looking for USB device with VID:{self.target_vid} PID:{self.target_pid}")
-            
+
             # Check if lsusb exists at the specified path
             if os.path.exists(LSUSB_PATH):
                 lsusb_output = subprocess.check_output([LSUSB_PATH], universal_newlines=True)
@@ -90,7 +93,8 @@ class RFIDService(QObject):
                     break
 
             if not target_line:
-                logger.warning(f"USB device with VID:{self.target_vid} PID:{self.target_pid} not found")
+                logger.warning(
+                    f"USB device with VID:{self.target_vid} PID:{self.target_pid} not found")
                 return False
 
             # Attempt to find the corresponding input device
@@ -103,7 +107,8 @@ class RFIDService(QObject):
                     device_info = f"Device: {device.name} ({device.path})"
                     try:
                         phys = device.phys
-                        if phys and (self.target_vid in phys.lower() and self.target_pid in phys.lower()):
+                        if phys and (self.target_vid in phys.lower()
+                                     and self.target_pid in phys.lower()):
                             logger.info(f"Found matching device by physical path: {device_info}")
                             self.device_path = device.path
                             return True
@@ -123,16 +128,20 @@ class RFIDService(QObject):
                 # Let's check if there's a device that looks like an HID keyboard
                 for device in devices:
                     if (evdev.ecodes.EV_KEY in device.capabilities() and
-                        len(device.capabilities().get(evdev.ecodes.EV_KEY, [])) > 10):
+                            len(device.capabilities().get(evdev.ecodes.EV_KEY, [])) > 10):
 
                         # Check if this device behaves like a RFID reader
                         # RFID readers typically don't have modifiers like shift/control
                         key_caps = device.capabilities().get(evdev.ecodes.EV_KEY, [])
-                        has_numerics = any(k in key_caps for k in range(evdev.ecodes.KEY_0, evdev.ecodes.KEY_9 + 1))
+                        has_numerics = any(
+                            k in key_caps for k in range(
+                                evdev.ecodes.KEY_0,
+                                evdev.ecodes.KEY_9 + 1))
                         has_enter = evdev.ecodes.KEY_ENTER in key_caps
 
                         if has_numerics and has_enter:
-                            logger.info(f"Found potential RFID reader: {device.name} ({device.path})")
+                            logger.info(
+                                f"Found potential RFID reader: {device.name} ({device.path})")
                             self.device_path = device.path
                             return True
 
@@ -213,7 +222,8 @@ class RFIDService(QObject):
         self.running = True
 
         # If we're not in simulation mode and on Linux, try one more time to detect the device
-        if not self.simulation_mode and self.os_platform.startswith('linux') and not self.device_path:
+        if not self.simulation_mode and self.os_platform.startswith(
+                'linux') and not self.device_path:
             if not self._find_device_by_vid_pid() and not self._detect_rfid_device():
                 logger.warning("No RFID device detected, falling back to simulation mode")
                 self.simulation_mode = True
@@ -226,13 +236,14 @@ class RFIDService(QObject):
                 logger.info(f"Starting RFID Service in Linux mode with device: {self.device_path}")
                 self.read_thread = threading.Thread(target=self._read_linux_rfid)
             else:
-                logger.warning(f"RFID hardware mode not supported on {self.os_platform}, falling back to simulation")
+                logger.warning(
+                    f"RFID hardware mode not supported on {self.os_platform}, falling back to simulation")
                 self.read_thread = threading.Thread(target=self._simulate_rfid_reading)
 
         self.read_thread.daemon = True
         self.read_thread.start()
         logger.info("RFID Service started")
-        self.refresh_student_data() # Refresh cache on start
+        self.refresh_student_data()  # Refresh cache on start
 
     def stop(self):
         """
@@ -286,17 +297,20 @@ class RFIDService(QObject):
                 for cached_uid, cached_student in self.student_rfid_cache.items():
                     if cached_uid.lower() == rfid_uid.lower():
                         student = cached_student
-                        logger.info(f"Found student via case-insensitive match in cache: {student.name}")
+                        logger.info(
+                            f"Found student via case-insensitive match in cache: {student.name}")
                         break
 
         if student:
-            logger.info(f"Student {student.name} (ID: {student.id}) found in cache for RFID UID: {rfid_uid}")
+            logger.info(
+                f"Student {student.name} (ID: {student.id}) found in cache for RFID UID: {rfid_uid}")
         else:
             logger.warning(f"No student found in cache for RFID UID: {rfid_uid}")
             # Optionally, log available UIDs in cache for debugging (at DEBUG level)
             if logger.isEnabledFor(logging.DEBUG):
                 with self.cache_lock:
-                    logger.debug(f"Available RFID UIDs in cache: {list(self.student_rfid_cache.keys())}")
+                    logger.debug(
+                        f"Available RFID UIDs in cache: {list(self.student_rfid_cache.keys())}")
 
         # Make a copy of callbacks to avoid issues if callbacks are modified during iteration
         callbacks_to_notify = list(self.callbacks)
@@ -310,10 +324,12 @@ class RFIDService(QObject):
                     continue
 
                 callback_name = getattr(callback, '__name__', str(callback))
-                logger.info(f"Calling callback: {callback_name} with student: {student is not None}, rfid_uid: {rfid_uid}")
+                logger.info(
+                    f"Calling callback: {callback_name} with student: {student is not None}, rfid_uid: {rfid_uid}")
                 callback(student, rfid_uid)
             except Exception as e:
-                logger.error(f"Error in RFID callback {getattr(callback, '__name__', str(callback))}: {str(e)}")
+                logger.error(
+                    f"Error in RFID callback {getattr(callback, '__name__', str(callback))}: {str(e)}")
                 import traceback
                 logger.error(f"Callback error traceback: {traceback.format_exc()}")
 
@@ -345,7 +361,8 @@ class RFIDService(QObject):
             try:
                 # Open the device
                 device = evdev.InputDevice(self.device_path)
-                logger.info(f"Reading RFID from device: {device.name} ({device.device_path if hasattr(device, 'device_path') else self.device_path})")
+                logger.info(
+                    f"Reading RFID from device: {device.name} ({device.device_path if hasattr(device, 'device_path') else self.device_path})")
 
                 # Let's take exclusive control of the device to prevent keyboard input in other apps
                 try:
@@ -392,7 +409,7 @@ class RFIDService(QObject):
             current_rfid = ""
             last_event_time = 0
 
-            logger.info("RFID reader is active and waiting for cards (supports 13.56 MHz)") # Log once
+            logger.info("RFID reader is active and waiting for cards (supports 13.56 MHz)")  # Log once
             initial_wait_logged = True
 
             while self.running:
@@ -400,7 +417,8 @@ class RFIDService(QObject):
                     # Enhanced debugging - log all events for debugging
                     # logger.info("Waiting for RFID card events...") # REMOVED - too verbose
                     if not initial_wait_logged:
-                        logger.info("RFID reader is active and waiting for cards (supports 13.56 MHz)")
+                        logger.info(
+                            "RFID reader is active and waiting for cards (supports 13.56 MHz)")
                         initial_wait_logged = True
 
                     for event in device.read_loop():
@@ -409,7 +427,8 @@ class RFIDService(QObject):
 
                         # Enhanced logging for all events
                         if event.type == evdev.ecodes.EV_KEY:
-                            logger.debug(f"RFID Key event: type={event.type}, code={event.code}, value={event.value}")
+                            logger.debug(
+                                f"RFID Key event: type={event.type}, code={event.code}, value={event.value}")
 
                         # Reset the RFID string if there's a pause between key events
                         current_time = time.time()
@@ -438,7 +457,8 @@ class RFIDService(QObject):
                                     if name.startswith('KEY_') and code == event.code:
                                         key_name = name
                                         break
-                                logger.info(f"Unhandled key in RFID input: {key_name} ({event.code})")
+                                logger.info(
+                                    f"Unhandled key in RFID input: {key_name} ({event.code})")
 
                 except OSError as e:
                     logger.error(f"Device read error (device may have been disconnected): {str(e)}")
@@ -458,7 +478,7 @@ class RFIDService(QObject):
                         try:
                             device.grab()
                             logger.info("Regained exclusive access to RFID reader")
-                        except:
+                        except BaseException:
                             pass
                     except Exception as e2:
                         logger.error(f"Failed to reopen device: {str(e2)}")
@@ -473,7 +493,8 @@ class RFIDService(QObject):
                 # Non-critical error, continue
 
         except ImportError as e:
-            logger.error(f"evdev library not installed: {e}. Please install it with: pip install evdev")
+            logger.error(
+                f"evdev library not installed: {e}. Please install it with: pip install evdev")
             logger.info("Falling back to simulation mode")
             self.simulation_mode = True
             self._simulate_rfid_reading()
@@ -500,18 +521,18 @@ class RFIDService(QObject):
         db = get_db()
         try:
             # Get all students with RFID UIDs
-            students = db.query(Student).filter(Student.rfid_uid != None).all()
-            
+            students = db.query(Student).filter(Student.rfid_uid is not None).all()
+
             # Update cache with fresh data
             with self.cache_lock:  # Use lock for thread safety
                 # Clear existing cache
                 self.student_rfid_cache.clear()
-                
+
                 # Add all students to cache
                 for student in students:
                     if student.rfid_uid:  # Double-check to avoid None keys
                         self.student_rfid_cache[student.rfid_uid] = student
-                        
+
             logger.info(f"Refreshed student RFID cache with {len(students)} students")
         except Exception as e:
             logger.error(f"Error refreshing student RFID cache: {str(e)}")
@@ -522,30 +543,30 @@ class RFIDService(QObject):
         """
         Get student by RFID UID.
         First checks the in-memory cache, then the database.
-        
+
         Args:
             rfid_uid (str): RFID UID
-            
+
         Returns:
             Student: Student object or None if not found
         """
         if not rfid_uid:
             logger.warning("Cannot get student: RFID UID is empty")
             return None
-            
+
         # First check in-memory cache for better performance
         with self.cache_lock:  # Use lock for thread safety
             if rfid_uid in self.student_rfid_cache:
                 logger.info(f"Student found in cache for RFID: {rfid_uid}")
                 return self.student_rfid_cache[rfid_uid]
-        
+
         # If not in cache, query the database
         logger.info(f"Student not in cache, checking database for RFID: {rfid_uid}")
         db = get_db()
         try:
             # Query database for student with this RFID UID
             student = db.query(Student).filter(Student.rfid_uid == rfid_uid).first()
-            
+
             if student:
                 logger.info(f"Student found in database: {student.name} (ID: {student.id})")
                 # Add to cache for future lookups
@@ -579,8 +600,10 @@ class RFIDService(QObject):
 
         return rfid_uid
 
+
 # Singleton instance
 rfid_service = None
+
 
 def get_rfid_service():
     """

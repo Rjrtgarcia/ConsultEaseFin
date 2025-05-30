@@ -7,6 +7,7 @@ import os
 
 logger = logging.getLogger(__name__)
 
+
 class ConsultEaseTheme:
     """
     Centralized theme class for ConsultEase.
@@ -15,13 +16,13 @@ class ConsultEaseTheme:
 
     # Color palette
     PRIMARY_COLOR = "#0d3b66"       # Dark blue
-    PRIMARY_COLOR_HOVER = "#1a5f99" # Slightly lighter dark blue for hover
+    PRIMARY_COLOR_HOVER = "#1a5f99"  # Slightly lighter dark blue for hover
     SECONDARY_COLOR = "#3498db"     # Light blue
     ACCENT_COLOR = "#f4d35e"        # Gold
     SUCCESS_COLOR = "#2ecc71"       # Green
-    SUCCESS_COLOR_HOVER = "#27ae60" # Darker Green for hover
+    SUCCESS_COLOR_HOVER = "#27ae60"  # Darker Green for hover
     WARNING_COLOR = "#f39c12"       # Orange
-    WARNING_COLOR_HOVER = "#e67e22" # Darker Orange for hover
+    WARNING_COLOR_HOVER = "#e67e22"  # Darker Orange for hover
     ERROR_COLOR = "#e74c3c"         # Red
     ERROR_COLOR_HOVER = "#c0392b"   # Darker Red for hover
     INFO_COLOR = "#3498db"          # Blue

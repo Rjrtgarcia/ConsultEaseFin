@@ -4,6 +4,7 @@ from sqlalchemy.orm import validates
 from .base import Base
 import re
 
+
 class Student(Base):
     """
     Student model.
@@ -41,10 +42,10 @@ class Student(Base):
     def validate_rfid_uid(rfid_value):
         if not rfid_value or not isinstance(rfid_value, str):
             return False, "RFID UID cannot be empty."
-        if not re.match(r'^[a-zA-Z0-9]+$', rfid_value): # Basic alphanumeric check
+        if not re.match(r'^[a-zA-Z0-9]+$', rfid_value):  # Basic alphanumeric check
             return False, "RFID UID must be alphanumeric."
-        if len(rfid_value) < 4 or len(rfid_value) > 32: # Example length check
-             return False, "RFID UID must be between 4 and 32 characters."
+        if len(rfid_value) < 4 or len(rfid_value) > 32:  # Example length check
+            return False, "RFID UID must be between 4 and 32 characters."
         return True, ""
 
     @validates('name')
@@ -70,7 +71,7 @@ class Student(Base):
 
     def __repr__(self):
         return f"<Student {self.name}>"
-    
+
     def to_dict(self):
         """
         Convert model instance to dictionary.
@@ -82,4 +83,4 @@ class Student(Base):
             "rfid_uid": self.rfid_uid,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None
-        } 
+        }

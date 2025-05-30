@@ -1,3 +1,4 @@
+from ..config import get_config
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, scoped_session
@@ -10,11 +11,11 @@ import time
 import functools
 
 # Set up logging
-# logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s') # REMOVED
+# logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s -
+# %(levelname)s - %(message)s') # REMOVED
 logger = logging.getLogger(__name__)
 
 # Import configuration system
-from ..config import get_config
 
 # Get configuration
 config = get_config()
@@ -42,12 +43,14 @@ else:
     if DB_HOST == 'localhost' and not DB_PASSWORD:
         # Use Unix socket connection for peer authentication
         DATABASE_URL = f"postgresql+psycopg2://{DB_USER}@/{DB_NAME}"
-        logger.info(f"Connecting to PostgreSQL database: {DB_NAME} as {DB_USER} using peer authentication")
+        logger.info(
+            f"Connecting to PostgreSQL database: {DB_NAME} as {DB_USER} using peer authentication")
     else:
         # Use TCP connection with password
         encoded_password = urllib.parse.quote_plus(DB_PASSWORD)
         DATABASE_URL = f"postgresql://{DB_USER}:{encoded_password}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-        logger.info(f"Connecting to PostgreSQL database: {DB_HOST}:{DB_PORT}/{DB_NAME} as {DB_USER}")
+        logger.info(
+            f"Connecting to PostgreSQL database: {DB_HOST}:{DB_PORT}/{DB_NAME} as {DB_USER}")
 
 # Configure connection pooling options with sensible defaults
 pool_size = config.get('database.pool_size', 5)
@@ -60,7 +63,7 @@ if DB_TYPE.lower() == 'sqlite':
     # SQLite doesn't support the same level of connection pooling
     # Get debug mode from config with default of False
     sql_debug = config.get('database.debug', False)
-    
+
     engine = create_engine(
         DATABASE_URL,
         connect_args={"check_same_thread": False},  # Allow SQLite to be used across threads
@@ -71,25 +74,27 @@ else:
     # PostgreSQL with full connection pooling
     # Get debug mode from config with default of False
     sql_debug = config.get('database.debug', False)
-    
+
     # Get additional performance settings from config
     # These are based on SQLAlchemy connection pool best practices
     pool_pre_ping = config.get('database.pool_pre_ping', True)  # Check connections before using
-    use_batch_mode = config.get('database.use_batch_mode', True)  # Use batch mode for better performance
-    
+    use_batch_mode = config.get(
+        'database.use_batch_mode',
+        True)  # Use batch mode for better performance
+
     # Use server-side statement caching by default (reduces parse overhead)
-    use_prepared_statements = config.get('database.use_prepared_statements', True) 
-    
+    use_prepared_statements = config.get('database.use_prepared_statements', True)
+
     # Set up connection arguments specific to PostgreSQL
     connect_args = {}
-    
+
     # Set application name for easier identification in pg_stat_activity
     connect_args["application_name"] = "ConsultEase"
-    
+
     # Optional: Set a statement timeout to prevent long-running queries
     if config.get('database.statement_timeout'):
         connect_args["options"] = f"-c statement_timeout={config.get('database.statement_timeout')}"
-    
+
     engine = create_engine(
         DATABASE_URL,
         poolclass=QueuePool,
@@ -103,8 +108,8 @@ else:
         use_batch_mode=use_batch_mode  # Enable batch mode for better performance
     )
     logger.info(f"Created PostgreSQL engine with optimized connection pooling " +
-               f"(size={pool_size}, max_overflow={max_overflow}, pre_ping={pool_pre_ping}, " +
-               f"batch_mode={use_batch_mode})")
+                f"(size={pool_size}, max_overflow={max_overflow}, pre_ping={pool_pre_ping}, " +
+                f"batch_mode={use_batch_mode})")
 
 # Create session factory with thread safety
 session_factory = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -112,6 +117,7 @@ SessionLocal = scoped_session(session_factory)
 
 # Create base class for models
 Base = declarative_base()
+
 
 def get_db(force_new=False):
     """
@@ -143,6 +149,7 @@ def get_db(force_new=False):
             db.close()
         raise e
 
+
 def close_db():
     """
     Remove the current session and return the connection to the pool.
@@ -153,6 +160,7 @@ def close_db():
         logger.debug("Released database connection back to pool")
     except Exception as e:
         logger.error(f"Error releasing database connection: {str(e)}")
+
 
 def db_operation_with_retry(max_retries=3, retry_delay=0.5):
     """
@@ -178,26 +186,33 @@ def db_operation_with_retry(max_retries=3, retry_delay=0.5):
                     # Pass self, then the db_session, then other *args and **kwargs
                     if not args:
                         # This case should ideally not happen for instance methods
-                        # but as a fallback, or for static/classmethods decorated (though less common for this decorator)
+                        # but as a fallback, or for static/classmethods decorated (though less
+                        # common for this decorator)
                         result = func(db_session, **kwargs)
                     else:
                         result = func(args[0], db_session, *(args[1:]), **kwargs)
-                    
+
                     # Diagnostic: Inspect session before flush
                     if hasattr(db_session, 'new'):
-                        logger.debug(f"SESSION STATE BEFORE FLUSH: session.new contains: {list(db_session.new)}")
+                        logger.debug(
+                            f"SESSION STATE BEFORE FLUSH: session.new contains: {list(db_session.new)}")
                     if hasattr(db_session, 'dirty'):
-                        logger.debug(f"SESSION STATE BEFORE FLUSH: session.dirty contains: {list(db_session.dirty)}")
+                        logger.debug(
+                            f"SESSION STATE BEFORE FLUSH: session.dirty contains: {list(db_session.dirty)}")
 
-                    db_session.flush() 
-                    logger.debug(f"ID of result after flush: {getattr(result, 'id', 'N/A') if hasattr(result, '__mapper__') else 'Not a model'}")
+                    db_session.flush()
+                    logger.debug(
+                        f"ID of result after flush: {getattr(result, 'id', 'N/A') if hasattr(result, '__mapper__') else 'Not a model'}")
                     db_session.commit()
-                    logger.debug(f"ID of result after commit: {getattr(result, 'id', 'N/A') if hasattr(result, '__mapper__') else 'Not a model'}")
+                    logger.debug(
+                        f"ID of result after commit: {getattr(result, 'id', 'N/A') if hasattr(result, '__mapper__') else 'Not a model'}")
 
-                    # If the result is a SQLAlchemy model instance, ensure it's refreshed and attached
+                    # If the result is a SQLAlchemy model instance, ensure it's refreshed and
+                    # attached
                     if result is not None and hasattr(result, '__mapper__'):
                         if not getattr(result, 'id', None):
-                            # This is a critical failure if an ID was expected (e.g., for a new auto-incremented PK)
+                            # This is a critical failure if an ID was expected (e.g., for a new
+                            # auto-incremented PK)
                             err_msg = f"CRITICAL: Instance {type(result)} (value: {str(result)}) has no ID after commit. This indicates a problem with primary key generation or its retrieval by SQLAlchemy. The object cannot be reliably refreshed or identified."
                             logger.error(err_msg)
                             # Raising an error here because returning an object without an ID when one is expected
@@ -207,25 +222,32 @@ def db_operation_with_retry(max_retries=3, retry_delay=0.5):
                             # ID is present. The object should be in the session and persistent.
                             # Attempt to refresh to get the most up-to-date state from the database.
                             try:
-                                logger.debug(f"Object {type(result)} with ID {result.id} is present. Attempting to refresh.")
+                                logger.debug(
+                                    f"Object {type(result)} with ID {result.id} is present. Attempting to refresh.")
                                 db_session.refresh(result)
-                                logger.debug(f"Successfully refreshed {type(result)} with ID {result.id}.")
+                                logger.debug(
+                                    f"Successfully refreshed {type(result)} with ID {result.id}.")
                                 return result
                             except Exception as e_refresh:
-                                logger.warning(f"Failed to refresh {type(result)} with ID {result.id} after commit (Error: {e_refresh}). Attempting to merge as a fallback.")
+                                logger.warning(
+                                    f"Failed to refresh {type(result)} with ID {result.id} after commit (Error: {e_refresh}). Attempting to merge as a fallback.")
                                 try:
                                     # Ensure the object is associated with the current session and load its current state.
-                                    # merge() returns a new instance or the same if already in session.
+                                    # merge() returns a new instance or the same if already in
+                                    # session.
                                     merged_result = db_session.merge(result, load=True)
-                                    logger.info(f"Successfully merged {type(merged_result)} with ID {merged_result.id} after refresh failure.")
+                                    logger.info(
+                                        f"Successfully merged {type(merged_result)} with ID {merged_result.id} after refresh failure.")
                                     return merged_result
                                 except Exception as e_merge:
-                                    logger.error(f"Failed to merge {type(result)} with ID {result.id} after refresh failure (Error: {e_merge}). Returning the instance as it was post-commit, but it may be stale or detached.")
+                                    logger.error(
+                                        f"Failed to merge {type(result)} with ID {result.id} after refresh failure (Error: {e_merge}). Returning the instance as it was post-commit, but it may be stale or detached.")
                                     # Fallback: return the original 'result'. It has an ID, but refresh/merge failed.
-                                    # This is risky as the state might not be fully consistent with the DB.
+                                    # This is risky as the state might not be fully consistent with
+                                    # the DB.
                                     return result
-                    
-                    return result # Return original result if not a model instance or if no specific handling applied
+
+                    return result  # Return original result if not a model instance or if no specific handling applied
                 except Exception as e:
                     db_session.rollback()
                     last_error = e
@@ -233,7 +255,8 @@ def db_operation_with_retry(max_retries=3, retry_delay=0.5):
 
                     # Log the error
                     if retries < max_retries:
-                        logger.warning(f"Database operation failed (attempt {retries}/{max_retries}): {e}")
+                        logger.warning(
+                            f"Database operation failed (attempt {retries}/{max_retries}): {e}")
                         # Exponential backoff
                         sleep_time = retry_delay * (2 ** (retries - 1))
                         time.sleep(sleep_time)
@@ -248,6 +271,7 @@ def db_operation_with_retry(max_retries=3, retry_delay=0.5):
         return wrapper
 
     return decorator
+
 
 def init_db():
     """
@@ -271,26 +295,33 @@ def init_db():
             logger.info("No admin users found, creating default admin.")
             # Use Admin model's hash_password to create the default admin
             # Ensure the default password meets strength requirements
-            default_password = config.get('security.default_admin_password', 'DefaultAdminP@ss1') # Get from config instead of hardcoding
+            default_password = config.get(
+                'security.default_admin_password',
+                os.environ.get('DEFAULT_ADMIN_PASSWORD'))
+            if not default_password:
+                logger.warning(
+                    "No default admin password configured, using fallback (this is insecure!)")
+                default_password = 'DefaultAdminP@ss1'  # Fallback only if not in config or env var
             try:
                 hashed_password, salt = Admin.hash_password(default_password)
                 admin = Admin(
                     username="admin",
                     password_hash=hashed_password,
-                    salt=salt, # Though bcrypt includes salt, schema might still have it
+                    salt=salt,  # Though bcrypt includes salt, schema might still have it
                     is_active=True,
-                    failed_login_attempts=0 # Initialize lockout fields
+                    failed_login_attempts=0  # Initialize lockout fields
                 )
                 db.add(admin)
                 db.commit()
-                logger.info(f"Default admin 'admin' created with a new secure password. PLEASE CHANGE IT.")
+                logger.info(
+                    f"Default admin 'admin' created with a new secure password. PLEASE CHANGE IT.")
             except ValueError as e:
                 logger.error(f"Error creating default admin user due to password policy: {e}")
                 # If default password fails validation, this is a critical setup error.
                 # Consider raising an exception or specific handling.
             except Exception as e:
                 logger.error(f"Unexpected error creating default admin user: {e}")
-                db.rollback() # Rollback on other errors
+                db.rollback()  # Rollback on other errors
         else:
             logger.info(f"Found {admin_count} admin user(s). Default admin creation skipped.")
 
@@ -317,7 +348,8 @@ def init_db():
                     name="Prof. Robert Chen",
                     department="Computer Science",
                     email="robert.chen@university.edu",
-                    ble_id="4fafc201-1fb5-459e-8fcc-c5c9c331914b",  # Match the SERVICE_UUID in the faculty desk unit code
+                    ble_id="4fafc201-1fb5-459e-8fcc-c5c9c331914b",
+                    # Match the SERVICE_UUID in the faculty desk unit code
                     status=True,  # Set to available for testing
                     always_available=True  # This faculty member is always available (BLE always on)
                 )

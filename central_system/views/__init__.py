@@ -16,4 +16,4 @@ __all__ = [
     'FacultyManagementTab',
     'StudentManagementTab',
     'SystemMaintenanceTab'
-] 
+]

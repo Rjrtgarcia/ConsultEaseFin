@@ -1,13 +1,15 @@
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-                               QPushButton, QTabWidget, QTableWidget, QTableWidgetItem,
-                               QHeaderView, QFrame, QDialog, QFormLayout, QLineEdit,
-                               QDialogButtonBox, QMessageBox, QComboBox, QCheckBox,
-                               QGroupBox, QFileDialog, QTextEdit, QApplication, QScrollArea)
-from PyQt5.QtCore import Qt, pyqtSignal, QTimer
+                             QPushButton, QTabWidget, QTableWidget, QTableWidgetItem,
+                             QHeaderView, QFrame, QDialog, QFormLayout, QLineEdit,
+                             QDialogButtonBox, QMessageBox, QComboBox, QCheckBox,
+                             QGroupBox, QFileDialog, QTextEdit, QApplication, QScrollArea)
+from PyQt5.QtCore import Qt, pyqtSignal, QTimer, QSize, QSettings, QTextCursor
 from PyQt5.QtGui import QIcon, QFont, QTextCursor
 
 import os
 import logging
+import datetime
+import time  # Moved import time here
 from .base_window import BaseWindow
 from ..controllers import FacultyController, ConsultationController, AdminController, StudentController
 from ..models.faculty import Faculty
@@ -21,10 +23,10 @@ from ..models.base import db_operation_with_retry
 from ..config import get_config
 from ..utils.icons import IconProvider, Icons
 from ..utils.theme import ConsultEaseTheme
-import datetime
 
 # Set up logging
 logger = logging.getLogger(__name__)
+
 
 class AdminDashboardWindow(BaseWindow):
     """
@@ -34,18 +36,21 @@ class AdminDashboardWindow(BaseWindow):
     faculty_updated = pyqtSignal()
     student_updated = pyqtSignal()
     change_window = pyqtSignal(str, object)  # Add explicit signal if it's missing
-    admin_username_changed_signal = pyqtSignal(str) # Define the signal
+    admin_username_changed_signal = pyqtSignal(str)  # Define the signal
 
     def __init__(self, admin=None, parent=None):
-        self.admin = admin # Initialize self.admin first
-        super().__init__(parent) # Now call super, which will call self.init_ui()
-        self.config = get_config() # It's fine to get it again or ensure it's set if needed here.
+        self.admin = admin  # Initialize self.admin first
+        super().__init__(parent)  # Now call super, which will call self.init_ui()
+        self.config = get_config()  # It's fine to get it again or ensure it's set if needed here.
 
         # Connect signals AFTER self.system_tab is created by init_ui (called via super)
-        if hasattr(self, 'system_tab') and hasattr(self.system_tab, 'actual_admin_username_changed_signal'):
-             self.system_tab.actual_admin_username_changed_signal.connect(self.handle_admin_username_changed_on_dashboard)
+        if hasattr(self, 'system_tab') and hasattr(
+                self.system_tab, 'actual_admin_username_changed_signal'):
+            self.system_tab.actual_admin_username_changed_signal.connect(
+                self.handle_admin_username_changed_on_dashboard)
         else:
-            logger.warning("Could not connect system_tab.actual_admin_username_changed_signal in AdminDashboardWindow.__init__.")
+            logger.warning(
+                "Could not connect system_tab.actual_admin_username_changed_signal in AdminDashboardWindow.__init__.")
 
     def init_ui(self):
         """
@@ -64,8 +69,8 @@ class AdminDashboardWindow(BaseWindow):
         header_layout = QHBoxLayout()
 
         # Admin welcome label
-        admin_username = "Admin" # Default
-        if self.admin: # self.admin is now expected to be an Admin model object
+        admin_username = "Admin"  # Default
+        if self.admin:  # self.admin is now expected to be an Admin model object
             admin_username = getattr(self.admin, 'username', 'Admin')
 
         self.admin_header_label = QLabel(f"Admin Dashboard - Logged in as: {admin_username}")
@@ -103,7 +108,8 @@ class AdminDashboardWindow(BaseWindow):
         self.student_tab = StudentManagementTab()
         self.student_tab.student_updated.connect(self.handle_student_updated)
 
-        self.system_tab = SystemMaintenanceTab(admin_info_context=self.admin, dashboard_window_ref=self)
+        self.system_tab = SystemMaintenanceTab(
+            admin_info_context=self.admin, dashboard_window_ref=self)
 
         # Add tabs to tab widget
         self.tab_widget.addTab(self.faculty_tab, "Faculty Management")
@@ -174,7 +180,7 @@ class AdminDashboardWindow(BaseWindow):
 
         # Emit signal to change to the admin login window
         logger.info("Redirecting to Admin Login window after admin logout")
-        self.change_window.emit("admin_login_requested", None) # More specific signal
+        self.change_window.emit("admin_login_requested", None)  # More specific signal
 
     def handle_faculty_updated(self):
         """
@@ -191,23 +197,27 @@ class AdminDashboardWindow(BaseWindow):
         The tab has already refreshed itself by adding/updating the specific row.
         This signal is primarily for other parts of the application if they need to react.
         """
-        logger.info("AdminDashboardWindow.handle_student_updated: StudentManagementTab reported an update. Forwarding signal.")
-        self.student_updated.emit() # This emits AdminDashboardWindow's own student_updated signal
+        logger.info(
+            "AdminDashboardWindow.handle_student_updated: StudentManagementTab reported an update. Forwarding signal.")
+        self.student_updated.emit()  # This emits AdminDashboardWindow's own student_updated signal
 
     def handle_admin_username_changed_on_dashboard(self, new_username):
         logger.info(f"AdminDashboard: Handling admin username change to: {new_username}")
-        if self.admin: # self.admin is now expected to be an Admin model object
+        if self.admin:  # self.admin is now expected to be an Admin model object
             # Assuming self.admin is the Admin object
             try:
                 self.admin.username = new_username
             except AttributeError:
-                logger.error(f"AdminDashboard: self.admin (type: {type(self.admin)}) does not have a username attribute or is not the expected object.")
-        
+                logger.error(
+                    f"AdminDashboard: self.admin (type: {type(self.admin)}) does not have a username attribute or is not the expected object.")
+
         if hasattr(self, 'admin_header_label'):
             self.admin_header_label.setText(f"Admin Dashboard - Logged in as: {new_username}")
-            logger.info(f"AdminDashboard: Updated header label to: {self.admin_header_label.text()}")
+            logger.info(
+                f"AdminDashboard: Updated header label to: {self.admin_header_label.text()}")
         else:
             logger.warning("AdminDashboard: admin_header_label not found for update.")
+
 
 class FacultyManagementTab(QWidget):
     """
@@ -235,7 +245,8 @@ class FacultyManagementTab(QWidget):
         button_layout = QHBoxLayout()
 
         self.add_button = QPushButton("Add Faculty")
-        self.add_button.setStyleSheet(f"background-color: {ConsultEaseTheme.SUCCESS_COLOR}; color: white;")
+        self.add_button.setStyleSheet(
+            f"background-color: {ConsultEaseTheme.SUCCESS_COLOR}; color: white;")
         self.add_button.clicked.connect(self.add_faculty)
         button_layout.addWidget(self.add_button)
 
@@ -244,7 +255,8 @@ class FacultyManagementTab(QWidget):
         button_layout.addWidget(self.edit_button)
 
         self.delete_button = QPushButton("Delete Faculty")
-        self.delete_button.setStyleSheet(f"background-color: {ConsultEaseTheme.ERROR_COLOR}; color: white;")
+        self.delete_button.setStyleSheet(
+            f"background-color: {ConsultEaseTheme.ERROR_COLOR}; color: white;")
         self.delete_button.clicked.connect(self.delete_faculty)
         button_layout.addWidget(self.delete_button)
 
@@ -259,7 +271,8 @@ class FacultyManagementTab(QWidget):
         # Faculty table
         self.faculty_table = QTableWidget()
         self.faculty_table.setColumnCount(6)
-        self.faculty_table.setHorizontalHeaderLabels(["ID", "Name", "Department", "Email", "BLE ID", "Status"])
+        self.faculty_table.setHorizontalHeaderLabels(
+            ["ID", "Name", "Department", "Email", "BLE ID", "Status"])
         self.faculty_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.faculty_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.faculty_table.setSelectionBehavior(QTableWidget.SelectRows)
@@ -366,9 +379,9 @@ class FacultyManagementTab(QWidget):
                 department = dialog.department_val
                 email = dialog.email_val
                 ble_id = dialog.ble_id_val
-                image_path_from_dialog = dialog.image_path_val # Raw path from file dialog
-                
-                processed_image_path = None # Initialize to None
+                image_path_from_dialog = dialog.image_path_val  # Raw path from file dialog
+
+                processed_image_path = None  # Initialize to None
 
                 # Process image if a path was provided in the dialog
                 if image_path_from_dialog:
@@ -376,27 +389,36 @@ class FacultyManagementTab(QWidget):
                     import shutil
 
                     # Use config for image directory
-                    img_conf_dir = self.faculty_controller.config.get('system.faculty_image_dir', 'images/faculty')
-                    base_dir = os.path.abspath(self.faculty_controller.config.get('system.base_app_dir', os.path.dirname(os.path.dirname(os.path.dirname(__file__)))))
+                    img_conf_dir = self.faculty_controller.config.get(
+                        'system.faculty_image_dir', 'images/faculty')
+                    base_dir = os.path.abspath(
+                        self.faculty_controller.config.get(
+                            'system.base_app_dir', os.path.dirname(
+                                os.path.dirname(
+                                    os.path.dirname(__file__)))))
                     images_dir = os.path.join(base_dir, img_conf_dir)
-                    
+
                     if not os.path.exists(images_dir):
                         os.makedirs(images_dir)
 
                     safe_email_prefix = sanitize_filename(email.split('@')[0])
                     safe_basename = sanitize_filename(os.path.basename(image_path_from_dialog))
                     filename = f"{safe_email_prefix}_{safe_basename}"
-                    
+
                     dest_path = sanitize_path(os.path.join(images_dir, filename), base_dir)
-                    
+
                     shutil.copy2(image_path_from_dialog, dest_path)
-                    processed_image_path = os.path.relpath(dest_path, base_dir).replace("\\", "/") # Store relative path, normalized
-                
+                    processed_image_path = os.path.relpath(
+                        dest_path, base_dir).replace(
+                        "\\", "/")  # Store relative path, normalized
+
                 # Add faculty using controller
-                faculty = self.faculty_controller.add_faculty(name, department, email, ble_id, processed_image_path)
+                faculty = self.faculty_controller.add_faculty(
+                    name, department, email, ble_id, processed_image_path)
 
                 if faculty:
-                    QMessageBox.information(self, "Add Faculty", f"Faculty '{name}' added successfully.")
+                    QMessageBox.information(
+                        self, "Add Faculty", f"Faculty '{name}' added successfully.")
                     self.refresh_data()
                     self.faculty_updated.emit()
                 # else: # Controller will raise ValueError for known issues like duplicates
@@ -404,10 +426,14 @@ class FacultyManagementTab(QWidget):
 
             except ValueError as e:
                 logger.error(f"Error adding faculty (likely from controller): {str(e)}")
-                QMessageBox.warning(self, "Add Faculty Error", str(e)) # Display specific error from controller
+                # Display specific error from controller
+                QMessageBox.warning(self, "Add Faculty Error", str(e))
             except Exception as e:
                 logger.error(f"Unexpected error adding faculty: {str(e)}", exc_info=True)
-                QMessageBox.warning(self, "Add Faculty Error", f"An unexpected error occurred: {str(e)}")
+                QMessageBox.warning(
+                    self,
+                    "Add Faculty Error",
+                    f"An unexpected error occurred: {str(e)}")
 
     def edit_faculty(self):
         """
@@ -443,16 +469,18 @@ class FacultyManagementTab(QWidget):
                 department = dialog.department_val
                 email = dialog.email_val
                 ble_id = dialog.ble_id_val
-                image_path_from_dialog = dialog.image_path_val # Raw path from file dialog, or existing if not changed
+                # Raw path from file dialog, or existing if not changed
+                image_path_from_dialog = dialog.image_path_val
 
-                processed_image_path = faculty.image_path # Default to existing image path
+                processed_image_path = faculty.image_path  # Default to existing image path
 
                 # Process image only if a new image path is provided and different from current one
                 # The dialog.image_path_val will be the path from QLineEdit.
                 # If user selected a new file, it's an absolute path to that new file.
                 # If user didn't touch browse, it might be the old relative path (if dialog populated it that way)
                 # or empty if it was empty.
-                # We need to be careful here: faculty.image_path is relative. image_path_from_dialog can be absolute or relative.
+                # We need to be careful here: faculty.image_path is relative.
+                # image_path_from_dialog can be absolute or relative.
 
                 # Scenario 1: User selected a new image file via "Browse..."
                 # image_path_from_dialog will be an absolute path to the new file.
@@ -476,40 +504,46 @@ class FacultyManagementTab(QWidget):
                         # This case is a bit ambiguous. For now, assume if it's not abs, and differs, it needs re-eval / processing
                         # However, typically user would use Browse. If they manually type a relative path, it's complex.
                         # Safest is to process if it's an absolute path (meaning new file selected)
-                        pass # For now, only process new absolute paths firmly
-                
+                        pass  # For now, only process new absolute paths firmly
+
                 if image_path_from_dialog and os.path.isabs(image_path_from_dialog):
-                    to_process_selected_path = image_path_from_dialog # This is the new absolute path to copy
+                    to_process_selected_path = image_path_from_dialog  # This is the new absolute path to copy
 
                     import os
                     import shutil
-                    img_conf_dir = self.faculty_controller.config.get('system.faculty_image_dir', 'images/faculty')
-                    base_dir = os.path.abspath(self.faculty_controller.config.get('system.base_app_dir', os.path.dirname(os.path.dirname(os.path.dirname(__file__)))))
+                    img_conf_dir = self.faculty_controller.config.get(
+                        'system.faculty_image_dir', 'images/faculty')
+                    base_dir = os.path.abspath(
+                        self.faculty_controller.config.get(
+                            'system.base_app_dir', os.path.dirname(
+                                os.path.dirname(
+                                    os.path.dirname(__file__)))))
                     images_dir = os.path.join(base_dir, img_conf_dir)
 
                     if not os.path.exists(images_dir):
                         os.makedirs(images_dir)
 
-                    safe_email_prefix = sanitize_filename(email.split('@')[0]) # Use new email for filename
+                    safe_email_prefix = sanitize_filename(
+                        email.split('@')[0])  # Use new email for filename
                     safe_basename = sanitize_filename(os.path.basename(to_process_selected_path))
                     filename = f"{safe_email_prefix}_{safe_basename}"
                     dest_path = sanitize_path(os.path.join(images_dir, filename), base_dir)
-                    
+
                     shutil.copy2(to_process_selected_path, dest_path)
                     processed_image_path = os.path.relpath(dest_path, base_dir).replace("\\", "/")
                 elif not image_path_from_dialog and faculty.image_path:
                     # User cleared the image path in dialog, intent to remove image
                     processed_image_path = None
-                # If image_path_from_dialog is same as faculty.image_path (relative) or empty and faculty.image_path was empty, 
+                # If image_path_from_dialog is same as faculty.image_path (relative) or empty and faculty.image_path was empty,
                 # then processed_image_path remains faculty.image_path (no change or still no image)
-                
 
                 updated_faculty = self.faculty_controller.update_faculty(
                     faculty_id, name, department, email, ble_id, processed_image_path
                 )
 
                 if updated_faculty:
-                    QMessageBox.information(self, "Edit Faculty", f"Faculty '{name}' updated successfully.")
+                    QMessageBox.information(
+                        self, "Edit Faculty", f"Faculty '{name}' updated successfully.")
                     self.refresh_data()
                     self.faculty_updated.emit()
                 # else:
@@ -520,7 +554,10 @@ class FacultyManagementTab(QWidget):
                 QMessageBox.warning(self, "Edit Faculty Error", str(e))
             except Exception as e:
                 logger.error(f"Unexpected error updating faculty: {str(e)}", exc_info=True)
-                QMessageBox.warning(self, "Edit Faculty Error", f"An unexpected error occurred: {str(e)}")
+                QMessageBox.warning(
+                    self,
+                    "Edit Faculty Error",
+                    f"An unexpected error occurred: {str(e)}")
 
     def delete_faculty(self):
         """
@@ -552,34 +589,38 @@ class FacultyManagementTab(QWidget):
                 success = self.faculty_controller.delete_faculty(faculty_id)
 
                 if success:
-                    QMessageBox.information(self, "Delete Faculty", f"Faculty '{faculty_name}' deleted successfully.")
+                    QMessageBox.information(
+                        self, "Delete Faculty", f"Faculty '{faculty_name}' deleted successfully.")
                     self.refresh_data()
                     self.faculty_updated.emit()
                 else:
-                    QMessageBox.warning(self, "Delete Faculty", f"Failed to delete faculty '{faculty_name}'.")
+                    QMessageBox.warning(
+                        self, "Delete Faculty", f"Failed to delete faculty '{faculty_name}'.")
 
             except Exception as e:
                 logger.error(f"Error deleting faculty: {str(e)}")
                 QMessageBox.warning(self, "Delete Faculty", f"Error deleting faculty: {str(e)}")
 
+
 class FacultyDialog(QDialog):
     """
     Dialog for adding or editing faculty members.
     """
+
     def __init__(self, faculty_id=None, parent=None):
         super().__init__(parent)
         self.faculty_id = faculty_id
-        self.faculty_controller = FacultyController.instance() # Get controller instance
-        self.original_ble_id = None # To track changes in BLE ID for validation
-        self.original_email = None # To track changes in email for validation
-        
+        self.faculty_controller = FacultyController.instance()  # Get controller instance
+        self.original_ble_id = None  # To track changes in BLE ID for validation
+        self.original_email = None  # To track changes in email for validation
+
         # Initialize attributes for storing validated data
         self.name_val = ""
         self.department_val = ""
         self.email_val = ""
         self.ble_id_val = ""
-        self.image_path_val = "" # Will store the raw path from image_path_input
-        
+        self.image_path_val = ""  # Will store the raw path from image_path_input
+
         self.init_ui()
         if self.faculty_id:
             self.load_faculty_data()
@@ -596,7 +637,7 @@ class FacultyDialog(QDialog):
         self.email_input = QLineEdit()
         form_layout.addRow("Email:", self.email_input)
         self.ble_id_input = QLineEdit()
-        form_layout.addRow("BLE ID (MAC or UUID):", self.ble_id_input) # Clarified label
+        form_layout.addRow("BLE ID (MAC or UUID):", self.ble_id_input)  # Clarified label
 
         image_layout = QHBoxLayout()
         self.image_path_input = QLineEdit()
@@ -638,28 +679,28 @@ class FacultyDialog(QDialog):
         self.name_val = sanitize_string(self.name_input.text())
         self.department_val = sanitize_string(self.department_input.text())
         self.email_val = sanitize_email(self.email_input.text())
-        self.ble_id_val = sanitize_string(self.ble_id_input.text()) # Sanitized, can be empty
+        self.ble_id_val = sanitize_string(self.ble_id_input.text())  # Sanitized, can be empty
         # Store the raw path from the QLineEdit, parent tab will handle processing
-        self.image_path_val = self.image_path_input.text() # No sanitization here, it's a path
+        self.image_path_val = self.image_path_input.text()  # No sanitization here, it's a path
 
         if not self.name_val or not self.department_val or not self.email_val:
             QMessageBox.warning(self, "Input Error", "Name, department, and email are required.")
-            return # Do not call super().accept()
+            return  # Do not call super().accept()
 
         # More specific email validation
         if "@" not in self.email_val or "." not in self.email_val.split("@")[-1]:
             QMessageBox.warning(self, "Input Error", "Please enter a valid email address.")
-            return # Do not call super().accept()
-        
+            return  # Do not call super().accept()
+
         # Further validation for BLE ID and Name using Faculty model methods
         # These can raise ValueError if validation fails.
         try:
-            Faculty.validate_name(self.name_val) # Will raise ValueError if invalid
-            if self.ble_id_val: # Only validate if not empty
-                 Faculty.validate_ble_id(self.ble_id_val) # Will raise ValueError if invalid
+            Faculty.validate_name(self.name_val)  # Will raise ValueError if invalid
+            if self.ble_id_val:  # Only validate if not empty
+                Faculty.validate_ble_id(self.ble_id_val)  # Will raise ValueError if invalid
         except ValueError as ve:
             QMessageBox.warning(self, "Input Validation Error", str(ve))
-            return # Do not call super().accept()
+            return  # Do not call super().accept()
 
         # If all validations pass, then call QDialog's accept.
         super().accept()
@@ -672,22 +713,24 @@ class FacultyDialog(QDialog):
         Load existing faculty data into the dialog fields when editing.
         """
         if not self.faculty_id:
-            return # Should not happen if called correctly
+            return  # Should not happen if called correctly
 
         faculty = self.faculty_controller.get_faculty_by_id(self.faculty_id)
         if faculty:
             self.name_input.setText(faculty.name)
             self.department_input.setText(faculty.department)
             self.email_input.setText(faculty.email)
-            self.original_email = faculty.email # Store original for reference
-            
+            self.original_email = faculty.email  # Store original for reference
+
             self.ble_id_input.setText(faculty.ble_id if faculty.ble_id else "")
-            self.original_ble_id = faculty.ble_id # Store original for reference
-            
+            self.original_ble_id = faculty.ble_id  # Store original for reference
+
             self.image_path_input.setText(faculty.image_path if faculty.image_path else "")
         else:
-            QMessageBox.warning(self, "Error", f"Could not load data for faculty ID: {self.faculty_id}")
-            self.close() # Close dialog if data cannot be loaded
+            QMessageBox.warning(
+                self, "Error", f"Could not load data for faculty ID: {self.faculty_id}")
+            self.close()  # Close dialog if data cannot be loaded
+
 
 class StudentManagementTab(QWidget):
     """
@@ -734,7 +777,7 @@ class StudentManagementTab(QWidget):
         header = self.student_table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeToContents)  # ID
         header.setSectionResizeMode(1, QHeaderView.Stretch)          # Name
-        header.setSectionResizeMode(2, QHeaderView.ResizeToContents) # Department
+        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)  # Department
         header.setSectionResizeMode(3, QHeaderView.Stretch)          # RFID UID
         self.student_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.student_table.setSelectionBehavior(QTableWidget.SelectRows)
@@ -745,7 +788,7 @@ class StudentManagementTab(QWidget):
         scroll_area.setWidgetResizable(True)
         scroll_area.setWidget(container)
         tab_layout = QVBoxLayout(self)
-        tab_layout.setContentsMargins(0,0,0,0)
+        tab_layout.setContentsMargins(0, 0, 0, 0)
         tab_layout.addWidget(scroll_area)
         self.refresh_data()
 
@@ -766,7 +809,9 @@ class StudentManagementTab(QWidget):
             else:
                 logger.info("No students found by controller during refresh_data.")
         except Exception as e:
-            logger.error(f"Error refreshing student data via controller in refresh_data: {str(e)}", exc_info=True)
+            logger.error(
+                f"Error refreshing student data via controller in refresh_data: {str(e)}",
+                exc_info=True)
             QMessageBox.warning(self, "Data Error", f"Failed to refresh student data: {str(e)}")
 
     def _add_student_to_table_row(self, student: Student, row_position: int):
@@ -781,7 +826,9 @@ class StudentManagementTab(QWidget):
             self.student_table.setItem(row_position, 2, QTableWidgetItem(student.department))
             self.student_table.setItem(row_position, 3, QTableWidgetItem(student.rfid_uid))
         except Exception as e:
-            logger.error(f"Error in _add_student_to_table_row for student {student.name if student else 'None'}: {e}", exc_info=True)
+            logger.error(
+                f"Error in _add_student_to_table_row for student {student.name if student else 'None'}: {e}",
+                exc_info=True)
 
     def add_student(self):
         dialog = StudentDialog(self.student_controller, self.rfid_service, parent=self)
@@ -789,18 +836,22 @@ class StudentManagementTab(QWidget):
             name = dialog.name_val
             department = dialog.department_val
             rfid_uid = dialog.rfid_uid_val
-            
-            logger.info(f"Attempting to add student via controller: {name}, Dept: {department}, RFID: {rfid_uid}")
+
+            logger.info(
+                f"Attempting to add student via controller: {name}, Dept: {department}, RFID: {rfid_uid}")
             try:
-                new_student = self.student_controller.add_student(name=name, department=department, rfid_uid=rfid_uid)
-                
+                new_student = self.student_controller.add_student(
+                    name=name, department=department, rfid_uid=rfid_uid)
+
                 if new_student:
-                    QMessageBox.information(self, "Add Student", f"Student '{new_student.name}' added successfully.")
+                    QMessageBox.information(
+                        self, "Add Student", f"Student '{new_student.name}' added successfully.")
                     # Add the new student directly to the table at the end
                     self._add_student_to_table_row(new_student, self.student_table.rowCount())
                     self.student_updated.emit()
-                    logger.info(f"Student '{new_student.name}' added and UI updated (via _add_student_to_table_row).")
-            except ValueError as ve: 
+                    logger.info(
+                        f"Student '{new_student.name}' added and UI updated (via _add_student_to_table_row).")
+            except ValueError as ve:
                 logger.error(f"Failed to add student: {str(ve)}")
                 QMessageBox.warning(self, "Add Student Error", str(ve))
 
@@ -821,46 +872,59 @@ class StudentManagementTab(QWidget):
             logger.error(f"Invalid student ID in table: {student_id_text}")
             QMessageBox.critical(self, "Error", "Invalid student ID selected.")
             return
-        
+
         current_student = self.student_controller.get_student_by_id(student_id)
 
         if not current_student:
             QMessageBox.warning(self, "Edit Student", f"Student with ID {student_id} not found.")
             return
 
-        dialog = StudentDialog(self.student_controller, self.rfid_service, student_id=student_id, current_rfid=current_student.rfid_uid, parent=self)
+        dialog = StudentDialog(
+            self.student_controller,
+            self.rfid_service,
+            student_id=student_id,
+            current_rfid=current_student.rfid_uid,
+            parent=self)
         dialog.name_edit.setText(current_student.name)
         dialog.department_edit.setText(current_student.department)
         dialog.rfid_edit.setText(current_student.rfid_uid)
-        # dialog.rfid_uid = current_student.rfid_uid # This was setting an old attribute, rfid_uid_val is now used internally by dialog
+        # dialog.rfid_uid = current_student.rfid_uid # This was setting an old
+        # attribute, rfid_uid_val is now used internally by dialog
 
         if dialog.exec_() == QDialog.Accepted:
             try:
-                name = dialog.name_val # Use validated value
-                department = dialog.department_val # Use validated value
-                rfid_uid = dialog.rfid_uid_val # Use validated value
+                name = dialog.name_val  # Use validated value
+                department = dialog.department_val  # Use validated value
+                rfid_uid = dialog.rfid_uid_val  # Use validated value
 
                 # This check is already done by dialog.accept()
                 # if not (name and department and rfid_uid):
                 #     QMessageBox.warning(self, "Input Error", "Name, Department, and RFID UID are required.")
                 #     return
 
-                logger.info(f"Attempting to update student via controller: ID={student_id}, Name={name}, Dept={department}, RFID={rfid_uid}")
+                logger.info(
+                    f"Attempting to update student via controller: ID={student_id}, Name={name}, Dept={department}, RFID={rfid_uid}")
                 updated_student = self.student_controller.update_student(
                     student_id=student_id, name=name, department=department, rfid_uid=rfid_uid
                 )
-                
-                if updated_student: 
-                    QMessageBox.information(self, "Edit Student", f"Student '{updated_student.name}' updated successfully.")
+
+                if updated_student:
+                    QMessageBox.information(
+                        self, "Edit Student", f"Student '{updated_student.name}' updated successfully.")
                     self.refresh_data()
                     self.student_updated.emit()
                     logger.info(f"Student '{updated_student.name}' updated and UI refreshed.")
-            except ValueError as ve: 
+            except ValueError as ve:
                 logger.error(f"Validation error updating student: {str(ve)}")
                 QMessageBox.warning(self, "Update Student Error", str(ve))
             except Exception as e:
-                logger.error(f"Unexpected error updating student via controller: {str(e)}", exc_info=True)
-                QMessageBox.critical(self, "Update Student Error", "An unexpected error occurred while updating.")
+                logger.error(
+                    f"Unexpected error updating student via controller: {str(e)}",
+                    exc_info=True)
+                QMessageBox.critical(
+                    self,
+                    "Update Student Error",
+                    "An unexpected error occurred while updating.")
 
     def delete_student(self):
         selected_rows = self.student_table.selectionModel().selectedRows()
@@ -879,25 +943,32 @@ class StudentManagementTab(QWidget):
             return
 
         reply = QMessageBox.question(self, "Delete Student",
-            f"Are you sure you want to delete student '{student_name}' (ID: {student_id})? This action cannot be undone.",
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+                                     f"Are you sure you want to delete student '{student_name}' (ID: {student_id})? This action cannot be undone.",
+                                     QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
 
         if reply == QMessageBox.Yes:
             try:
-                logger.info(f"Attempting to delete student via controller: ID={student_id}, Name={student_name}")
+                logger.info(
+                    f"Attempting to delete student via controller: ID={student_id}, Name={student_name}")
                 success = self.student_controller.delete_student(student_id=student_id)
-                
+
                 if success:
-                    QMessageBox.information(self, "Delete Student", f"Student '{student_name}' deleted successfully.")
+                    QMessageBox.information(
+                        self, "Delete Student", f"Student '{student_name}' deleted successfully.")
                     self.refresh_data()
                     self.student_updated.emit()
                     logger.info(f"Student '{student_name}' deleted and UI refreshed.")
-            except ValueError as ve: 
+            except ValueError as ve:
                 logger.error(f"Failed to delete student: {str(ve)}")
                 QMessageBox.warning(self, "Delete Student Error", str(ve))
             except Exception as e:
-                logger.error(f"Unexpected error deleting student via controller: {str(e)}", exc_info=True)
-                QMessageBox.critical(self, "Delete Student Error", f"Could not delete student '{student_name}'. An unexpected error occurred.")
+                logger.error(
+                    f"Unexpected error deleting student via controller: {str(e)}",
+                    exc_info=True)
+                QMessageBox.critical(
+                    self,
+                    "Delete Student Error",
+                    f"Could not delete student '{student_name}'. An unexpected error occurred.")
 
     def scan_rfid_for_table_selection(self):
         rfid_scan_dialog = RFIDScanDialog(self.rfid_service, parent=self)
@@ -909,29 +980,37 @@ class StudentManagementTab(QWidget):
                     for row in range(self.student_table.rowCount()):
                         if self.student_table.item(row, 3).text() == rfid_uid:
                             self.student_table.selectRow(row)
-                            QMessageBox.information(self, "Student Found", f"Student '{student.name}' selected in table.")
+                            QMessageBox.information(
+                                self, "Student Found", f"Student '{student.name}' selected in table.")
                             return
-                    QMessageBox.information(self, "Student Found", f"Student '{student.name}' (RFID: {rfid_uid}) found but might not be visible due to table filters/paging (if any).")
+                    QMessageBox.information(
+                        self,
+                        "Student Found",
+                        f"Student '{student.name}' (RFID: {rfid_uid}) found but might not be visible due to table filters/paging (if any).")
                 else:
-                    QMessageBox.information(self, "Student Not Found", f"No student found with RFID: {rfid_uid}")
+                    QMessageBox.information(
+                        self, "Student Not Found", f"No student found with RFID: {rfid_uid}")
             else:
                 logger.info("Admin tab RFID Scan dialog cancelled or no UID obtained.")
+
 
 class StudentDialog(QDialog):
     """
     Dialog for adding or editing students.
     """
-    def __init__(self, student_controller, rfid_service, student_id=None, current_rfid=None, parent=None):
+
+    def __init__(self, student_controller, rfid_service,
+                 student_id=None, current_rfid=None, parent=None):
         super().__init__(parent)
         self.student_controller = student_controller
         self.rfid_service = rfid_service
         self.student_id = student_id
-        self.original_rfid_uid = current_rfid # Store original RFID for edit mode if needed for complex validation
-        
+        self.original_rfid_uid = current_rfid  # Store original RFID for edit mode if needed for complex validation
+
         # Attributes to store validated data
         self.name_val = ""
         self.department_val = ""
-        self.rfid_uid_val = current_rfid if current_rfid else "" # Initialize with current_rfid
+        self.rfid_uid_val = current_rfid if current_rfid else ""  # Initialize with current_rfid
 
         self.scan_dialog_instance = None
         self.init_ui()
@@ -975,7 +1054,7 @@ class StudentDialog(QDialog):
 
         self.setLayout(layout)
 
-        self.scan_dialog = None # Initialize scan_dialog attribute
+        self.scan_dialog = None  # Initialize scan_dialog attribute
 
         if self.student_id:
             self.load_student_data()
@@ -990,10 +1069,10 @@ class StudentDialog(QDialog):
                 self.department_edit.setText(student.department)
                 self.rfid_edit.setText(student.rfid_uid)
                 self.original_rfid_uid = student.rfid_uid
-                self.rfid_uid_val = student.rfid_uid # Update rfid_uid_val as well
+                self.rfid_uid_val = student.rfid_uid  # Update rfid_uid_val as well
             else:
                 QMessageBox.warning(self, "Error", "Student not found.")
-                self.reject() # or disable save
+                self.reject()  # or disable save
         except Exception as e:
             logger.error(f"Error loading student data: {e}")
             QMessageBox.critical(self, "Error", f"Could not load student details: {e}")
@@ -1009,27 +1088,31 @@ class StudentDialog(QDialog):
             rfid_uid_from_scan = self.scan_dialog.get_rfid_uid()
             if rfid_uid_from_scan:
                 self.rfid_edit.setText(rfid_uid_from_scan)
-                self.rfid_uid_val = rfid_uid_from_scan # Update instance attribute
-        self.scan_dialog.deleteLater() 
+                self.rfid_uid_val = rfid_uid_from_scan  # Update instance attribute
+        self.scan_dialog.deleteLater()
         self.scan_dialog = None
 
     def accept(self):
         self.name_val = sanitize_string(self.name_edit.text())
         self.department_val = sanitize_string(self.department_edit.text())
-        self.rfid_uid_val = sanitize_string(self.rfid_edit.text()) # Update from rfid_edit field
+        self.rfid_uid_val = sanitize_string(self.rfid_edit.text())  # Update from rfid_edit field
 
         if not self.name_val or not self.department_val or not self.rfid_uid_val:
-            QMessageBox.warning(self, "Input Error", "All fields (Name, Department, RFID UID) are required.")
-            return # Important: do not call super().accept()
+            QMessageBox.warning(
+                self,
+                "Input Error",
+                "All fields (Name, Department, RFID UID) are required.")
+            return  # Important: do not call super().accept()
 
         # Further validation can be added here if needed, specific to the dialog's role.
         # For example, checking RFID format, name length, etc.
         # If any validation fails, show a QMessageBox and 'return' without calling super().accept().
 
-        super().accept() # Call QDialog.accept() to close dialog and signal success to the caller
+        super().accept()  # Call QDialog.accept() to close dialog and signal success to the caller
 
     def reject(self):
         super().reject()
+
 
 class RFIDScanDialog(QDialog):
     def __init__(self, rfid_service=None, parent=None):
@@ -1038,7 +1121,7 @@ class RFIDScanDialog(QDialog):
         self.config = get_config()
         self.scanned_rfid_uid = None
         self.animation_timer = QTimer(self)
-        self.animation_chars = ["|", "/", "-", "\\\\"] # Use escaped backslash
+        self.animation_chars = ["|", "/", "-", "\\\\"]  # Use escaped backslash
         self.animation_index = 0
 
         self.init_ui()
@@ -1055,7 +1138,7 @@ class RFIDScanDialog(QDialog):
             self.status_label.setText("RFID Service not available.")
 
         self.animation_timer.timeout.connect(self.update_animation)
-        self.animation_timer.start(200) # Animation speed
+        self.animation_timer.start(200)  # Animation speed
 
         # Timer to reset status label after a few seconds of inactivity or error
         self.status_reset_timer = QTimer(self)
@@ -1064,10 +1147,10 @@ class RFIDScanDialog(QDialog):
 
     def init_ui(self):
         self.setWindowTitle("Scan RFID Card")
-        self.setMinimumSize(320, 280) # Increased minimum size slightly
+        self.setMinimumSize(320, 280)  # Increased minimum size slightly
 
-        main_layout = QVBoxLayout() # main_layout for the dialog
-        main_layout.setSpacing(20) # Increased main layout spacing
+        main_layout = QVBoxLayout()  # main_layout for the dialog
+        main_layout.setSpacing(20)  # Increased main layout spacing
         main_layout.setContentsMargins(20, 20, 20, 20)
 
         self.status_label = QLabel("Please scan an RFID card...")
@@ -1084,9 +1167,10 @@ class RFIDScanDialog(QDialog):
 
         # Manual UID entry
         manual_entry_group = QGroupBox("Manual Entry / Simulation")
-        manual_entry_group.setContentsMargins(10,10,10,10) # Add margins to groupbox
-        manual_entry_layout = QFormLayout(manual_entry_group) # Use QFormLayout for better label-field alignment
-        manual_entry_layout.setSpacing(10) # Spacing within the form
+        manual_entry_group.setContentsMargins(10, 10, 10, 10)  # Add margins to groupbox
+        # Use QFormLayout for better label-field alignment
+        manual_entry_layout = QFormLayout(manual_entry_group)
+        manual_entry_layout.setSpacing(10)  # Spacing within the form
 
         self.manual_uid_input = QLineEdit()
         self.manual_uid_input.setPlaceholderText("Enter RFID UID manually")
@@ -1102,15 +1186,15 @@ class RFIDScanDialog(QDialog):
             manual_entry_layout.addRow(self.simulate_scan_button)
 
         main_layout.addWidget(manual_entry_group)
-        main_layout.addStretch(1) # Add stretch to push buttons to bottom
+        main_layout.addStretch(1)  # Add stretch to push buttons to bottom
 
         button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         button_box.accepted.connect(self.accept)
         button_box.rejected.connect(self.reject)
         main_layout.addWidget(button_box)
 
-        self.setLayout(main_layout) # Set the main layout for the dialog
-        self.adjustSize() # Adjust size after all widgets are added
+        self.setLayout(main_layout)  # Set the main layout for the dialog
+        self.adjustSize()  # Adjust size after all widgets are added
 
     def handle_manual_input(self):
         uid = self.manual_uid_input.text().strip().upper()
@@ -1133,7 +1217,8 @@ class RFIDScanDialog(QDialog):
             return
 
         animations = ["🔄", "🔁", "🔃", "🔂"]
-        current_index = animations.index(self.animation_label.text()) if self.animation_label.text() in animations else 0
+        current_index = animations.index(
+            self.animation_label.text()) if self.animation_label.text() in animations else 0
         next_index = (current_index + 1) % len(animations)
         self.animation_label.setText(animations[next_index])
 
@@ -1141,7 +1226,8 @@ class RFIDScanDialog(QDialog):
         logger.info(f"RFIDScanDialog received scan: {rfid_uid}")
 
         if not rfid_uid or self.scanned_rfid_uid:
-            logger.info(f"Ignoring scan - UID '{rfid_uid}' is invalid or already processed ('{self.scanned_rfid_uid}').")
+            logger.info(
+                f"Ignoring scan - UID '{rfid_uid}' is invalid or already processed ('{self.scanned_rfid_uid}').")
             return
 
         self.scanned_rfid_uid = rfid_uid
@@ -1157,7 +1243,7 @@ class RFIDScanDialog(QDialog):
         # This dialog is primarily for capturing a UID.
         # The calling context (e.g., StudentDialog) can handle checks after UID is returned.
 
-        QTimer.singleShot(1500, self.accept) # Accept the dialog after a short delay
+        QTimer.singleShot(1500, self.accept)  # Accept the dialog after a short delay
 
     def closeEvent(self, event):
         if hasattr(self, 'callback_fn') and self.callback_fn:
@@ -1210,24 +1296,25 @@ class RFIDScanDialog(QDialog):
     def get_rfid_uid(self):
         return self.scanned_rfid_uid
 
+
 class SystemMaintenanceTab(QWidget):
     actual_admin_username_changed_signal = pyqtSignal(str)
 
     def __init__(self, admin_info_context=None, dashboard_window_ref=None, parent=None):
-        super().__init__(parent if parent else dashboard_window_ref) 
+        super().__init__(parent if parent else dashboard_window_ref)
         self.config = get_config()
         self.admin_info_context = admin_info_context
         self.dashboard_window_ref = dashboard_window_ref
         self.faculty_controller = FacultyController.instance()
         self.consultation_controller = ConsultationController.instance()
         self.admin_controller = AdminController.instance()
-        self.init_ui() 
+        self.init_ui()
         self.load_faculty_list()
 
     def init_ui(self):
         container = QWidget()
         main_layout = QVBoxLayout(container)
-        main_layout.setContentsMargins(10,10,10,10)
+        main_layout.setContentsMargins(10, 10, 10, 10)
         main_layout.setSpacing(15)
 
         database_group = QGroupBox("Database Maintenance")
@@ -1246,7 +1333,9 @@ class SystemMaintenanceTab(QWidget):
         username_form = QFormLayout()
         self.current_password_username_input = QLineEdit()
         self.current_password_username_input.setEchoMode(QLineEdit.Password)
-        username_form.addRow("Current Password (for username change):", self.current_password_username_input)
+        username_form.addRow(
+            "Current Password (for username change):",
+            self.current_password_username_input)
         self.new_username_input = QLineEdit()
         username_form.addRow("New Username:", self.new_username_input)
         change_username_button = QPushButton("Change Username")
@@ -1260,7 +1349,9 @@ class SystemMaintenanceTab(QWidget):
         password_form = QFormLayout()
         self.current_password_password_input = QLineEdit()
         self.current_password_password_input.setEchoMode(QLineEdit.Password)
-        password_form.addRow("Current Password (for password change):", self.current_password_password_input)
+        password_form.addRow(
+            "Current Password (for password change):",
+            self.current_password_password_input)
         self.new_password_input = QLineEdit()
         self.new_password_input.setEchoMode(QLineEdit.Password)
         password_form.addRow("New Password:", self.new_password_input)
@@ -1317,16 +1408,16 @@ class SystemMaintenanceTab(QWidget):
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
         scroll_area.setWidget(container)
-        scroll_area.setStyleSheet(""" QScrollArea { border: none; background-color: transparent; } 
-                                      QScrollBar:vertical { border: none; background: #f0f0f0; width: 15px; margin: 0px; } 
-                                      QScrollBar::handle:vertical { background: #adb5bd; min-height: 30px; border-radius: 7px; } 
-                                      QScrollBar::handle:vertical:hover { background: #868e96; } 
-                                      QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; } 
+        scroll_area.setStyleSheet(""" QScrollArea { border: none; background-color: transparent; }
+                                      QScrollBar:vertical { border: none; background: #f0f0f0; width: 15px; margin: 0px; }
+                                      QScrollBar::handle:vertical { background: #adb5bd; min-height: 30px; border-radius: 7px; }
+                                      QScrollBar::handle:vertical:hover { background: #868e96; }
+                                      QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }
                                       QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: none; } """)
         tab_layout = QVBoxLayout(self)
-        tab_layout.setContentsMargins(0,0,0,0)
+        tab_layout.setContentsMargins(0, 0, 0, 0)
         tab_layout.addWidget(scroll_area)
-    
+
     def backup_database(self):
         """
         Handle database backup.
@@ -1334,7 +1425,7 @@ class SystemMaintenanceTab(QWidget):
         # Default backup filename with timestamp
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         default_filename = f"consultease_backup_{timestamp}.backup"
-        
+
         # Suggest a default directory (e.g., user's Documents folder or a configured backup path)
         # For simplicity, let's use a 'backups' subdirectory in the app's main data/log area
         # This path should ideally come from config or be more robustly determined.
@@ -1344,7 +1435,7 @@ class SystemMaintenanceTab(QWidget):
         # For now, let's assume a 'backups' dir in the current working directory for simplicity,
         # or better, relative to the log file directory if that's well-defined.
         log_file_path = config.get('logging.file', 'logs/consultease.log')
-        base_backup_dir = os.path.join(os.path.dirname(log_file_path), '.. reinstated original line ', 'backups')
+        base_backup_dir = os.path.join(os.path.dirname(log_file_path), 'backups')
         os.makedirs(base_backup_dir, exist_ok=True)
         default_path = os.path.join(base_backup_dir, default_filename)
 
@@ -1353,7 +1444,7 @@ class SystemMaintenanceTab(QWidget):
         backup_file_path, _ = QFileDialog.getSaveFileName(
             self,
             "Save Database Backup",
-            default_path, # Default path and filename
+            default_path,  # Default path and filename
             "Backup Files (*.backup *.db *.sqlite *.dump);;All Files (*)",
             options=options
         )
@@ -1362,7 +1453,7 @@ class SystemMaintenanceTab(QWidget):
             logger.info(f"User selected backup path: {backup_file_path}")
             # Call controller method
             success, message = self.admin_controller.backup_database(backup_file_path)
-            
+
             if success:
                 QMessageBox.information(self, "Backup Successful", message)
                 logger.info(f"Database backup successful: {message}")
@@ -1379,7 +1470,7 @@ class SystemMaintenanceTab(QWidget):
         # Default restore filename with timestamp
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         default_filename = f"consultease_restore_{timestamp}.backup"
-        
+
         # Suggest a default directory (e.g., user's Documents folder or a configured restore path)
         # For simplicity, let's use a 'restores' subdirectory in the app's main data/log area
         # This path should ideally come from config or be more robustly determined.
@@ -1389,7 +1480,7 @@ class SystemMaintenanceTab(QWidget):
         # For now, let's assume a 'restores' dir in the current working directory for simplicity,
         # or better, relative to the log file directory if that's well-defined.
         log_file_path = config.get('logging.file', 'logs/consultease.log')
-        base_restore_dir = os.path.join(os.path.dirname(log_file_path), '.. reinstated original line ', 'restores')
+        base_restore_dir = os.path.join(os.path.dirname(log_file_path), 'restores')
         os.makedirs(base_restore_dir, exist_ok=True)
         default_path = os.path.join(base_restore_dir, default_filename)
 
@@ -1398,7 +1489,7 @@ class SystemMaintenanceTab(QWidget):
         restore_file_path, _ = QFileDialog.getOpenFileName(
             self,
             "Restore Database Backup",
-            default_path, # Default path and filename
+            default_path,  # Default path and filename
             "Backup Files (*.backup *.db *.sqlite *.dump);;All Files (*)",
             options=options
         )
@@ -1407,7 +1498,7 @@ class SystemMaintenanceTab(QWidget):
             logger.info(f"User selected restore path: {restore_file_path}")
             # Call controller method
             success, message = self.admin_controller.restore_database(restore_file_path)
-            
+
             if success:
                 QMessageBox.information(self, "Restore Successful", message)
                 logger.info(f"Database restore successful: {message}")
@@ -1427,7 +1518,8 @@ class SystemMaintenanceTab(QWidget):
             self.faculty_combo.clear()
             for faculty in faculties:
                 self.faculty_combo.addItem(f"{faculty.name} (ID: {faculty.id})", faculty.id)
-            logger.info(f"Loaded {len(faculties)} faculty members into SystemMaintenanceTab dropdown")
+            logger.info(
+                f"Loaded {len(faculties)} faculty members into SystemMaintenanceTab dropdown")
         except Exception as e:
             logger.error(f"Error loading faculty list for SystemMaintenanceTab: {str(e)}")
             QMessageBox.warning(self, "Error", f"Failed to load faculty list: {str(e)}")
@@ -1442,7 +1534,7 @@ class SystemMaintenanceTab(QWidget):
                 QMessageBox.warning(self, "Test Connection", "Please select a faculty.")
                 return
             faculty_name = self.faculty_combo.currentText().split(" (ID:")[0]
-            
+
             progress_dialog = QMessageBox(self)
             progress_dialog.setWindowTitle("Testing Connection")
             progress_dialog.setText(f"Sending test to {faculty_name}... Check desk unit.")
@@ -1454,11 +1546,16 @@ class SystemMaintenanceTab(QWidget):
             progress_dialog.close()
 
             if success:
-                QMessageBox.information(self, "Test Connection", f"Test message sent to {faculty_name}.")
+                QMessageBox.information(
+                    self, "Test Connection", f"Test message sent to {faculty_name}.")
             else:
-                QMessageBox.warning(self, "Test Connection", f"Failed to send test message to {faculty_name}. Check MQTT settings and connectivity.")
+                QMessageBox.warning(
+                    self,
+                    "Test Connection",
+                    f"Failed to send test message to {faculty_name}. Check MQTT settings and connectivity.")
         except Exception as e:
-            if 'progress_dialog' in locals() and progress_dialog.isVisible(): progress_dialog.close()
+            if 'progress_dialog' in locals() and progress_dialog.isVisible():
+                progress_dialog.close()
             logger.error(f"Error testing faculty desk connection: {str(e)}")
             QMessageBox.critical(self, "Test Connection Error", str(e))
 
@@ -1467,15 +1564,20 @@ class SystemMaintenanceTab(QWidget):
             if not self.admin_info_context:
                 QMessageBox.warning(self, "Admin Error", "Admin context not available.")
                 return
-            admin_id = self.admin_info_context.get('id') if isinstance(self.admin_info_context, dict) else self.admin_info_context.id
-            
+            admin_id = self.admin_info_context.get('id') if isinstance(
+                self.admin_info_context, dict) else self.admin_info_context.id
+
             current_password = self.current_password_username_input.text()
             new_username = self.new_username_input.text().strip()
             if not (current_password and new_username):
-                QMessageBox.warning(self, "Input Error", "All fields for username change are required.")
+                QMessageBox.warning(
+                    self,
+                    "Input Error",
+                    "All fields for username change are required.")
                 return
 
-            success = self.admin_controller.change_username(admin_id, current_password, new_username)
+            success = self.admin_controller.change_username(
+                admin_id, current_password, new_username)
             if success:
                 self.actual_admin_username_changed_signal.emit(new_username)
                 if isinstance(self.admin_info_context, dict):
@@ -1485,7 +1587,10 @@ class SystemMaintenanceTab(QWidget):
                 self.current_password_username_input.clear()
                 self.new_username_input.clear()
             else:
-                QMessageBox.warning(self, "Username Change Failed", "Failed. Check password or new username may be taken.")
+                QMessageBox.warning(
+                    self,
+                    "Username Change Failed",
+                    "Failed. Check password or new username may be taken.")
         except Exception as e:
             logger.error(f"Error changing admin username: {str(e)}", exc_info=True)
             QMessageBox.critical(self, "Error", f"An unexpected error occurred: {str(e)}")
@@ -1493,12 +1598,19 @@ class SystemMaintenanceTab(QWidget):
     def change_admin_password(self):
         try:
             if not self.admin_info_context:
-                QMessageBox.warning(self, "Admin Error", "Admin context not available to identify current admin.")
+                QMessageBox.warning(
+                    self,
+                    "Admin Error",
+                    "Admin context not available to identify current admin.")
                 return
-            
-            admin_id = self.admin_info_context.get('id') if isinstance(self.admin_info_context, dict) else self.admin_info_context.id
+
+            admin_id = self.admin_info_context.get('id') if isinstance(
+                self.admin_info_context, dict) else self.admin_info_context.id
             if not admin_id:
-                QMessageBox.warning(self, "Admin Error", "Could not determine Admin ID from context.")
+                QMessageBox.warning(
+                    self,
+                    "Admin Error",
+                    "Could not determine Admin ID from context.")
                 return
 
             current_password = self.current_password_password_input.text()
@@ -1511,23 +1623,27 @@ class SystemMaintenanceTab(QWidget):
             if new_password != confirm_password:
                 QMessageBox.warning(self, "Input Error", "New passwords do not match.")
                 return
-            
+
             from ..models.admin import Admin as AdminModel
             is_strong, msg = AdminModel.validate_password_strength(new_password)
             if not is_strong:
                 QMessageBox.warning(self, "Password Policy", msg)
                 return
 
-            success = self.admin_controller.change_password(admin_id, current_password, new_password)
+            success = self.admin_controller.change_password(
+                admin_id, current_password, new_password)
             if success:
                 QMessageBox.information(self, "Password Changed", "Password changed successfully.")
                 self.current_password_password_input.clear()
                 self.new_password_input.clear()
                 self.confirm_password_input.clear()
             else:
-                QMessageBox.warning(self, "Password Change Failed", "Failed. Check current password or new password policy.")
-        except ValueError as ve: 
-             QMessageBox.warning(self, "Password Policy/Error", str(ve))
+                QMessageBox.warning(
+                    self,
+                    "Password Change Failed",
+                    "Failed. Check current password or new password policy.")
+        except ValueError as ve:
+            QMessageBox.warning(self, "Password Policy/Error", str(ve))
         except Exception as e:
             logger.error(f"Error changing admin password: {str(e)}")
             QMessageBox.critical(self, "Error", str(e))
@@ -1538,35 +1654,17 @@ class SystemMaintenanceTab(QWidget):
 
         settings_to_update = {}
 
-        # UI Theme
-        settings_to_update['ui.theme'] = self.theme_combo.currentText().lower()
-        
-        # Logging Level
-        settings_to_update['logging.level'] = self.log_level_combo.currentText().upper()
-        
-        # RFID Simulation Mode
-        settings_to_update['rfid.simulation_mode'] = self.rfid_simulation_checkbox.isChecked()
+        # MQTT settings (these exist in the UI)
+        settings_to_update['mqtt.broker_host'] = self.mqtt_host_input.text().strip()
+        settings_to_update['mqtt.broker_port'] = self.mqtt_port_input.text().strip()
 
-        # Keyboard Preference
-        settings_to_update['keyboard.preference'] = self.keyboard_combo.currentText()
-
-        # pg_dump and pg_restore paths
-        pg_dump_val = self.pg_dump_path_input.text().strip()
-        if pg_dump_val:
-            settings_to_update['database.pg_dump_path'] = pg_dump_val
-        else: # If empty, perhaps remove or set to a default like 'pg_dump' if that's intended
-            settings_to_update['database.pg_dump_path'] = 'pg_dump' # Or handle as error / keep old value
-
-        pg_restore_val = self.pg_restore_path_input.text().strip()
-        if pg_restore_val:
-            settings_to_update['database.pg_restore_path'] = pg_restore_val
-            else:
-            settings_to_update['database.pg_restore_path'] = 'pg_restore'
+        # Auto-start setting (exists in the UI)
+        settings_to_update['system.auto_start'] = self.auto_start_checkbox.isChecked()
 
         logger.debug(f"Attempting to save settings: {settings_to_update}")
 
         # Confirmation Dialog
-        reply = QMessageBox.question(self, 'Confirm Save', 
+        reply = QMessageBox.question(self, 'Confirm Save',
                                      "Saving these settings will modify config.json. Some changes may require an application restart. Proceed?",
                                      QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
 
@@ -1576,18 +1674,20 @@ class SystemMaintenanceTab(QWidget):
                 QMessageBox.information(self, "Settings Saved", message)
                 logger.info(f"System settings saved: {message}")
                 # Potentially update self.config in this tab if live updates are desired for some settings
-                # self.config = get_config() # Re-fetch, but this might not be enough if get_config() caches extensively
+                # self.config = get_config() # Re-fetch, but this might not be enough if
+                # get_config() caches extensively
             else:
                 QMessageBox.critical(self, "Save Failed", message)
                 logger.error(f"Failed to save system settings: {message}")
         else:
             logger.info("User cancelled saving system settings.")
 
+
 class LogViewerDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.config = get_config()
-        self.log_file_path = self.config.get('logging.file', 'consultease.log') 
+        self.log_file_path = self.config.get('logging.file', 'consultease.log')
         self.init_ui()
         self.load_logs()
 
@@ -1628,9 +1728,9 @@ class LogViewerDialog(QDialog):
 
     def clear_logs(self):
         try:
-            reply = QMessageBox.warning(self, "Clear Logs", 
-                f"Are you sure you want to clear the log file: {self.log_file_path}? This cannot be undone.",
-                QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+            reply = QMessageBox.warning(self, "Clear Logs",
+                                        f"Are you sure you want to clear the log file: {self.log_file_path}? This cannot be undone.",
+                                        QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
             if reply == QMessageBox.Yes:
                 if os.path.exists(self.log_file_path):
                     with open(self.log_file_path, 'w', encoding='utf-8') as f:
@@ -1638,7 +1738,8 @@ class LogViewerDialog(QDialog):
                     self.log_text.setText("Log cleared by admin.\n")
                     QMessageBox.information(self, "Logs Cleared", "Log file has been cleared.")
                 else:
-                    QMessageBox.warning(self, "Clear Logs", f"Log file not found: {self.log_file_path}")
+                    QMessageBox.warning(
+                        self, "Clear Logs", f"Log file not found: {self.log_file_path}")
         except Exception as e:
             QMessageBox.critical(self, "Clear Logs Error", f"Error clearing logs: {str(e)}")
             logger.error(f"Error clearing log file {self.log_file_path}: {e}")
